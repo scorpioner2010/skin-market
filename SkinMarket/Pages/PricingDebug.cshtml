@@ -43,10 +43,13 @@
                         <th>ClassId</th>
                         <th>MarketHashName</th>
                         <th>MarketName</th>
+                        <th>ResolvedMarketHashName</th>
                         <th>Steam Market</th>
+                        <th>CSFloat</th>
                         <th>Skinport</th>
                         <th>Final</th>
                         <th>Source</th>
+                        <th>Status</th>
                         <th>Errors</th>
                     </tr>
                 </thead>
@@ -59,20 +62,34 @@
                         <td class="break-value">@item.ClassId</td>
                         <td class="break-value">@item.MarketHashName</td>
                         <td class="break-value">@item.MarketName</td>
-                        <td>@(item.SteamPrice.HasValue ? $"${item.SteamPrice.Value:0.00}" : "-")</td>
-                        <td>@(item.SkinportPrice.HasValue ? $"${item.SkinportPrice.Value:0.00}" : "-")</td>
+                        <td class="break-value">@item.ResolvedMarketHashName</td>
+                        <td>@(item.SteamPrice.HasValue ? $"${item.SteamPrice.Value:0.00} ({item.SteamStatus})" : item.SteamStatus ?? "-")</td>
+                        <td>@(item.CsFloatPrice.HasValue ? $"${item.CsFloatPrice.Value:0.00} ({item.CsFloatStatus})" : item.CsFloatStatus ?? "-")</td>
+                        <td>@(item.SkinportPrice.HasValue ? $"${item.SkinportPrice.Value:0.00} ({item.SkinportStatus})" : item.SkinportStatus ?? "-")</td>
                         <td>@(item.FinalPrice.HasValue ? $"${item.FinalPrice.Value:0.00}" : "-")</td>
                         <td><span class="compact-badge compact-badge-neutral">@item.FinalSource</span></td>
+                        <td><span class="compact-badge compact-badge-neutral">@item.FinalStatus</span></td>
                         <td class="debug-errors">
                             @if (!string.IsNullOrWhiteSpace(item.SteamError))
                             {
                                 <div><strong>Steam:</strong> @item.SteamError</div>
                             }
+                            @if (!string.IsNullOrWhiteSpace(item.CsFloatError))
+                            {
+                                <div><strong>CSFloat:</strong> @item.CsFloatError</div>
+                            }
                             @if (!string.IsNullOrWhiteSpace(item.SkinportError))
                             {
                                 <div><strong>Skinport:</strong> @item.SkinportError</div>
                             }
-                            @if (string.IsNullOrWhiteSpace(item.SteamError) && string.IsNullOrWhiteSpace(item.SkinportError))
+                            @if (!string.IsNullOrWhiteSpace(item.FailureReason))
+                            {
+                                <div><strong>Final:</strong> @item.FailureReason</div>
+                            }
+                            @if (string.IsNullOrWhiteSpace(item.SteamError) &&
+                                 string.IsNullOrWhiteSpace(item.CsFloatError) &&
+                                 string.IsNullOrWhiteSpace(item.SkinportError) &&
+                                 string.IsNullOrWhiteSpace(item.FailureReason))
                             {
                                 <span>-</span>
                             }

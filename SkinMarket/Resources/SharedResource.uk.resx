@@ -198,4 +198,10 @@
   <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Відповідь інвентарю Steam неповна: assets не повернуто.</value></data>
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Створено stub bot trade. Реальна інтеграція зі Steam-ботом ще не підключена.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Створено stub delivery trade. Реальна Steam-інтеграція доставки ще не підключена.</value></data>
+  <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
+  <data name="PriceStatus_Cached" xml:space="preserve"><value>Cached</value></data>
+  <data name="PriceStatus_Estimated" xml:space="preserve"><value>Estimated</value></data>
+  <data name="PriceStatus_Loading" xml:space="preserve"><value>Loading price...</value></data>
+  <data name="PriceStatus_NoPrice" xml:space="preserve"><value>No price</value></data>
+  <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Refreshing</value></data>
 </root>

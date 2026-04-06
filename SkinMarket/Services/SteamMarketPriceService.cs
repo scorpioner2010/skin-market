@@ -1,169 +1,181 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
 
 public class SteamMarketPriceService : ISteamMarketPriceService
 {
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
-
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SteamMarketPriceService> _logger;
     private readonly IGameCatalog _gameCatalog;
+    private readonly PricingOptions _options;
 
-    public SteamMarketPriceService(HttpClient httpClient, IMemoryCache memoryCache, ILogger<SteamMarketPriceService> logger, IGameCatalog gameCatalog)
+    public SteamMarketPriceService(
+        HttpClient httpClient,
+        IMemoryCache memoryCache,
+        ILogger<SteamMarketPriceService> logger,
+        IGameCatalog gameCatalog,
+        IOptions<PricingOptions> options)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
+        _options = options.Value;
     }
 
-    public async Task<ResolvedItemPrice> ResolvePriceAsync(string? itemName, GameType gameType, CancellationToken cancellationToken = default)
+    public async Task<PriceSourceResult> ProbePriceAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)
     {
-        var probe = await ProbePriceAsync(itemName, gameType, cancellationToken);
-        return new ResolvedItemPrice
-        {
-            RealPriceUsd = probe.Price,
-            Source = probe.Source,
-            IsFallback = true
-        };
-    }
-
-    public async Task<ResolvedItemPrice> ResolvePriceAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
-    {
-        var probe = await ProbePriceAsync(item, cancellationToken);
-        return new ResolvedItemPrice
-        {
-            RealPriceUsd = probe.Price,
-            Source = probe.Source,
-            IsFallback = true
-        };
-    }
-
-    public async Task<PriceSourceResult> ProbePriceAsync(string? itemName, GameType gameType, CancellationToken cancellationToken = default)
-    {
+        var normalizedName = MarketHashNameUtility.Normalize(marketHashName);
         var game = _gameCatalog.Get(gameType);
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return Failure("Steam", "Unavailable", "MissingMarketHashName", normalizedName);
+        }
+
         if (!game.SupportsSteamMarketPricing)
         {
-            return new PriceSourceResult
-            {
-                Source = "GamePricingNotConfigured",
-                ErrorMessage = $"Steam market pricing is not configured for {game.DisplayName}."
-            };
+            return Failure("Steam", "Unavailable", $"Steam market pricing is not configured for {game.DisplayName}.", normalizedName);
         }
 
-        if (string.IsNullOrWhiteSpace(itemName))
-        {
-            return new PriceSourceResult
-            {
-                Source = "SteamUnavailable",
-                ErrorMessage = "Item name is missing."
-            };
-        }
-
-        var normalizedName = itemName.Trim();
         var cacheKey = $"steam-market-price::{game.Key}::{normalizedName}";
         if (_memoryCache.TryGetValue<PriceSourceResult>(cacheKey, out var cachedResult) && cachedResult is not null)
         {
-            _logger.LogDebug("Steam market price cache hit for {ItemName}.", normalizedName);
+            cachedResult.IsCached = true;
             return cachedResult;
         }
-
-        _logger.LogDebug("Steam market price cache miss for {ItemName}.", normalizedName);
 
         var requestUri =
             $"https://steamcommunity.com/market/priceoverview/?country=US&currency=1&appid={game.SteamAppId}&market_hash_name={Uri.EscapeDataString(normalizedName)}";
 
-        try
+        for (var attempt = 0; attempt <= Math.Max(0, _options.SteamRetryCount); attempt++)
         {
-            using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                _logger.LogWarning("Steam market price request failed for {ItemName} with status code {StatusCode}. URL: {RequestUrl}", normalizedName, (int)response.StatusCode, requestUri);
-                return Unavailable(cacheKey, $"HTTP {(int)response.StatusCode}");
-            }
-
-            var rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            var payload = JsonSerializer.Deserialize<SteamMarketPriceResponse>(
-                rawContent,
-                new JsonSerializerOptions
+                using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
+                if (response.StatusCode == HttpStatusCode.Forbidden)
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    var forbidden = Failure("Steam", "Forbidden", "Steam market denied the request.", normalizedName);
+                    Cache(cacheKey, forbidden);
+                    return forbidden;
+                }
 
-            if (payload?.Success != true)
-            {
-                _logger.LogInformation("Steam market price unavailable for {ItemName}. URL: {RequestUrl}. Response: {ResponseSnippet}", normalizedName, requestUri, GetSnippet(rawContent));
-                return Unavailable(cacheKey, "Steam market did not return a price.");
-            }
+                if (response.StatusCode == (HttpStatusCode)429)
+                {
+                    if (attempt < _options.SteamRetryCount)
+                    {
+                        await DelayForRetryAsync(cancellationToken);
+                        continue;
+                    }
 
-            var parsedPrice = ParsePrice(payload.LowestPrice) ??
-                              ParsePrice(payload.MedianPrice);
+                    var rateLimited = Failure("Steam", "RateLimited", "Steam market is rate limiting requests.", normalizedName);
+                    Cache(cacheKey, rateLimited);
+                    return rateLimited;
+                }
 
-            if (!parsedPrice.HasValue || parsedPrice.Value <= 0)
-            {
-                _logger.LogInformation("Steam market price payload did not contain a usable price for {ItemName}. URL: {RequestUrl}. Response: {ResponseSnippet}", normalizedName, requestUri, GetSnippet(rawContent));
-                return Unavailable(cacheKey, "Steam market price payload was empty.");
-            }
+                if ((int)response.StatusCode >= 500 && attempt < _options.SteamRetryCount)
+                {
+                    await DelayForRetryAsync(cancellationToken);
+                    continue;
+                }
 
-            var result = new PriceSourceResult
-            {
-                Success = true,
-                Price = Math.Round(parsedPrice.Value, 2, MidpointRounding.AwayFromZero),
-                Source = "Steam",
-                ErrorMessage = null
-            };
+                if (!response.IsSuccessStatusCode)
+                {
+                    var failed = Failure("Steam", "HttpError", $"Steam market returned HTTP {(int)response.StatusCode}.", normalizedName);
+                    Cache(cacheKey, failed);
+                    return failed;
+                }
 
-            _logger.LogInformation("Steam market price found for {ItemName}.", normalizedName);
-            _memoryCache.Set(cacheKey, result, CacheDuration);
-            return result;
-        }
-        catch (HttpRequestException exception)
-        {
-            _logger.LogError(exception, "Steam market price HTTP request failed for {ItemName}.", normalizedName);
-            return Unavailable(cacheKey, exception.Message);
-        }
-        catch (JsonException exception)
-        {
-            _logger.LogError(exception, "Steam market price parsing failed for {ItemName}. URL: {RequestUrl}", normalizedName, requestUri);
-            return Unavailable(cacheKey, "Steam market response parsing failed.");
-        }
-    }
+                var rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                var payload = JsonSerializer.Deserialize<SteamMarketPriceResponse>(
+                    rawContent,
+                    new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
 
-    public async Task<PriceSourceResult> ProbePriceAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
-    {
-        foreach (var candidate in GetCandidates(item))
-        {
-            var result = await ProbePriceAsync(candidate.Value, item.GameType, cancellationToken);
-            if (result.Success)
-            {
-                _logger.LogInformation("Steam market match used {CandidateType} for {ItemName}.", candidate.Key, item.Name);
+                if (payload?.Success != true)
+                {
+                    var unavailable = Failure("Steam", "Unavailable", "Steam market did not return a price.", normalizedName);
+                    Cache(cacheKey, unavailable);
+                    return unavailable;
+                }
+
+                var parsedPrice = ParsePrice(payload.LowestPrice) ?? ParsePrice(payload.MedianPrice);
+                if (!parsedPrice.HasValue || parsedPrice <= 0)
+                {
+                    var malformed = Failure("Steam", "MalformedResponse", "Steam market response did not contain a usable price.", normalizedName);
+                    Cache(cacheKey, malformed);
+                    return malformed;
+                }
+
+                var result = new PriceSourceResult
+                {
+                    Success = true,
+                    Price = Math.Round(parsedPrice.Value, 2, MidpointRounding.AwayFromZero),
+                    Currency = _options.PreferredCurrency,
+                    Source = "Steam",
+                    Status = "Live",
+                    LastUpdatedUtc = DateTime.UtcNow,
+                    ResolvedMarketHashName = normalizedName
+                };
+
+                Cache(cacheKey, result);
                 return result;
             }
+            catch (HttpRequestException exception) when (attempt < _options.SteamRetryCount)
+            {
+                _logger.LogWarning(exception, "Transient Steam price error for {MarketHashName}. Retrying.", normalizedName);
+                await DelayForRetryAsync(cancellationToken);
+            }
+            catch (HttpRequestException exception)
+            {
+                var failed = Failure("Steam", "NetworkError", exception.Message, normalizedName);
+                Cache(cacheKey, failed);
+                return failed;
+            }
+            catch (JsonException exception)
+            {
+                var failed = Failure("Steam", "MalformedResponse", exception.Message, normalizedName);
+                Cache(cacheKey, failed);
+                return failed;
+            }
         }
 
-        return new PriceSourceResult
-        {
-            Source = "SteamUnavailable",
-            ErrorMessage = "Steam market price was not found for market hash name, market name or item name."
-        };
+        var exhausted = Failure("Steam", "TransientFailure", "Steam market retry budget exhausted.", normalizedName);
+        Cache(exhaustedKey: cacheKey, result: exhausted);
+        return exhausted;
     }
 
-    private PriceSourceResult Unavailable(string cacheKey, string errorMessage)
+    private void Cache(string exhaustedKey, PriceSourceResult result)
     {
-        var result = new PriceSourceResult
-        {
-            Source = "SteamUnavailable",
-            ErrorMessage = errorMessage
-        };
+        var minutes = result.Success ? _options.SteamCacheMinutes : _options.NegativeCacheMinutes;
+        _memoryCache.Set(exhaustedKey, result, TimeSpan.FromMinutes(Math.Max(1, minutes)));
+    }
 
-        _memoryCache.Set(cacheKey, result, CacheDuration);
-        return result;
+    private Task DelayForRetryAsync(CancellationToken cancellationToken)
+    {
+        return Task.Delay(Math.Max(50, _options.HttpTransientRetryDelayMilliseconds), cancellationToken);
+    }
+
+    private static PriceSourceResult Failure(string source, string status, string failureReason, string? marketHashName)
+    {
+        return new PriceSourceResult
+        {
+            Source = source,
+            Status = status,
+            FailureReason = failureReason,
+            Currency = "USD",
+            ResolvedMarketHashName = marketHashName,
+            LastUpdatedUtc = DateTime.UtcNow
+        };
     }
 
     private static decimal? ParsePrice(string? rawValue)
@@ -198,33 +210,5 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         public bool Success { get; set; }
         public string? LowestPrice { get; set; }
         public string? MedianPrice { get; set; }
-    }
-
-    private static IEnumerable<KeyValuePair<string, string>> GetCandidates(SteamInventoryItemDto item)
-    {
-        if (!string.IsNullOrWhiteSpace(item.MarketHashName))
-        {
-            yield return new KeyValuePair<string, string>("MarketHashName", item.MarketHashName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.MarketName))
-        {
-            yield return new KeyValuePair<string, string>("MarketName", item.MarketName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.Name))
-        {
-            yield return new KeyValuePair<string, string>("Name", item.Name);
-        }
-    }
-
-    private static string GetSnippet(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "<empty>";
-        }
-
-        return value.Length <= 200 ? value : value[..200];
     }
 }

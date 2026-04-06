@@ -42,6 +42,7 @@ public class MarketService : IMarketService
             ClassId = operation.ClassId,
             InstanceId = operation.InstanceId,
             ItemName = operation.ItemName,
+            MarketHashName = operation.MarketHashName,
             IconUrl = operation.IconUrl,
             Price = await _marketPricingService.CalculatePriceAsync(operation, cancellationToken),
             Status = "Available",

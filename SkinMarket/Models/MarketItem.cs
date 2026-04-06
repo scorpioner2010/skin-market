@@ -9,6 +9,7 @@ public class MarketItem
     public string ClassId { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;
     public string ItemName { get; set; } = string.Empty;
+    public string? MarketHashName { get; set; }
     public string? IconUrl { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = string.Empty;

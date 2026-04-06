@@ -1,249 +1,239 @@
-using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
 
 public class SkinportPricingService : ISkinportPricingService
 {
-    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
-
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SkinportPricingService> _logger;
     private readonly IGameCatalog _gameCatalog;
+    private readonly PricingOptions _options;
 
-    public SkinportPricingService(HttpClient httpClient, IMemoryCache memoryCache, ILogger<SkinportPricingService> logger, IGameCatalog gameCatalog)
+    public SkinportPricingService(
+        HttpClient httpClient,
+        IMemoryCache memoryCache,
+        ILogger<SkinportPricingService> logger,
+        IGameCatalog gameCatalog,
+        IOptions<PricingOptions> options)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
+        _options = options.Value;
     }
 
-    public async Task<IReadOnlyDictionary<string, SkinportItemDto>> GetPriceMapAsync(GameType gameType, CancellationToken cancellationToken = default)
+    public async Task<PriceSourceResult> ProbePriceAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)
     {
+        var normalizedName = MarketHashNameUtility.Normalize(marketHashName);
         var game = _gameCatalog.Get(gameType);
+        if (string.IsNullOrWhiteSpace(normalizedName))
+        {
+            return Failure("MissingMarketHashName", normalizedName);
+        }
+
         if (!game.SupportsSkinportPricing)
         {
-            _logger.LogInformation("Skinport pricing is not configured for game {GameKey}.", game.Key);
-            return EmptyPriceMap();
+            return Failure($"Skinport pricing is not configured for {game.DisplayName}.", normalizedName);
         }
 
-        var cacheKey = $"skinport-prices-usd-{game.SteamAppId}-tradable-0";
-        var normalizedCacheKey = $"{cacheKey}-normalized";
-        var endpoint = $"https://api.skinport.com/v1/items?app_id={game.SteamAppId}&currency=USD&tradable=0";
-
-        if (_memoryCache.TryGetValue<IReadOnlyDictionary<string, SkinportItemDto>>(cacheKey, out var cachedPrices) &&
-            cachedPrices is not null)
+        var historyMap = await GetSalesHistoryAsync([normalizedName], gameType, cancellationToken);
+        if (historyMap.TryGetValue(normalizedName, out var historyItem))
         {
-            _logger.LogDebug("Using cached Skinport price map.");
-            return cachedPrices;
+            var historyResult = ResolveFromHistory(historyItem, normalizedName);
+            if (historyResult.Success)
+            {
+                return historyResult;
+            }
         }
+
+        var outOfStockMap = await GetOutOfStockPriceMapAsync(gameType, cancellationToken);
+        if (outOfStockMap.TryGetValue(normalizedName, out var outOfStockItem))
+        {
+            var outOfStockResult = ResolveFromOutOfStock(outOfStockItem, normalizedName);
+            if (outOfStockResult.Success)
+            {
+                return outOfStockResult;
+            }
+        }
+
+        return Failure("Skinport did not return a usable history or out-of-stock price.", normalizedName);
+    }
+
+    public async Task<IReadOnlyDictionary<string, SkinportSalesHistoryDto>> GetSalesHistoryAsync(
+        IReadOnlyCollection<string> marketHashNames,
+        GameType gameType,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedNames = marketHashNames
+            .Select(MarketHashNameUtility.Normalize)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (normalizedNames.Count == 0)
+        {
+            return EmptyHistoryMap();
+        }
+
+        var game = _gameCatalog.Get(gameType);
+        var cacheKey = $"skinport-history::{game.Key}::{string.Join('|', normalizedNames)}::{_options.PreferredCurrency}";
+        if (_memoryCache.TryGetValue<IReadOnlyDictionary<string, SkinportSalesHistoryDto>>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var endpoint =
+            $"https://api.skinport.com/v1/sales/history?app_id={game.SteamAppId}&currency={Uri.EscapeDataString(_options.PreferredCurrency)}&market_hash_name={Uri.EscapeDataString(string.Join(',', normalizedNames))}";
 
         try
         {
             using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Skinport pricing request failed with status code {StatusCode}.", (int)response.StatusCode);
-                return EmptyPriceMap();
+                _logger.LogWarning("Skinport history request failed with status code {StatusCode}.", (int)response.StatusCode);
+                return EmptyHistoryMap();
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            var items = await JsonSerializer.DeserializeAsync<List<SkinportItemDto>>(
+            var payload = await JsonSerializer.DeserializeAsync<List<SkinportSalesHistoryDto>>(
                 stream,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                },
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
                 cancellationToken);
 
-            if (items is null || items.Count == 0)
-            {
-                _logger.LogWarning("Skinport pricing response was empty.");
-                return EmptyPriceMap();
-            }
-
-            var priceMap = items
+            var result = payload?
                 .Where(item => !string.IsNullOrWhiteSpace(item.MarketHashName))
-                .GroupBy(item => item.MarketHashName, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+                .ToDictionary(item => item.MarketHashName, item => item, StringComparer.Ordinal)
+                ?? new Dictionary<string, SkinportSalesHistoryDto>(StringComparer.Ordinal);
 
-            var normalizedPriceMap = priceMap
-                .Values
-                .GroupBy(item => NormalizeName(item.MarketHashName), StringComparer.Ordinal)
-                .Where(group => !string.IsNullOrWhiteSpace(group.Key))
-                .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-
-            _memoryCache.Set(cacheKey, priceMap, CacheDuration);
-            _memoryCache.Set(normalizedCacheKey, normalizedPriceMap, CacheDuration);
-            _logger.LogInformation("Skinport price map loaded with {Count} items and cached for {Minutes} minutes.", priceMap.Count, CacheDuration.TotalMinutes);
-            return priceMap;
+            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportHistoryCacheMinutes)));
+            return result;
         }
-        catch (HttpRequestException exception)
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
         {
-            _logger.LogError(exception, "Skinport pricing HTTP request failed.");
-            return EmptyPriceMap();
-        }
-        catch (JsonException exception)
-        {
-            _logger.LogError(exception, "Skinport pricing response parsing failed.");
-            return EmptyPriceMap();
+            _logger.LogWarning(exception, "Skinport history lookup failed.");
+            return EmptyHistoryMap();
         }
     }
 
-    public async Task<ResolvedItemPrice> ResolvePriceAsync(string? itemName, GameType gameType, CancellationToken cancellationToken = default)
-    {
-        var probe = await ProbePriceAsync(itemName, gameType, cancellationToken);
-        return new ResolvedItemPrice
-        {
-            RealPriceUsd = probe.Price,
-            Source = probe.Source,
-            IsFallback = !probe.Success
-        };
-    }
-
-    public async Task<ResolvedItemPrice> ResolvePriceAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
-    {
-        var probe = await ProbePriceAsync(item, cancellationToken);
-        return new ResolvedItemPrice
-        {
-            RealPriceUsd = probe.Price,
-            Source = probe.Source,
-            IsFallback = !probe.Success
-        };
-    }
-
-    public async Task<PriceSourceResult> ProbePriceAsync(string? itemName, GameType gameType, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyDictionary<string, SkinportOutOfStockItemDto>> GetOutOfStockPriceMapAsync(GameType gameType, CancellationToken cancellationToken = default)
     {
         var game = _gameCatalog.Get(gameType);
-        if (!game.SupportsSkinportPricing)
+        var cacheKey = $"skinport-out-of-stock::{game.Key}::{_options.PreferredCurrency}";
+        if (_memoryCache.TryGetValue<IReadOnlyDictionary<string, SkinportOutOfStockItemDto>>(cacheKey, out var cached) && cached is not null)
         {
-            return new PriceSourceResult
-            {
-                Source = "GamePricingNotConfigured",
-                ErrorMessage = $"Skinport pricing is not configured for {game.DisplayName}."
-            };
+            return cached;
         }
 
-        if (string.IsNullOrWhiteSpace(itemName))
+        var endpoint =
+            $"https://api.skinport.com/v1/items?app_id={game.SteamAppId}&currency={Uri.EscapeDataString(_options.PreferredCurrency)}&tradable=0";
+
+        try
         {
-            return new PriceSourceResult
+            using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+            if (!response.IsSuccessStatusCode)
             {
-                Source = "MissingItemName",
-                ErrorMessage = "Item name is missing."
-            };
-        }
-
-        var cacheKey = $"skinport-prices-usd-{game.SteamAppId}-tradable-0-normalized";
-        var priceMap = await GetPriceMapAsync(gameType, cancellationToken);
-        var trimmedName = itemName.Trim();
-        if (!priceMap.TryGetValue(trimmedName, out var item))
-        {
-            _logger.LogInformation("Skinport exact match not found for item name {ItemName}.", trimmedName);
-
-            var normalizedMap = _memoryCache.TryGetValue<IReadOnlyDictionary<string, SkinportItemDto>>(cacheKey, out var cachedNormalizedMap) &&
-                                cachedNormalizedMap is not null
-                ? cachedNormalizedMap
-                : EmptyPriceMap();
-
-            var normalizedName = NormalizeName(trimmedName);
-            if (normalizedMap.TryGetValue(normalizedName, out item))
-            {
-                _logger.LogInformation("Using Skinport fallback price via normalized match for {ItemName}.", trimmedName);
-                return CreateResolvedPrice(item, "SkinportNormalizedMatch");
+                _logger.LogWarning("Skinport items request failed with status code {StatusCode}.", (int)response.StatusCode);
+                return EmptyOutOfStockMap();
             }
 
-            _logger.LogInformation("Skinport normalized match not found for item name {ItemName}.", trimmedName);
-            return new PriceSourceResult
-            {
-                Source = "ExactMatchNotFound",
-                ErrorMessage = "Skinport exact/normalized match not found."
-            };
-        }
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var payload = await JsonSerializer.DeserializeAsync<List<SkinportOutOfStockItemDto>>(
+                stream,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                cancellationToken);
 
-        _logger.LogInformation("Using Skinport fallback price via exact match for {ItemName}.", trimmedName);
-        return CreateResolvedPrice(item, "SkinportExactMatch");
+            var result = payload?
+                .Where(item => !string.IsNullOrWhiteSpace(item.MarketHashName))
+                .ToDictionary(item => item.MarketHashName, item => item, StringComparer.Ordinal)
+                ?? new Dictionary<string, SkinportOutOfStockItemDto>(StringComparer.Ordinal);
+
+            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportItemsCacheMinutes)));
+            return result;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            _logger.LogWarning(exception, "Skinport out-of-stock lookup failed.");
+            return EmptyOutOfStockMap();
+        }
     }
 
-    public async Task<PriceSourceResult> ProbePriceAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
+    private PriceSourceResult ResolveFromHistory(SkinportSalesHistoryDto item, string marketHashName)
     {
-        foreach (var candidate in GetCandidates(item))
+        var candidates = new (SkinportSalesWindowDto? Window, string Status)[]
         {
-            var result = await ProbePriceAsync(candidate.Value, item.GameType, cancellationToken);
-            if (result.Success)
-            {
-                _logger.LogInformation("Skinport match used {CandidateType} for {ItemName}.", candidate.Key, item.Name);
-                return result;
-            }
-        }
-
-        return new PriceSourceResult
-        {
-            Source = "ExactMatchNotFound",
-            ErrorMessage = "Skinport exact/normalized match not found."
+            (item.Last7Days, "SkinportHistory7d"),
+            (item.Last30Days, "SkinportHistory30d"),
+            (item.Last90Days, "SkinportHistory90d")
         };
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Window?.Median is decimal median && median > 0 && (candidate.Window.Volume ?? 0) > 0)
+            {
+                return new PriceSourceResult
+                {
+                    Success = true,
+                    Price = Math.Round(median, 2, MidpointRounding.AwayFromZero),
+                    Currency = item.Currency,
+                    Source = "Skinport",
+                    Status = "Live",
+                    LastUpdatedUtc = DateTime.UtcNow,
+                    ResolvedMarketHashName = marketHashName
+                };
+            }
+        }
+
+        return Failure("Skinport history did not contain a usable median.", marketHashName);
     }
 
-    private PriceSourceResult CreateResolvedPrice(SkinportItemDto item, string source)
+    private PriceSourceResult ResolveFromOutOfStock(SkinportOutOfStockItemDto item, string marketHashName)
     {
-        var resolvedValue = item.SuggestedPrice ?? item.MeanPrice ?? item.MedianPrice ?? item.MinPrice;
-        if (!resolvedValue.HasValue || resolvedValue.Value <= 0)
+        var price = item.SuggestedPrice ?? item.AvgSalePrice;
+        if (!price.HasValue || price <= 0)
         {
-            _logger.LogInformation("Skinport item {ItemName} did not contain a usable price.", item.MarketHashName);
-            return new PriceSourceResult
-            {
-                Source = "PriceUnavailable",
-                ErrorMessage = "Skinport price fields were empty."
-            };
+            return Failure("Skinport out-of-stock data did not contain a usable price.", marketHashName);
         }
 
         return new PriceSourceResult
         {
             Success = true,
-            Price = Math.Round(resolvedValue.Value, 2, MidpointRounding.AwayFromZero),
-            Source = source,
-            ErrorMessage = null
+            Price = Math.Round(price.Value, 2, MidpointRounding.AwayFromZero),
+            Currency = item.Currency,
+            Source = "Skinport",
+            Status = "Estimated",
+            IsEstimated = true,
+            LastUpdatedUtc = DateTime.UtcNow,
+            ResolvedMarketHashName = marketHashName
         };
     }
 
-    private static string NormalizeName(string? value)
+    private static PriceSourceResult Failure(string failureReason, string? marketHashName)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        return new PriceSourceResult
         {
-            return string.Empty;
-        }
-
-        return string.Join(
-            ' ',
-            value.Trim()
-                .Replace('\u00A0', ' ')
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries));
+            Source = "Skinport",
+            Status = "Unavailable",
+            FailureReason = failureReason,
+            Currency = "USD",
+            LastUpdatedUtc = DateTime.UtcNow,
+            ResolvedMarketHashName = marketHashName
+        };
     }
 
-    private static IReadOnlyDictionary<string, SkinportItemDto> EmptyPriceMap()
+    private static IReadOnlyDictionary<string, SkinportSalesHistoryDto> EmptyHistoryMap()
     {
-        return new Dictionary<string, SkinportItemDto>(StringComparer.Ordinal);
+        return new Dictionary<string, SkinportSalesHistoryDto>(StringComparer.Ordinal);
     }
 
-    private static IEnumerable<KeyValuePair<string, string>> GetCandidates(SteamInventoryItemDto item)
+    private static IReadOnlyDictionary<string, SkinportOutOfStockItemDto> EmptyOutOfStockMap()
     {
-        if (!string.IsNullOrWhiteSpace(item.MarketHashName))
-        {
-            yield return new KeyValuePair<string, string>("MarketHashName", item.MarketHashName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.MarketName))
-        {
-            yield return new KeyValuePair<string, string>("MarketName", item.MarketName);
-        }
-
-        if (!string.IsNullOrWhiteSpace(item.Name))
-        {
-            yield return new KeyValuePair<string, string>("Name", item.Name);
-        }
+        return new Dictionary<string, SkinportOutOfStockItemDto>(StringComparer.Ordinal);
     }
 }

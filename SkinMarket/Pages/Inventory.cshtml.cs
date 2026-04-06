@@ -7,6 +7,7 @@ using SkinMarket.Contracts;
 using SkinMarket.Data;
 using SkinMarket.Localization;
 using SkinMarket.Models;
+using SkinMarket.Services;
 
 namespace SkinMarket.Pages;
 
@@ -14,8 +15,7 @@ public class InventoryModel : PageModel
 {
     private readonly AppDbContext _dbContext;
     private readonly ISteamInventoryService _steamInventoryService;
-    private readonly ISkinportPricingService _skinportPricingService;
-    private readonly ISteamMarketPriceService _steamMarketPriceService;
+    private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
     private readonly ITradeOperationService _tradeOperationService;
     private readonly ISteamBotIntakeService _steamBotIntakeService;
     private readonly ICreditService _creditService;
@@ -25,8 +25,7 @@ public class InventoryModel : PageModel
     public InventoryModel(
         AppDbContext dbContext,
         ISteamInventoryService steamInventoryService,
-        ISkinportPricingService skinportPricingService,
-        ISteamMarketPriceService steamMarketPriceService,
+        IInventoryPriceRefreshService inventoryPriceRefreshService,
         ITradeOperationService tradeOperationService,
         ISteamBotIntakeService steamBotIntakeService,
         ICreditService creditService,
@@ -35,8 +34,7 @@ public class InventoryModel : PageModel
     {
         _dbContext = dbContext;
         _steamInventoryService = steamInventoryService;
-        _skinportPricingService = skinportPricingService;
-        _steamMarketPriceService = steamMarketPriceService;
+        _inventoryPriceRefreshService = inventoryPriceRefreshService;
         _tradeOperationService = tradeOperationService;
         _steamBotIntakeService = steamBotIntakeService;
         _creditService = creditService;
@@ -45,7 +43,8 @@ public class InventoryModel : PageModel
     }
 
     public List<SteamInventoryItemDto> Items { get; private set; } = new();
-    public Dictionary<string, ResolvedItemPrice> ResolvedPricesByAssetId { get; private set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, ItemPriceResolutionResult> ResolvedPricesByAssetId { get; private set; } = new(StringComparer.Ordinal);
+    public List<InventoryPriceItemRequest> PricePollingItems { get; private set; } = new();
     public List<TradeOperation> RecentOperations { get; private set; } = new();
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
@@ -68,8 +67,8 @@ public class InventoryModel : PageModel
     {
         return source switch
         {
-            "SkinportExactMatch" => "Skinport",
-            "SkinportNormalizedMatch" => "Skinport",
+            "CSFloat" => "CSFloat",
+            "Skinport" => "Skinport",
             "Steam" => "Steam",
             _ => "Unavailable"
         };
@@ -108,6 +107,7 @@ public class InventoryModel : PageModel
             ClassId = Input.ClassId?.Trim() ?? string.Empty,
             InstanceId = Input.InstanceId?.Trim() ?? string.Empty,
             Name = Input.ItemName?.Trim() ?? "Unknown Item",
+            MarketHashName = MarketHashNameUtility.Normalize(Input.MarketHashName),
             IconUrl = string.IsNullOrWhiteSpace(Input.IconUrl) ? null : Input.IconUrl.Trim()
         };
 
@@ -200,16 +200,63 @@ public class InventoryModel : PageModel
         }
 
         Items = result.Items;
+        var marketHashNames = Items
+            .Select(MarketHashNameUtility.ResolvePrimary)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
+        var pricesByMarketHashName = await _inventoryPriceRefreshService.GetCurrentPricesAsync(marketHashNames, CurrentGameType, cancellationToken);
+        var refreshTargets = new List<string>();
         foreach (var item in Items)
         {
-            var resolvedPrice = await _steamMarketPriceService.ResolvePriceAsync(item, cancellationToken);
-            if (!resolvedPrice.RealPriceUsd.HasValue)
+            var marketHashName = MarketHashNameUtility.ResolvePrimary(item);
+            if (!string.IsNullOrWhiteSpace(marketHashName) &&
+                pricesByMarketHashName.TryGetValue(marketHashName, out var resolvedPrice))
             {
-                resolvedPrice = await _skinportPricingService.ResolvePriceAsync(item, cancellationToken);
+                if (resolvedPrice.NeedsRefresh && !resolvedPrice.HasPrice)
+                {
+                    resolvedPrice.Status = "Refreshing";
+                }
+
+                ResolvedPricesByAssetId[item.AssetId] = resolvedPrice;
+                if (resolvedPrice.NeedsRefresh || resolvedPrice.Status == "Refreshing")
+                {
+                    refreshTargets.Add(marketHashName);
+                    PricePollingItems.Add(new InventoryPriceItemRequest
+                    {
+                        AssetId = item.AssetId,
+                        MarketHashName = marketHashName
+                    });
+                }
+                continue;
             }
 
-            ResolvedPricesByAssetId[item.AssetId] = resolvedPrice;
+            ResolvedPricesByAssetId[item.AssetId] = new ItemPriceResolutionResult
+            {
+                HasPrice = false,
+                Currency = "USD",
+                Source = "Unavailable",
+                Status = "Refreshing",
+                FailureReason = "Missing cached price.",
+                NeedsRefresh = true
+            };
+
+            if (!string.IsNullOrWhiteSpace(marketHashName))
+            {
+                refreshTargets.Add(marketHashName);
+                PricePollingItems.Add(new InventoryPriceItemRequest
+                {
+                    AssetId = item.AssetId,
+                    MarketHashName = marketHashName
+                });
+            }
+        }
+
+        if (refreshTargets.Count > 0)
+        {
+            await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
     }
 
@@ -246,6 +293,7 @@ public class InventoryModel : PageModel
         public string? ClassId { get; set; }
         public string? InstanceId { get; set; }
         public string? ItemName { get; set; }
+        public string? MarketHashName { get; set; }
         public string? IconUrl { get; set; }
         public string? TradeOperationId { get; set; }
     }

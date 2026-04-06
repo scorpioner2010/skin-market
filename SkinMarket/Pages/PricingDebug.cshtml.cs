@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
 using SkinMarket.Models;
+using SkinMarket.Services;
 
 namespace SkinMarket.Pages;
 
@@ -10,20 +11,26 @@ public class PricingDebugModel : PageModel
 {
     private readonly AppDbContext _dbContext;
     private readonly ISteamInventoryService _steamInventoryService;
+    private readonly IItemPriceResolver _itemPriceResolver;
     private readonly ISteamMarketPriceService _steamMarketPriceService;
+    private readonly ICsFloatPriceService _csFloatPriceService;
     private readonly ISkinportPricingService _skinportPricingService;
     private readonly IGameCatalog _gameCatalog;
 
     public PricingDebugModel(
         AppDbContext dbContext,
         ISteamInventoryService steamInventoryService,
+        IItemPriceResolver itemPriceResolver,
         ISteamMarketPriceService steamMarketPriceService,
+        ICsFloatPriceService csFloatPriceService,
         ISkinportPricingService skinportPricingService,
         IGameCatalog gameCatalog)
     {
         _dbContext = dbContext;
         _steamInventoryService = steamInventoryService;
+        _itemPriceResolver = itemPriceResolver;
         _steamMarketPriceService = steamMarketPriceService;
+        _csFloatPriceService = csFloatPriceService;
         _skinportPricingService = skinportPricingService;
         _gameCatalog = gameCatalog;
     }
@@ -48,8 +55,17 @@ public class PricingDebugModel : PageModel
 
         foreach (var item in inventory.Items)
         {
-            var steamResult = await _steamMarketPriceService.ProbePriceAsync(item, cancellationToken);
-            var skinportResult = await _skinportPricingService.ProbePriceAsync(item, cancellationToken);
+            var marketHashName = MarketHashNameUtility.ResolvePrimary(item);
+            var steamResult = string.IsNullOrWhiteSpace(marketHashName)
+                ? new PriceSourceResult { Source = "Steam", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
+                : await _steamMarketPriceService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
+            var csFloatResult = string.IsNullOrWhiteSpace(marketHashName)
+                ? new PriceSourceResult { Source = "CSFloat", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
+                : await _csFloatPriceService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
+            var skinportResult = string.IsNullOrWhiteSpace(marketHashName)
+                ? new PriceSourceResult { Source = "Skinport", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
+                : await _skinportPricingService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
+            var finalResult = await _itemPriceResolver.ResolveAsync(item, cancellationToken);
 
             var diagnosticsResult = new ItemPriceDiagnosticsResult
             {
@@ -58,22 +74,21 @@ public class PricingDebugModel : PageModel
                 ClassId = item.ClassId,
                 MarketHashName = item.MarketHashName,
                 MarketName = item.MarketName,
+                ResolvedMarketHashName = finalResult.ResolvedMarketHashName,
                 SteamPrice = steamResult.Price,
+                SteamStatus = steamResult.Status,
+                CsFloatPrice = csFloatResult.Price,
+                CsFloatStatus = csFloatResult.Status,
                 SkinportPrice = skinportResult.Price,
+                SkinportStatus = skinportResult.Status,
                 SteamError = steamResult.ErrorMessage,
-                SkinportError = skinportResult.ErrorMessage
+                CsFloatError = csFloatResult.ErrorMessage,
+                SkinportError = skinportResult.ErrorMessage,
+                FinalPrice = finalResult.Price,
+                FinalSource = finalResult.Source,
+                FinalStatus = finalResult.Status,
+                FailureReason = finalResult.FailureReason
             };
-
-            if (steamResult.Success && steamResult.Price.HasValue)
-            {
-                diagnosticsResult.FinalPrice = steamResult.Price;
-                diagnosticsResult.FinalSource = "Steam";
-            }
-            else if (skinportResult.Success && skinportResult.Price.HasValue)
-            {
-                diagnosticsResult.FinalPrice = skinportResult.Price;
-                diagnosticsResult.FinalSource = "Skinport";
-            }
 
             Items.Add(diagnosticsResult);
         }

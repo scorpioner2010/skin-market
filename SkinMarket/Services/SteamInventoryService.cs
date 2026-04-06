@@ -151,8 +151,8 @@ public class SteamInventoryService : ISteamInventoryService
                     ClassId = classId,
                     InstanceId = instanceId,
                     Name = GetString(description, "name") ?? "Unknown Item",
-                    MarketHashName = GetString(description, "market_hash_name"),
-                    MarketName = GetString(description, "market_name"),
+                    MarketHashName = MarketHashNameUtility.Normalize(GetString(description, "market_hash_name")),
+                    MarketName = MarketHashNameUtility.Normalize(GetString(description, "market_name")),
                     IconUrl = BuildIconUrl(GetString(description, "icon_url")),
                     Tradable = GetBooleanFlag(description, "tradable"),
                     Marketable = GetBooleanFlag(description, "marketable")

@@ -1,13 +1,22 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
 using SkinMarket.Infrastructure;
+using SkinMarket.Models;
 using SkinMarket.Services;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var port = builder.Configuration["PORT"];
+if (string.IsNullOrWhiteSpace(builder.Configuration["ASPNETCORE_URLS"]) &&
+    !string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
 
 var supportedCultures = new[]
 {
@@ -22,13 +31,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     {
         options.LoginPath = "/Auth/Login";
         options.LogoutPath = "/Auth/Logout";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
+var connectionString = DatabaseConnectionStringFactory.Resolve(builder.Configuration);
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 builder.Services.Configure<SteamBotOptions>(builder.Configuration.GetSection(SteamBotOptions.SectionName));
 builder.Services.Configure<SteamApiOptions>(builder.Configuration.GetSection(SteamApiOptions.SectionName));
+builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddRazorPages()
     .AddViewLocalization()
     .AddDataAnnotationsLocalization();
@@ -47,6 +67,10 @@ builder.Services.AddSingleton<IGameCatalog, GameCatalog>();
 builder.Services.AddScoped<IBalanceService, BalanceService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
+builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
+builder.Services.AddSingleton<InventoryPriceRefreshService>();
+builder.Services.AddSingleton<IInventoryPriceRefreshService>(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
+builder.Services.AddHostedService(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
 builder.Services.AddScoped<IMarketPricingService, MarketPricingService>();
 builder.Services.AddScoped<IMarketService, MarketService>();
 builder.Services.AddScoped<IMarketPurchaseService, MarketPurchaseService>();
@@ -55,6 +79,7 @@ builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();
 builder.Services.AddSingleton<ISteamTradeClient, StubSteamTradeClient>();
+builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>();
 builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();
 builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>();
 builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>();
@@ -72,6 +97,12 @@ builder.Services.AddHttpClient<ISteamMarketPriceService, SteamMarketPriceService
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    dbContext.Database.Migrate();
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -81,6 +112,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseForwardedHeaders();
 app.UseStaticFiles();
 
 app.UseRouting();
@@ -106,6 +138,74 @@ app.MapGet("/set-language", (HttpContext httpContext, string culture, string? re
 
     var targetUrl = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
     return Results.LocalRedirect(targetUrl);
+});
+
+app.MapPost("/api/inventory/prices/refresh", async (
+    HttpContext httpContext,
+    InventoryPriceRefreshRequest request,
+    IInventoryPriceRefreshService refreshService,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var marketHashNames = request.Items
+        .Select(item => item.MarketHashName)
+        .Where(item => !string.IsNullOrWhiteSpace(item))
+        .ToList();
+
+    await refreshService.QueueRefreshAsync(marketHashNames, request.GameType, cancellationToken);
+    return Results.Accepted();
+});
+
+app.MapPost("/api/inventory/prices/status", async (
+    HttpContext httpContext,
+    InventoryPriceRefreshRequest request,
+    IInventoryPriceRefreshService refreshService,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var marketHashNames = request.Items
+        .Select(item => item.MarketHashName)
+        .Where(item => !string.IsNullOrWhiteSpace(item))
+        .Distinct(StringComparer.Ordinal)
+        .ToList();
+
+    var statuses = await refreshService.GetStatusAsync(marketHashNames, request.GameType, cancellationToken);
+    var responseItems = request.Items.Select(item =>
+    {
+        var normalizedMarketHashName = MarketHashNameUtility.Normalize(item.MarketHashName) ?? item.MarketHashName;
+        statuses.TryGetValue(normalizedMarketHashName, out var status);
+        status ??= new ItemPriceResolutionResult
+        {
+            Currency = "USD",
+            Source = "Unavailable",
+            Status = "Refreshing",
+            FailureReason = "Price refresh pending."
+        };
+
+        return new InventoryPriceStatusItem
+        {
+            AssetId = item.AssetId,
+            MarketHashName = normalizedMarketHashName,
+            HasPrice = status.HasPrice,
+            Price = status.Price,
+            Currency = status.Currency,
+            Source = status.Source,
+            Status = status.Status,
+            IsCached = status.IsCached,
+            IsEstimated = status.IsEstimated,
+            FailureReason = status.FailureReason
+        };
+    }).ToList();
+
+    return Results.Ok(new { Items = responseItems });
 });
 
 app.MapRazorPages();

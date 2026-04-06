@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<BalanceTransaction> BalanceTransactions => Set<BalanceTransaction>();
     public DbSet<MarketItem> MarketItems => Set<MarketItem>();
+    public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<TradeOperation> TradeOperations => Set<TradeOperation>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -47,6 +48,7 @@ public class AppDbContext : DbContext
             entity.Property(operation => operation.ClassId).IsRequired();
             entity.Property(operation => operation.InstanceId).IsRequired();
             entity.Property(operation => operation.ItemName).IsRequired();
+            entity.Property(operation => operation.MarketHashName).HasMaxLength(300);
             entity.Property(operation => operation.Status).IsRequired();
             entity.Property(operation => operation.TradeOfferId).HasMaxLength(100);
             entity.Property(operation => operation.BotTradeUrl).HasMaxLength(500);
@@ -64,6 +66,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.ClassId).IsRequired();
             entity.Property(item => item.InstanceId).IsRequired();
             entity.Property(item => item.ItemName).IsRequired();
+            entity.Property(item => item.MarketHashName).HasMaxLength(300);
             entity.Property(item => item.Status).IsRequired();
             entity.Property(item => item.DeliveryStatus).HasMaxLength(100);
             entity.Property(item => item.DeliveryTradeOfferId).HasMaxLength(100);
@@ -75,6 +78,17 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.BuyerAppUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PriceSnapshot>(entity =>
+        {
+            entity.HasKey(snapshot => snapshot.Id);
+            entity.Property(snapshot => snapshot.MarketHashName).IsRequired().HasMaxLength(300);
+            entity.Property(snapshot => snapshot.Currency).IsRequired().HasMaxLength(10);
+            entity.Property(snapshot => snapshot.Source).IsRequired().HasMaxLength(50);
+            entity.Property(snapshot => snapshot.Status).IsRequired().HasMaxLength(50);
+            entity.Property(snapshot => snapshot.FailureReason).HasMaxLength(500);
+            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency }).IsUnique();
         });
     }
 }

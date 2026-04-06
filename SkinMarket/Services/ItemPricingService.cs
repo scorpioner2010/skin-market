@@ -5,38 +5,36 @@ namespace SkinMarket.Services;
 
 public class ItemPricingService : IItemPricingService
 {
-    private readonly ISkinportPricingService _skinportPricingService;
+    private readonly IItemPriceResolver _itemPriceResolver;
     private readonly ILogger<ItemPricingService> _logger;
-    private readonly IGameCatalog _gameCatalog;
 
-    public ItemPricingService(ISkinportPricingService skinportPricingService, ILogger<ItemPricingService> logger, IGameCatalog gameCatalog)
+    public ItemPricingService(IItemPriceResolver itemPriceResolver, ILogger<ItemPricingService> logger)
     {
-        _skinportPricingService = skinportPricingService;
+        _itemPriceResolver = itemPriceResolver;
         _logger = logger;
-        _gameCatalog = gameCatalog;
     }
 
     public async Task<decimal> CalculatePriceAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
     {
-        var resolvedPrice = await _skinportPricingService.ResolvePriceAsync(item.Name, item.GameType, cancellationToken);
-        if (resolvedPrice.RealPriceUsd.HasValue)
+        var resolvedPrice = await _itemPriceResolver.ResolveAsync(item, cancellationToken);
+        if (resolvedPrice.HasPrice && resolvedPrice.Price.HasValue)
         {
-            return Math.Round(resolvedPrice.RealPriceUsd.Value * 0.80m, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(resolvedPrice.Price.Value * 0.80m, 2, MidpointRounding.AwayFromZero);
         }
 
-        _logger.LogInformation("Using fallback credit pricing for inventory item {ItemName}. Source: {Source}", item.Name, resolvedPrice.Source);
+        _logger.LogInformation("Using fallback credit pricing for inventory item {ItemName}. Failure: {FailureReason}", item.Name, resolvedPrice.FailureReason);
         return CalculateFallbackInventoryPrice(item);
     }
 
     public async Task<decimal> CalculatePriceAsync(TradeOperation operation, CancellationToken cancellationToken = default)
     {
-        var resolvedPrice = await _skinportPricingService.ResolvePriceAsync(operation.ItemName, _gameCatalog.DefaultGameType, cancellationToken);
-        if (resolvedPrice.RealPriceUsd.HasValue)
+        var resolvedPrice = await _itemPriceResolver.ResolveAsync(operation, cancellationToken);
+        if (resolvedPrice.HasPrice && resolvedPrice.Price.HasValue)
         {
-            return Math.Round(resolvedPrice.RealPriceUsd.Value * 0.80m, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(resolvedPrice.Price.Value * 0.80m, 2, MidpointRounding.AwayFromZero);
         }
 
-        _logger.LogInformation("Using fallback credit pricing for trade operation {TradeOperationId}. Source: {Source}", operation.Id, resolvedPrice.Source);
+        _logger.LogInformation("Using fallback credit pricing for trade operation {TradeOperationId}. Failure: {FailureReason}", operation.Id, resolvedPrice.FailureReason);
         return CalculateFallbackTradeOperationPrice(operation);
     }
 

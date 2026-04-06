@@ -1,5 +1,6 @@
 @page
 @model SkinMarket.Pages.InventoryModel
+@using System.Text.Json
 @{
     ViewData["Title"] = L["Page_Inventory_Title"];
 }
@@ -110,22 +111,47 @@
                                 </div>
                                 <div class="inventory-cell inventory-meta break-value" data-label="AssetId">@item.AssetId</div>
                                 <div class="inventory-cell inventory-meta break-value" data-label="ClassId">@item.ClassId</div>
-                                <div class="inventory-cell inventory-meta" data-label="@L["Inventory_Column_RealPrice"]">
+                                <div class="inventory-cell inventory-meta inventory-price-cell" data-label="@L["Inventory_Column_RealPrice"]" data-asset-id="@item.AssetId" data-market-hash-name="@item.MarketHashName">
                                     @{
                                         var resolvedPrice = Model.ResolvedPricesByAssetId.GetValueOrDefault(item.AssetId);
                                     }
-                                    @if (resolvedPrice?.RealPriceUsd is decimal realPrice)
+                                    @if (resolvedPrice?.Status == "Refreshing")
                                     {
                                         <div class="inventory-price-block">
-                                            <span class="price-value">$@realPrice.ToString("0.00")</span>
-                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizePriceSource(L, Model.GetPriceSourceLabel(resolvedPrice.Source))</span>
+                                            <span class="inventory-unavailable">@L["PriceStatus_Loading"]</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["PriceStatus_Refreshing"]</span>
+                                        </div>
+                                    }
+                                    else if (resolvedPrice?.HasPrice == true && resolvedPrice.Price is decimal realPrice)
+                                    {
+                                        <div class="inventory-price-block">
+                                            <span class="price-value">@(resolvedPrice.IsEstimated ? "~" : string.Empty)$@realPrice.ToString("0.00")</span>
+                                            <div class="inventory-badges">
+                                                <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizePriceSource(L, Model.GetPriceSourceLabel(resolvedPrice.Source))</span>
+                                                @if (resolvedPrice.IsCached)
+                                                {
+                                                    <span class="compact-badge compact-badge-neutral">@L["PriceStatus_Cached"]</span>
+                                                }
+                                                else if (resolvedPrice.IsEstimated)
+                                                {
+                                                    <span class="compact-badge compact-badge-neutral">@L["PriceStatus_Estimated"]</span>
+                                                }
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(resolvedPrice.FailureReason) && (resolvedPrice.IsCached || resolvedPrice.IsEstimated))
+                                            {
+                                                <span class="inventory-inline-note break-value">@resolvedPrice.FailureReason</span>
+                                            }
                                         </div>
                                     }
                                     else
                                     {
                                         <div class="inventory-price-block">
-                                            <span class="inventory-unavailable">@L["Inventory_PriceUnavailable"]</span>
+                                            <span class="inventory-unavailable">@L["PriceStatus_NoPrice"]</span>
                                             <span class="compact-badge compact-badge-neutral">@L["Common_Unavailable"]</span>
+                                            @if (!string.IsNullOrWhiteSpace(resolvedPrice?.FailureReason))
+                                            {
+                                                <span class="inventory-inline-note break-value">@resolvedPrice.FailureReason</span>
+                                            }
                                         </div>
                                     }
                                 </div>
@@ -183,6 +209,7 @@
                                                 <input type="hidden" name="Input.ClassId" value="@item.ClassId" />
                                                 <input type="hidden" name="Input.InstanceId" value="@item.InstanceId" />
                                                 <input type="hidden" name="Input.ItemName" value="@item.Name" />
+                                                <input type="hidden" name="Input.MarketHashName" value="@item.MarketHashName" />
                                                 <input type="hidden" name="Input.IconUrl" value="@item.IconUrl" />
                                                 <button type="submit" class="btn app-button-primary">@L["Common_Sell"]</button>
                                             </form>
@@ -258,3 +285,111 @@
         </section>
     }
 </div>
+
+@if (Model.PricePollingItems.Count > 0)
+{
+    <script type="application/json" id="inventory-price-items">@Html.Raw(JsonSerializer.Serialize(Model.PricePollingItems))</script>
+}
+
+@section Scripts {
+    <script>
+        (() => {
+            const payloadElement = document.getElementById('inventory-price-items');
+            if (!payloadElement) {
+                return;
+            }
+
+            const items = JSON.parse(payloadElement.textContent || '[]');
+            if (!Array.isArray(items) || items.length === 0) {
+                return;
+            }
+
+            const statusUrl = '/api/inventory/prices/status';
+            const refreshUrl = '/api/inventory/prices/refresh';
+            const requestBody = {
+                gameType: @((int)Model.CurrentGameType),
+                items
+            };
+
+            const updateCell = (entry) => {
+                const cell = document.querySelector(`.inventory-price-cell[data-asset-id="${entry.assetId}"]`);
+                if (!cell) {
+                    return;
+                }
+
+                if (entry.status === 'Refreshing') {
+                    cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">@L["PriceStatus_Loading"]</span><span class="compact-badge compact-badge-neutral">@L["PriceStatus_Refreshing"]</span></div>`;
+                    return;
+                }
+
+                if (entry.hasPrice && entry.price !== null) {
+                    const prefix = entry.isEstimated ? '~' : '';
+                    const tags = [];
+                    tags.push(`<span class="compact-badge compact-badge-neutral">${entry.source}</span>`);
+                    if (entry.isCached) {
+                        tags.push(`<span class="compact-badge compact-badge-neutral">@L["PriceStatus_Cached"]</span>`);
+                    } else if (entry.isEstimated) {
+                        tags.push(`<span class="compact-badge compact-badge-neutral">@L["PriceStatus_Estimated"]</span>`);
+                    }
+
+                    const reason = entry.failureReason
+                        ? `<span class="inventory-inline-note break-value">${entry.failureReason}</span>`
+                        : '';
+
+                    cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${prefix}$${Number(entry.price).toFixed(2)}</span><div class="inventory-badges">${tags.join('')}</div>${reason}</div>`;
+                    return;
+                }
+
+                const reason = entry.failureReason
+                    ? `<span class="inventory-inline-note break-value">${entry.failureReason}</span>`
+                    : '';
+                cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">@L["PriceStatus_NoPrice"]</span><span class="compact-badge compact-badge-neutral">@L["Common_Unavailable"]</span>${reason}</div>`;
+            };
+
+            const fetchJson = async (url) => {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                return await response.json();
+            };
+
+            let pollCount = 0;
+            const maxPolls = 20;
+
+            const poll = async () => {
+                pollCount += 1;
+                try {
+                    const data = await fetchJson(statusUrl);
+                    const statuses = Array.isArray(data?.items) ? data.items : [];
+                    let hasRefreshing = false;
+                    for (const entry of statuses) {
+                        updateCell(entry);
+                        if (entry.status === 'Refreshing') {
+                            hasRefreshing = true;
+                        }
+                    }
+
+                    if (hasRefreshing && pollCount < maxPolls) {
+                        window.setTimeout(poll, 2500);
+                    }
+                } catch {
+                }
+            };
+
+            fetchJson(refreshUrl)
+                .catch(() => null)
+                .finally(() => {
+                    window.setTimeout(poll, 1200);
+                });
+        })();
+    </script>
+}

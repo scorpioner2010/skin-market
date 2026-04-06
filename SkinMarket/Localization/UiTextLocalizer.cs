@@ -36,6 +36,16 @@ public static partial class UiTextLocalizer
         return Resolve(localizer, $"PriceSource_{source}", source);
     }
 
+    public static string LocalizePriceStatus(IStringLocalizer localizer, string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return string.Empty;
+        }
+
+        return Resolve(localizer, $"PriceStatus_{status}", status);
+    }
+
     public static string LocalizeMessage(IStringLocalizer localizer, string? message)
     {
         if (string.IsNullOrWhiteSpace(message))

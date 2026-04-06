@@ -43,6 +43,7 @@ public class TradeOperationService : ITradeOperationService
             ClassId = item.ClassId,
             InstanceId = item.InstanceId,
             ItemName = string.IsNullOrWhiteSpace(item.Name) ? "Unknown Item" : item.Name,
+            MarketHashName = MarketHashNameUtility.ResolvePrimary(item),
             IconUrl = item.IconUrl,
             Status = "Pending",
             CreatedAtUtc = DateTime.UtcNow,
