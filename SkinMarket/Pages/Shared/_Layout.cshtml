@@ -36,9 +36,6 @@
                 <div class="collapse navbar-collapse" id="app-nav">
                     <ul class="navbar-nav app-nav-links">
                         <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Index">@L["Layout_Nav_Home"]</a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link app-nav-link" asp-area="" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
                         </li>
                         <li class="nav-item">
@@ -49,6 +46,9 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link app-nav-link" asp-area="" asp-page="/History">@L["Layout_Nav_History"]</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Admin/Logs">Admin</a>
                         </li>
                     </ul>
                     <div class="app-toolbar">
@@ -98,11 +98,7 @@
 
     <footer class="app-footer">
         <div class="container app-shell app-footer-inner">
-            <div>
-                <strong>SkinMarket</strong>
-                <span class="app-footer-text">@L["Layout_Footer_Primary"]</span>
-            </div>
-            <div class="app-footer-text">@L["Layout_Footer_Secondary"]</div>
+            <div><strong>SkinMarket</strong></div>
         </div>
     </footer>
 

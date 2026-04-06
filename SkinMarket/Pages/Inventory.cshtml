@@ -8,9 +8,7 @@
 <div class="py-4">
     <div class="page-header">
         <div>
-            <span class="section-kicker">@L["Inventory_Kicker"]</span>
             <h1>@L["Page_Inventory_Title"]</h1>
-            <p class="page-description">@L["Inventory_Description"]</p>
         </div>
         <div class="status-group">
             <span class="compact-badge compact-badge-neutral">@Model.CurrentGameDisplayName</span>
@@ -21,7 +19,6 @@
     {
         <div class="empty-state">
             <h2>@L["Common_SteamLoginRequired"]</h2>
-            <p>@L["Inventory_LoginRequired_Text"]</p>
             <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
         </div>
     }
@@ -57,10 +54,7 @@
         {
             <section class="page-section">
                 <div class="section-heading">
-                    <div>
-                        <h2>@L["Inventory_YourItems_Title"]</h2>
-                        <p>@L["Inventory_YourItems_Description"]</p>
-                    </div>
+                    <div><h2>@L["Inventory_YourItems_Title"]</h2></div>
                 </div>
                 <div class="inventory-table-shell">
                     <div class="inventory-list">
@@ -232,10 +226,9 @@
             </div>
             @if (Model.RecentOperations.Count == 0)
             {
-                <div class="empty-state compact">
-                    <h3>@L["Inventory_RecentSales_Empty_Title"]</h3>
-                    <p>@L["Inventory_RecentSales_Empty_Text"]</p>
-                </div>
+            <div class="empty-state compact">
+                <h3>@L["Inventory_RecentSales_Empty_Title"]</h3>
+            </div>
             }
             else
             {
@@ -363,7 +356,7 @@
             };
 
             let pollCount = 0;
-            const maxPolls = 20;
+            const maxPolls = 60;
 
             const poll = async () => {
                 pollCount += 1;

@@ -19,4 +19,6 @@ public class PricingOptions
     public bool AllowStaleSnapshotFallback { get; set; } = true;
     public int SteamRetryCount { get; set; } = 2;
     public int HttpTransientRetryDelayMilliseconds { get; set; } = 400;
+    public int RefreshTimeoutSeconds { get; set; } = 75;
+    public int RefreshingStateTimeoutSeconds { get; set; } = 90;
 }

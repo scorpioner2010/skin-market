@@ -6,11 +6,7 @@
 
 <div class="py-4">
     <div class="page-header">
-        <div>
-            <span class="section-kicker">@L["Market_Kicker"]</span>
-            <h1>@L["Page_Market_Title"]</h1>
-            <p class="page-description">@L["Market_Description"]</p>
-        </div>
+        <div><h1>@L["Page_Market_Title"]</h1></div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
@@ -26,9 +22,7 @@
     @if (User.Identity?.IsAuthenticated ?? false)
     {
         <div class="summary-card">
-            <span class="section-kicker">@L["Market_BalanceSummary"]</span>
             <h2>@Model.CurrentBalance</h2>
-            <p>@L["Market_BalanceSummary_Text"]</p>
         </div>
     }
 
@@ -36,17 +30,13 @@
     {
         <div class="empty-state">
             <h2>@L["Market_Empty_Title"]</h2>
-            <p>@L["Market_Empty_Text"]</p>
         </div>
     }
     else
     {
         <section class="page-section">
             <div class="section-heading">
-                <div>
-                    <h2>@L["Market_AvailableItems_Title"]</h2>
-                    <p>@L["Market_AvailableItems_Text"]</p>
-                </div>
+                <div><h2>@L["Market_AvailableItems_Title"]</h2></div>
             </div>
             <div class="card-grid">
                 @foreach (var item in Model.Items)
@@ -79,7 +69,9 @@
                         }
                         else if (!(User.Identity?.IsAuthenticated ?? false))
                         {
-                            <p class="meta-note">@L["Market_LoginRequiredToBuy"]</p>
+                            <div class="action-row">
+                                <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+                            </div>
                         }
                         else
                         {
@@ -98,16 +90,12 @@
     {
         <section class="page-section">
             <div class="section-heading">
-                <div>
-                    <h2>@L["Market_Purchases_Title"]</h2>
-                    <p>@L["Market_Purchases_Text"]</p>
-                </div>
+                <div><h2>@L["Market_Purchases_Title"]</h2></div>
             </div>
             @if (Model.Purchases.Count == 0)
             {
                 <div class="empty-state compact">
                     <h3>@L["Market_Purchases_Empty_Title"]</h3>
-                    <p>@L["Market_Purchases_Empty_Text"]</p>
                 </div>
             }
             else

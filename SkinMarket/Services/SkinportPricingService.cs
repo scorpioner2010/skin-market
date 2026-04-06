@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -14,19 +15,22 @@ public class SkinportPricingService : ISkinportPricingService
     private readonly ILogger<SkinportPricingService> _logger;
     private readonly IGameCatalog _gameCatalog;
     private readonly PricingOptions _options;
+    private readonly IAppLogService _appLogService;
 
     public SkinportPricingService(
         HttpClient httpClient,
         IMemoryCache memoryCache,
         ILogger<SkinportPricingService> logger,
         IGameCatalog gameCatalog,
-        IOptions<PricingOptions> options)
+        IOptions<PricingOptions> options,
+        IAppLogService appLogService)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
         _options = options.Value;
+        _appLogService = appLogService;
     }
 
     public async Task<PriceSourceResult> ProbePriceAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)
@@ -92,12 +96,24 @@ public class SkinportPricingService : ISkinportPricingService
         var endpoint =
             $"https://api.skinport.com/v1/sales/history?app_id={game.SteamAppId}&currency={Uri.EscapeDataString(_options.PreferredCurrency)}&market_hash_name={Uri.EscapeDataString(string.Join(',', normalizedNames))}";
 
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Skinport history lookup started for {GameType} / {Count} items.", gameType, normalizedNames.Count);
+        await _appLogService.WriteAsync("Info", $"Start history. Url={endpoint}; GameType={(int)gameType}; Count={normalizedNames.Count}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
         try
         {
             using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "Skinport history lookup finished for {GameType} / {Count} items with HTTP {StatusCode} in {ElapsedMs}ms.",
+                gameType,
+                normalizedNames.Count,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+            await _appLogService.WriteAsync("Info", $"End history. Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Count={normalizedNames.Count}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Skinport history request failed with status code {StatusCode}.", (int)response.StatusCode);
+                await _appLogService.WriteAsync("Warning", $"Fail history. Url={endpoint}; Http={(int)response.StatusCode}; Reason=Skinport history returned HTTP {(int)response.StatusCode}.", nameof(SkinportPricingService), cancellationToken: CancellationToken.None);
                 return EmptyHistoryMap();
             }
 
@@ -115,9 +131,23 @@ public class SkinportPricingService : ISkinportPricingService
             _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportHistoryCacheMinutes)));
             return result;
         }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                exception,
+                "Skinport history lookup timed out for {GameType} / {Count} items after {ElapsedMs}ms.",
+                gameType,
+                normalizedNames.Count,
+                stopwatch.ElapsedMilliseconds);
+            await _appLogService.WriteAsync("Warning", $"Timeout history. Url={endpoint}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}", nameof(SkinportPricingService), exception, CancellationToken.None);
+            return EmptyHistoryMap();
+        }
         catch (Exception exception) when (exception is HttpRequestException or JsonException)
         {
+            stopwatch.Stop();
             _logger.LogWarning(exception, "Skinport history lookup failed.");
+            await _appLogService.WriteAsync("Error", $"Fail history. Url={endpoint}; ExceptionType={exception.GetType().Name}; Reason={exception.Message}", nameof(SkinportPricingService), exception, CancellationToken.None);
             return EmptyHistoryMap();
         }
     }
@@ -134,12 +164,23 @@ public class SkinportPricingService : ISkinportPricingService
         var endpoint =
             $"https://api.skinport.com/v1/items?app_id={game.SteamAppId}&currency={Uri.EscapeDataString(_options.PreferredCurrency)}&tradable=0";
 
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Skinport out-of-stock lookup started for {GameType}.", gameType);
+        await _appLogService.WriteAsync("Info", $"Start items. Url={endpoint}; GameType={(int)gameType}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
         try
         {
             using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "Skinport out-of-stock lookup finished for {GameType} with HTTP {StatusCode} in {ElapsedMs}ms.",
+                gameType,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+            await _appLogService.WriteAsync("Info", $"End items. Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; GameType={(int)gameType}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Skinport items request failed with status code {StatusCode}.", (int)response.StatusCode);
+                await _appLogService.WriteAsync("Warning", $"Fail items. Url={endpoint}; Http={(int)response.StatusCode}; Reason=Skinport items returned HTTP {(int)response.StatusCode}.", nameof(SkinportPricingService), cancellationToken: CancellationToken.None);
                 return EmptyOutOfStockMap();
             }
 
@@ -157,9 +198,22 @@ public class SkinportPricingService : ISkinportPricingService
             _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportItemsCacheMinutes)));
             return result;
         }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                exception,
+                "Skinport out-of-stock lookup timed out for {GameType} after {ElapsedMs}ms.",
+                gameType,
+                stopwatch.ElapsedMilliseconds);
+            await _appLogService.WriteAsync("Warning", $"Timeout items. Url={endpoint}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}", nameof(SkinportPricingService), exception, CancellationToken.None);
+            return EmptyOutOfStockMap();
+        }
         catch (Exception exception) when (exception is HttpRequestException or JsonException)
         {
+            stopwatch.Stop();
             _logger.LogWarning(exception, "Skinport out-of-stock lookup failed.");
+            await _appLogService.WriteAsync("Error", $"Fail items. Url={endpoint}; ExceptionType={exception.GetType().Name}; Reason={exception.Message}", nameof(SkinportPricingService), exception, CancellationToken.None);
             return EmptyOutOfStockMap();
         }
     }

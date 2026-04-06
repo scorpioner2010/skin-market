@@ -10,6 +10,7 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<AppLog> Logs => Set<AppLog>();
     public DbSet<BalanceTransaction> BalanceTransactions => Set<BalanceTransaction>();
     public DbSet<MarketItem> MarketItems => Set<MarketItem>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
@@ -29,6 +30,16 @@ public class AppDbContext : DbContext
             entity.Property(user => user.TradeUrl).HasMaxLength(500);
             entity.Property(user => user.Balance).HasDefaultValue(0m);
             entity.HasIndex(user => user.SteamId).IsUnique();
+        });
+
+        modelBuilder.Entity<AppLog>(entity =>
+        {
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Level).IsRequired().HasMaxLength(20);
+            entity.Property(item => item.Message).IsRequired().HasMaxLength(4000);
+            entity.Property(item => item.Source).HasMaxLength(200);
+            entity.Property(item => item.StackTrace).HasMaxLength(12000);
+            entity.HasIndex(item => item.TimestampUtc);
         });
 
         modelBuilder.Entity<BalanceTransaction>(entity =>

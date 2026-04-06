@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -14,19 +15,22 @@ public class CsFloatPriceService : ICsFloatPriceService
     private readonly ILogger<CsFloatPriceService> _logger;
     private readonly IGameCatalog _gameCatalog;
     private readonly PricingOptions _options;
+    private readonly IAppLogService _appLogService;
 
     public CsFloatPriceService(
         HttpClient httpClient,
         IMemoryCache memoryCache,
         ILogger<CsFloatPriceService> logger,
         IGameCatalog gameCatalog,
-        IOptions<PricingOptions> options)
+        IOptions<PricingOptions> options,
+        IAppLogService appLogService)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
         _options = options.Value;
+        _appLogService = appLogService;
     }
 
     public async Task<PriceSourceResult> ProbePriceAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)
@@ -53,12 +57,24 @@ public class CsFloatPriceService : ICsFloatPriceService
         var requestUri =
             $"https://csfloat.com/api/v1/listings?limit=1&sort_by=lowest_price&type=buy_now&market_hash_name={Uri.EscapeDataString(normalizedName)}";
 
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("CSFloat price lookup started for {GameType} / {MarketHashName}.", gameType, normalizedName);
+        await _appLogService.WriteAsync("Info", $"Start. Url={requestUri}; GameType={(int)gameType}; MarketHashName={normalizedName}", nameof(CsFloatPriceService), cancellationToken: cancellationToken);
         try
         {
             using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "CSFloat price lookup finished for {GameType} / {MarketHashName} with HTTP {StatusCode} in {ElapsedMs}ms.",
+                gameType,
+                normalizedName,
+                (int)response.StatusCode,
+                stopwatch.ElapsedMilliseconds);
+            await _appLogService.WriteAsync("Info", $"End. Url={requestUri}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; MarketHashName={normalizedName}", nameof(CsFloatPriceService), cancellationToken: cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 var failed = Failure($"CSFloat returned HTTP {(int)response.StatusCode}.", normalizedName);
+                await _appLogService.WriteAsync("Warning", $"Fail. Url={requestUri}; Http={(int)response.StatusCode}; MarketHashName={normalizedName}; Reason={failed.FailureReason}", nameof(CsFloatPriceService), cancellationToken: CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
@@ -79,6 +95,7 @@ public class CsFloatPriceService : ICsFloatPriceService
             if (!scmPrice.HasValue || scmPrice <= 0)
             {
                 var failed = Failure("CSFloat item.scm.price is missing.", normalizedName);
+                await _appLogService.WriteAsync("Info", $"No price. Url={requestUri}; MarketHashName={normalizedName}; Reason={failed.FailureReason}", nameof(CsFloatPriceService), cancellationToken: CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
@@ -94,13 +111,30 @@ public class CsFloatPriceService : ICsFloatPriceService
                 ResolvedMarketHashName = normalizedName
             };
 
+            await _appLogService.WriteAsync("Info", $"Success. Url={requestUri}; MarketHashName={normalizedName}; Price={result.Price}; Currency={result.Currency}", nameof(CsFloatPriceService), cancellationToken: CancellationToken.None);
             Cache(cacheKey, result);
             return result;
         }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                exception,
+                "CSFloat price lookup timed out for {GameType} / {MarketHashName} after {ElapsedMs}ms.",
+                gameType,
+                normalizedName,
+                stopwatch.ElapsedMilliseconds);
+            var failed = Failure($"CSFloat request timed out after {stopwatch.ElapsedMilliseconds}ms.", normalizedName);
+            await _appLogService.WriteAsync("Warning", $"Timeout. Url={requestUri}; MarketHashName={normalizedName}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(CsFloatPriceService), exception, CancellationToken.None);
+            Cache(cacheKey, failed);
+            return failed;
+        }
         catch (Exception exception) when (exception is HttpRequestException or JsonException)
         {
+            stopwatch.Stop();
             _logger.LogWarning(exception, "CSFloat price lookup failed for {MarketHashName}.", normalizedName);
             var failed = Failure(exception.Message, normalizedName);
+            await _appLogService.WriteAsync("Error", $"Fail. Url={requestUri}; MarketHashName={normalizedName}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(CsFloatPriceService), exception, CancellationToken.None);
             Cache(cacheKey, failed);
             return failed;
         }

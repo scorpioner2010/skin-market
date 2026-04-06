@@ -1,0 +1,55 @@
+@page
+@model SkinMarket.Pages.Admin.LogsModel
+@{
+    ViewData["Title"] = "Logs";
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div><h1>Logs</h1></div>
+    </div>
+
+    <form method="get" class="action-row mb-3">
+        <select name="Level" class="form-select app-input" style="max-width: 140px;">
+            <option value="">All</option>
+            <option value="Info" selected="@(Model.Level == "Info")">Info</option>
+            <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
+            <option value="Error" selected="@(Model.Level == "Error")">Error</option>
+        </select>
+        <input name="Source" value="@Model.Source" class="form-control app-input" style="max-width: 220px;" placeholder="Source" />
+        <select name="Limit" class="form-select app-input" style="max-width: 120px;">
+            <option value="100" selected="@(Model.Limit != 500)">100</option>
+            <option value="500" selected="@(Model.Limit == 500)">500</option>
+        </select>
+        <button type="submit" class="btn app-button-primary">Apply</button>
+    </form>
+
+    @if (Model.Items.Count > 0)
+    {
+        <div class="debug-table-wrap">
+            <table class="table debug-table">
+                <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Level</th>
+                    <th>Source</th>
+                    <th>Message</th>
+                    <th>Details</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td>@item.TimestampUtc</td>
+                        <td>@item.Level</td>
+                        <td class="break-value">@item.Source</td>
+                        <td class="break-value">@item.Message</td>
+                        <td class="break-value">@(string.IsNullOrWhiteSpace(item.StackTrace) ? string.Empty : item.StackTrace.Split('\n').FirstOrDefault())</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

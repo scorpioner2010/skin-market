@@ -9,9 +9,10 @@
 <div class="py-4">
     <div class="page-header">
         <div>
-            <span class="section-kicker">@L["Profile_Kicker"]</span>
             <h1>@L["Page_Profile_Title"]</h1>
-            <p class="page-description">@L["Profile_Description"]</p>
+        </div>
+        <div class="status-group">
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Admin</a>
         </div>
     </div>
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -43,13 +44,7 @@
                         </div>
                     }
                     <div>
-                        <p class="profile-eyebrow">@L["Profile_SteamProfile"]</p>
                         <h3 class="profile-name">@profileName</h3>
-                        <p class="profile-subtitle">
-                            @(string.IsNullOrWhiteSpace(Model.AppUser?.PersonaName)
-                                ? L["Profile_Subtitle_Fallback"]
-                                : L["Profile_Subtitle_Synced"])
-                        </p>
                     </div>
                 </div>
                 <dl class="detail-list">
@@ -92,7 +87,6 @@
                 <div class="card-heading">
                     <h2>@L["Profile_TradeSettings"]</h2>
                 </div>
-                <p class="section-description">@L["Profile_TradeSettings_Description"]</p>
                 <form method="post" class="stack-form">
                     <div>
                         <label asp-for="Input.TradeUrl" class="form-label">@L["Profile_SteamTradeUrl"]</label>
@@ -108,7 +102,6 @@
     {
         <div class="empty-state">
             <h2>@L["Common_SteamLoginRequired"]</h2>
-            <p>@L["Profile_LoginRequired_Text"]</p>
             <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
         </div>
     }

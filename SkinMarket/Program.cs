@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,7 @@ using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 using SkinMarket.Services;
 using System.Globalization;
+using System.Net.Http.Headers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,6 +93,7 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
 });
 builder.Services.AddSingleton<IGameCatalog, GameCatalog>();
 builder.Services.AddScoped<IBalanceService, BalanceService>();
+builder.Services.AddScoped<IAppLogService, AppLogService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
 builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
@@ -105,12 +108,22 @@ builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();
 builder.Services.AddSingleton<ISteamTradeClient, StubSteamTradeClient>();
-builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>();
+builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(pricing-refresh)"));
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
 builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();
 builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>();
 builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>();
 builder.Services.AddHttpClient<ISkinportPricingService, SkinportPricingService>(client =>
 {
+    client.Timeout = TimeSpan.FromSeconds(25);
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(pricing-refresh)"));
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     client.DefaultRequestHeaders.TryAddWithoutValidation("Accept-Encoding", "br");
 })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
@@ -119,7 +132,12 @@ builder.Services.AddHttpClient<ISkinportPricingService, SkinportPricingService>(
                                  System.Net.DecompressionMethods.GZip |
                                  System.Net.DecompressionMethods.Deflate
     });
-builder.Services.AddHttpClient<ISteamMarketPriceService, SteamMarketPriceService>();
+builder.Services.AddHttpClient<ISteamMarketPriceService, SteamMarketPriceService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
+});
 
 var app = builder.Build();
 
@@ -150,15 +168,61 @@ using (var scope = app.Services.CreateScope())
         catch (Exception exception)
         {
             logger.LogCritical(exception, "Application startup failed while initializing PostgreSQL.");
+            var appLogService = scope.ServiceProvider.GetService<IAppLogService>();
+            if (appLogService is not null)
+            {
+                await appLogService.WriteAsync("Error", exception.Message, "Startup", exception);
+            }
             throw;
         }
     }
 }
 
 // Configure the HTTP request pipeline.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception exception)
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var appLogService = scope.ServiceProvider.GetRequiredService<IAppLogService>();
+        await appLogService.WriteAsync("Error", exception.Message, context.Request.Path, exception, context.RequestAborted);
+        throw;
+    }
+});
+
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            var exceptionFeature = context.Features.Get<IExceptionHandlerPathFeature>();
+            if (exceptionFeature?.Error is not null)
+            {
+                await using var scope = app.Services.CreateAsyncScope();
+                var appLogService = scope.ServiceProvider.GetRequiredService<IAppLogService>();
+                await appLogService.WriteAsync(
+                    "Error",
+                    exceptionFeature.Error.Message,
+                    exceptionFeature.Path,
+                    exceptionFeature.Error,
+                    context.RequestAborted);
+            }
+
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                await context.Response.WriteAsJsonAsync(new { error = "Server error" });
+                return;
+            }
+
+            context.Response.Redirect("/Error");
+        });
+    });
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
@@ -198,6 +262,7 @@ app.MapPost("/api/inventory/prices/refresh", async (
     HttpContext httpContext,
     InventoryPriceRefreshRequest request,
     IInventoryPriceRefreshService refreshService,
+    IAppLogService appLogService,
     CancellationToken cancellationToken) =>
 {
     if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
@@ -210,6 +275,11 @@ app.MapPost("/api/inventory/prices/refresh", async (
         .Where(item => !string.IsNullOrWhiteSpace(item))
         .ToList();
 
+    await appLogService.WriteAsync(
+        "Info",
+        $"Refresh requested. GameType={(int)request.GameType}; Count={marketHashNames.Count}; Items={string.Join(" | ", marketHashNames.Take(20))}",
+        "InventoryPricesRefresh",
+        cancellationToken: cancellationToken);
     await refreshService.QueueRefreshAsync(marketHashNames, request.GameType, cancellationToken);
     return Results.Accepted();
 });
@@ -218,6 +288,7 @@ app.MapPost("/api/inventory/prices/status", async (
     HttpContext httpContext,
     InventoryPriceRefreshRequest request,
     IInventoryPriceRefreshService refreshService,
+    IAppLogService appLogService,
     CancellationToken cancellationToken) =>
 {
     if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
@@ -232,6 +303,11 @@ app.MapPost("/api/inventory/prices/status", async (
         .ToList();
 
     var statuses = await refreshService.GetStatusAsync(marketHashNames, request.GameType, cancellationToken);
+    await appLogService.WriteAsync(
+        "Info",
+        $"Status requested. GameType={(int)request.GameType}; Count={marketHashNames.Count}; Summary={string.Join(" | ", statuses.Take(20).Select(item => $"{item.Key}={item.Value.Status}/{item.Value.Source}/{item.Value.FailureReason}"))}",
+        "InventoryPricesStatus",
+        cancellationToken: cancellationToken);
     var responseItems = request.Items.Select(item =>
     {
         var normalizedMarketHashName = MarketHashNameUtility.Normalize(item.MarketHashName) ?? item.MarketHashName;
