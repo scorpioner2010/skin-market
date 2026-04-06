@@ -38,7 +38,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.Configure<AppRuntimeOptions>(builder.Configuration.GetSection(AppRuntimeOptions.SectionName));
 var runtimeOptions = builder.Configuration.GetSection(AppRuntimeOptions.SectionName).Get<AppRuntimeOptions>() ?? new AppRuntimeOptions();
 var connectionString = DatabaseConnectionStringFactory.ResolveOptional(builder.Configuration);
-var isDatabaseAvailable = !runtimeOptions.DisableDatabase && !string.IsNullOrWhiteSpace(connectionString);
+if (!runtimeOptions.DisableDatabase && string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Database is enabled but no connection string was configured. Set DATABASE_URL or ConnectionStrings__DefaultConnection, or set App__DisableDatabase=true for degraded mode.");
+}
+
+var isDatabaseAvailable = !runtimeOptions.DisableDatabase;
 builder.Services.AddSingleton(new AppRuntimeState
 {
     IsDatabaseAvailable = isDatabaseAvailable
@@ -48,7 +54,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     if (isDatabaseAvailable)
     {
         options.UseNpgsql(
-            connectionString,
+            connectionString!,
             npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
