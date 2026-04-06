@@ -1,0 +1,111 @@
+@page
+@model SkinMarket.Pages.ProfileModel
+@{
+    ViewData["Title"] = L["Page_Profile_Title"];
+    var profileName = string.IsNullOrWhiteSpace(Model.AppUser?.PersonaName) ? Model.AppUser?.DisplayName : Model.AppUser?.PersonaName;
+    var avatarAlt = string.Format(L["Profile_AvatarAlt"].Value, profileName ?? L["Profile_SteamUserFallback"].Value);
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <span class="section-kicker">@L["Profile_Kicker"]</span>
+            <h1>@L["Page_Profile_Title"]</h1>
+            <p class="page-description">@L["Profile_Description"]</p>
+        </div>
+    </div>
+    @if (User.Identity?.IsAuthenticated ?? false)
+    {
+        @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+        {
+            <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
+        }
+
+        <div class="profile-grid">
+            <section class="content-card profile-card">
+                <div class="card-heading">
+                    <h2>@L["Profile_AccountSummary"]</h2>
+                    <span class="status-badge" data-status="Credited">@UiTextLocalizer.LocalizeStatus(L, "Credited")</span>
+                </div>
+                <div class="profile-identity">
+                    @if (!string.IsNullOrWhiteSpace(Model.AppUser?.AvatarUrl))
+                    {
+                        <img class="profile-avatar" src="@Model.AppUser.AvatarUrl" alt="@avatarAlt" />
+                    }
+                    else
+                    {
+                        <div class="profile-avatar profile-avatar-fallback" aria-hidden="true">
+                            @((Model.AppUser?.DisplayName?.FirstOrDefault() ?? 'S').ToString().ToUpperInvariant())
+                        </div>
+                    }
+                    <div>
+                        <p class="profile-eyebrow">@L["Profile_SteamProfile"]</p>
+                        <h3 class="profile-name">@profileName</h3>
+                        <p class="profile-subtitle">
+                            @(string.IsNullOrWhiteSpace(Model.AppUser?.PersonaName)
+                                ? L["Profile_Subtitle_Fallback"]
+                                : L["Profile_Subtitle_Synced"])
+                        </p>
+                    </div>
+                </div>
+                <dl class="detail-list">
+                    <div class="detail-row">
+                        <dt>SteamID</dt>
+                        <dd class="break-value">@Model.AppUser?.SteamId</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_PersonaName"]</dt>
+                        <dd>@profileName</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_DisplayName"]</dt>
+                        <dd>@Model.AppUser?.DisplayName</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_AvatarUrl"]</dt>
+                        <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.AppUser?.AvatarUrl) ? L["Profile_AvatarUnavailable"] : Model.AppUser?.AvatarUrl)</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_Balance"]</dt>
+                        <dd><span class="balance-pill">@Model.Balance</span></dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_TradeUrl"]</dt>
+                        <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.AppUser?.TradeUrl) ? L["Profile_TradeUrl_NotSet"] : Model.AppUser?.TradeUrl)</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Common_Created"]</dt>
+                        <dd>@Model.AppUser?.CreatedAtUtc</dd>
+                    </div>
+                    <div class="detail-row">
+                        <dt>@L["Profile_LocalUserId"]</dt>
+                        <dd class="break-value">@Model.AppUser?.Id</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="content-card">
+                <div class="card-heading">
+                    <h2>@L["Profile_TradeSettings"]</h2>
+                </div>
+                <p class="section-description">@L["Profile_TradeSettings_Description"]</p>
+                <form method="post" class="stack-form">
+                    <div>
+                        <label asp-for="Input.TradeUrl" class="form-label">@L["Profile_SteamTradeUrl"]</label>
+                        <input asp-for="Input.TradeUrl" class="form-control app-input" placeholder="@L["Profile_TradeUrl_Placeholder"]" />
+                        <span asp-validation-for="Input.TradeUrl" class="text-danger small"></span>
+                    </div>
+                    <button type="submit" class="btn app-button-primary">@L["Profile_SaveTradeUrl"]</button>
+                </form>
+            </section>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <p>@L["Profile_LoginRequired_Text"]</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+        </div>
+    }
+</div>

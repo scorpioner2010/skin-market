@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Layout_UserFallback" xml:space="preserve"><value>Logged in</value></data>
+  <data name="Layout_Subtitle" xml:space="preserve"><value>Game item marketplace</value></data>
+  <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Toggle navigation</value></data>
+  <data name="Layout_Nav_Home" xml:space="preserve"><value>Home</value></data>
+  <data name="Layout_Nav_Profile" xml:space="preserve"><value>Profile</value></data>
+  <data name="Layout_Nav_Market" xml:space="preserve"><value>Market</value></data>
+  <data name="Layout_Nav_Inventory" xml:space="preserve"><value>Inventory</value></data>
+  <data name="Layout_Nav_History" xml:space="preserve"><value>History</value></data>
+  <data name="Layout_Language" xml:space="preserve"><value>Language</value></data>
+  <data name="Layout_UserAvatarAlt" xml:space="preserve"><value>User avatar</value></data>
+  <data name="Layout_Logout" xml:space="preserve"><value>Logout</value></data>
+  <data name="Layout_Footer_Primary" xml:space="preserve"><value>Marketplace for game inventories, item sales and delivery tracking.</value></data>
+  <data name="Layout_Footer_Secondary" xml:space="preserve"><value>Steam inventory, listings and trade status in one workspace.</value></data>
+  <data name="Common_LoginWithSteam" xml:space="preserve"><value>Login with Steam</value></data>
+  <data name="Common_SteamLoginRequired" xml:space="preserve"><value>Steam login required</value></data>
+  <data name="Common_Sell" xml:space="preserve"><value>Sell</value></data>
+  <data name="Common_Buy" xml:space="preserve"><value>Buy</value></data>
+  <data name="Common_Created" xml:space="preserve"><value>Created</value></data>
+  <data name="Common_Message" xml:space="preserve"><value>Message</value></data>
+  <data name="Common_Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Common_No" xml:space="preserve"><value>No</value></data>
+  <data name="Common_Unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="Common_Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="Page_Home_Title" xml:space="preserve"><value>Home</value></data>
+  <data name="Page_Profile_Title" xml:space="preserve"><value>Profile</value></data>
+  <data name="Page_Inventory_Title" xml:space="preserve"><value>Inventory</value></data>
+  <data name="Page_Market_Title" xml:space="preserve"><value>Market</value></data>
+  <data name="Page_History_Title" xml:space="preserve"><value>History</value></data>
+  <data name="Home_Kicker" xml:space="preserve"><value>Multi-game ready marketplace</value></data>
+  <data name="Home_HeroText" xml:space="preserve"><value>Buy, sell and track game items with a clear marketplace workflow for inventory, balance and delivery states.</value></data>
+  <data name="Home_OpenMarket" xml:space="preserve"><value>Open Market</value></data>
+  <data name="Home_ViewInventory" xml:space="preserve"><value>View Inventory</value></data>
+  <data name="Home_Workflow_Label" xml:space="preserve"><value>Workflow</value></data>
+  <data name="Home_Workflow_Value" xml:space="preserve"><value>Steam sign-in, item listing, balance credit, purchase and delivery tracking</value></data>
+  <data name="Home_Focus_Label" xml:space="preserve"><value>Focus</value></data>
+  <data name="Home_Focus_Value" xml:space="preserve"><value>Fast item review, predictable actions and clear marketplace states</value></data>
+  <data name="Home_Overview_Title" xml:space="preserve"><value>Platform overview</value></data>
+  <data name="Home_Overview_Description" xml:space="preserve"><value>Core marketplace features are available end-to-end for inventory management, selling and purchase tracking.</value></data>
+  <data name="Home_Feature_Profile_Title" xml:space="preserve"><value>Steam auth and profile</value></data>
+  <data name="Home_Feature_Profile_Text" xml:space="preserve"><value>Sign in with Steam, manage your profile and keep trade details ready for item transfers.</value></data>
+  <data name="Home_Feature_Inventory_Title" xml:space="preserve"><value>Inventory and sales</value></data>
+  <data name="Home_Feature_Inventory_Text" xml:space="preserve"><value>Review supported game inventories, create sale requests and monitor each item through its sale states.</value></data>
+  <data name="Home_Feature_Market_Title" xml:space="preserve"><value>Market and delivery</value></data>
+  <data name="Home_Feature_Market_Text" xml:space="preserve"><value>Available listings can be purchased with account balance and tracked through delivery progress.</value></data>
+  <data name="Profile_SteamUserFallback" xml:space="preserve"><value>Steam User</value></data>
+  <data name="Profile_AvatarAlt" xml:space="preserve"><value>{0} avatar</value></data>
+  <data name="Profile_Kicker" xml:space="preserve"><value>User profile</value></data>
+  <data name="Profile_Description" xml:space="preserve"><value>Manage your account details, current balance and Steam Trade URL in one place.</value></data>
+  <data name="Profile_AccountSummary" xml:space="preserve"><value>Account summary</value></data>
+  <data name="Profile_SteamProfile" xml:space="preserve"><value>Steam profile</value></data>
+  <data name="Profile_Subtitle_Fallback" xml:space="preserve"><value>Steam profile data is using fallback values.</value></data>
+  <data name="Profile_Subtitle_Synced" xml:space="preserve"><value>Nickname and avatar synced from Steam.</value></data>
+  <data name="Profile_PersonaName" xml:space="preserve"><value>Persona name</value></data>
+  <data name="Profile_DisplayName" xml:space="preserve"><value>Display name</value></data>
+  <data name="Profile_AvatarUrl" xml:space="preserve"><value>Avatar URL</value></data>
+  <data name="Profile_AvatarUnavailable" xml:space="preserve"><value>Avatar is not available.</value></data>
+  <data name="Profile_Balance" xml:space="preserve"><value>Balance</value></data>
+  <data name="Profile_TradeUrl" xml:space="preserve"><value>Trade URL</value></data>
+  <data name="Profile_TradeUrl_NotSet" xml:space="preserve"><value>Trade URL is not set yet.</value></data>
+  <data name="Profile_LocalUserId" xml:space="preserve"><value>Local user id</value></data>
+  <data name="Profile_TradeSettings" xml:space="preserve"><value>Trade settings</value></data>
+  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Your Trade URL is required for bot intake and delivery flow.</value></data>
+  <data name="Profile_SteamTradeUrl" xml:space="preserve"><value>Steam Trade URL</value></data>
+  <data name="Profile_TradeUrl_Placeholder" xml:space="preserve"><value>https://steamcommunity.com/tradeoffer/new/...</value></data>
+  <data name="Profile_SaveTradeUrl" xml:space="preserve"><value>Save Trade URL</value></data>
+  <data name="Profile_LoginRequired_Text" xml:space="preserve"><value>Sign in with Steam to access your profile, balance and trading settings.</value></data>
+  <data name="Inventory_Kicker" xml:space="preserve"><value>Steam inventory</value></data>
+  <data name="Inventory_Description" xml:space="preserve"><value>Review your game items, create sale requests and track sale processing states.</value></data>
+  <data name="Inventory_LoginRequired_Text" xml:space="preserve"><value>Sign in with Steam to load your inventory and manage sale requests.</value></data>
+  <data name="Inventory_Empty_Title" xml:space="preserve"><value>No inventory items found</value></data>
+  <data name="Inventory_Empty_Text" xml:space="preserve"><value>Steam did not return visible items for this account right now.</value></data>
+  <data name="Inventory_YourItems_Title" xml:space="preserve"><value>Your items</value></data>
+  <data name="Inventory_YourItems_Description" xml:space="preserve"><value>Compact inventory list for quick review of item status, identifiers and next action.</value></data>
+  <data name="Inventory_Column_Item" xml:space="preserve"><value>Item</value></data>
+  <data name="Inventory_Column_Tradable" xml:space="preserve"><value>Tradable</value></data>
+  <data name="Inventory_Column_Marketable" xml:space="preserve"><value>Marketable</value></data>
+  <data name="Inventory_Column_RealPrice" xml:space="preserve"><value>Real Price</value></data>
+  <data name="Inventory_Column_Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Inventory_Column_Action" xml:space="preserve"><value>Action</value></data>
+  <data name="Inventory_InstanceId" xml:space="preserve"><value>InstanceId</value></data>
+  <data name="Inventory_PriceUnavailable" xml:space="preserve"><value>Price unavailable</value></data>
+  <data name="Inventory_Credited" xml:space="preserve"><value>Credited</value></data>
+  <data name="Inventory_TradeOfferId" xml:space="preserve"><value>TradeOfferId</value></data>
+  <data name="Inventory_Ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="Inventory_CreateTrade" xml:space="preserve"><value>Create Trade</value></data>
+  <data name="Inventory_ConfirmReceived" xml:space="preserve"><value>Confirm Received</value></data>
+  <data name="Inventory_PendingSale" xml:space="preserve"><value>Pending sale</value></data>
+  <data name="Inventory_RecentSales_Title" xml:space="preserve"><value>Recent sale requests</value></data>
+  <data name="Inventory_RecentSales_Description" xml:space="preserve"><value>Latest sell operations with current trade and credit statuses.</value></data>
+  <data name="Inventory_RecentSales_Empty_Title" xml:space="preserve"><value>No sale requests yet</value></data>
+  <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Create a sale from your inventory to start the marketplace flow.</value></data>
+  <data name="Inventory_Credit" xml:space="preserve"><value>Credit</value></data>
+  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>BotTradeUrl</value></data>
+  <data name="Market_Kicker" xml:space="preserve"><value>Marketplace</value></data>
+  <data name="Market_Description" xml:space="preserve"><value>Browse credited items, spend account balance and track delivery progress for your purchases.</value></data>
+  <data name="Market_BalanceSummary" xml:space="preserve"><value>Balance summary</value></data>
+  <data name="Market_BalanceSummary_Text" xml:space="preserve"><value>Current balance available for market purchases.</value></data>
+  <data name="Market_Empty_Title" xml:space="preserve"><value>No items in market yet</value></data>
+  <data name="Market_Empty_Text" xml:space="preserve"><value>Credited items will appear here automatically after the sale flow is completed.</value></data>
+  <data name="Market_AvailableItems_Title" xml:space="preserve"><value>Available items</value></data>
+  <data name="Market_AvailableItems_Text" xml:space="preserve"><value>All market offers that are currently open for purchase.</value></data>
+  <data name="Market_LoginRequiredToBuy" xml:space="preserve"><value>Login required to buy.</value></data>
+  <data name="Market_Purchases_Title" xml:space="preserve"><value>My purchases</value></data>
+  <data name="Market_Purchases_Text" xml:space="preserve"><value>Track purchased items, delivery statuses and delivery trade references.</value></data>
+  <data name="Market_Purchases_Empty_Title" xml:space="preserve"><value>No purchases yet</value></data>
+  <data name="Market_Purchases_Empty_Text" xml:space="preserve"><value>Purchased items will appear here together with delivery progress.</value></data>
+  <data name="Market_PurchasedFor" xml:space="preserve"><value>Purchased for ${0}</value></data>
+  <data name="Market_Purchased" xml:space="preserve"><value>Purchased</value></data>
+  <data name="Market_DeliveryTradeOfferId" xml:space="preserve"><value>DeliveryTradeOfferId</value></data>
+  <data name="Market_Delivered" xml:space="preserve"><value>Delivered</value></data>
+  <data name="Market_CreateDeliveryTrade" xml:space="preserve"><value>Create Delivery Trade</value></data>
+  <data name="Market_ConfirmDelivered" xml:space="preserve"><value>Confirm Delivered</value></data>
+  <data name="History_Kicker" xml:space="preserve"><value>Account activity</value></data>
+  <data name="History_Description" xml:space="preserve"><value>Review sales, purchases and balance changes linked to your current account.</value></data>
+  <data name="History_LoginRequired_Text" xml:space="preserve"><value>Sign in with Steam to view account activity history.</value></data>
+  <data name="History_CurrentBalance" xml:space="preserve"><value>Current balance</value></data>
+  <data name="History_CurrentBalance_Text" xml:space="preserve"><value>Latest balance based on credited sales and market purchases.</value></data>
+  <data name="History_Sales_Title" xml:space="preserve"><value>Sale history</value></data>
+  <data name="History_Sales_Text" xml:space="preserve"><value>All sell operations connected to your Steam inventory items.</value></data>
+  <data name="History_Sales_Empty_Title" xml:space="preserve"><value>No sales yet</value></data>
+  <data name="History_Sales_Empty_Text" xml:space="preserve"><value>Your sale requests will appear here once you start selling items.</value></data>
+  <data name="History_CreditAmount" xml:space="preserve"><value>CreditAmount</value></data>
+  <data name="History_Purchases_Title" xml:space="preserve"><value>Purchase history</value></data>
+  <data name="History_Purchases_Text" xml:space="preserve"><value>Items you bought from the market and their delivery progress.</value></data>
+  <data name="History_Purchases_Empty_Title" xml:space="preserve"><value>No purchases yet</value></data>
+  <data name="History_Purchases_Empty_Text" xml:space="preserve"><value>Items bought from the market will appear here.</value></data>
+  <data name="History_Price" xml:space="preserve"><value>Price</value></data>
+  <data name="History_Balance_Title" xml:space="preserve"><value>Balance history</value></data>
+  <data name="History_Balance_Text" xml:space="preserve"><value>All balance credits and market purchase debits for your account.</value></data>
+  <data name="History_Balance_Empty_Title" xml:space="preserve"><value>No balance transactions yet</value></data>
+  <data name="History_Balance_Empty_Text" xml:space="preserve"><value>Credits and purchases will appear here once activity starts.</value></data>
+  <data name="Status_Pending" xml:space="preserve"><value>Pending</value></data>
+  <data name="Status_BotPending" xml:space="preserve"><value>Bot pending</value></data>
+  <data name="Status_PendingDelivery" xml:space="preserve"><value>Pending delivery</value></data>
+  <data name="Status_DeliveryBotPending" xml:space="preserve"><value>Delivery bot pending</value></data>
+  <data name="Status_TradeCreated" xml:space="preserve"><value>Trade created</value></data>
+  <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade created</value></data>
+  <data name="Status_Available" xml:space="preserve"><value>Available</value></data>
+  <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Awaiting user action</value></data>
+  <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Awaiting buyer action</value></data>
+  <data name="Status_ReceivedByBot" xml:space="preserve"><value>Received by bot</value></data>
+  <data name="Status_Credited" xml:space="preserve"><value>Credited</value></data>
+  <data name="Status_Delivered" xml:space="preserve"><value>Delivered</value></data>
+  <data name="Status_Sold" xml:space="preserve"><value>Sold</value></data>
+  <data name="Status_Failed" xml:space="preserve"><value>Failed</value></data>
+  <data name="Status_DeliveryFailed" xml:space="preserve"><value>Delivery failed</value></data>
+  <data name="BalanceType_CreditFromSale" xml:space="preserve"><value>Credit from sale</value></data>
+  <data name="BalanceType_PurchaseFromMarket" xml:space="preserve"><value>Purchase from market</value></data>
+  <data name="PriceSource_Skinport" xml:space="preserve"><value>Skinport</value></data>
+  <data name="PriceSource_Steam" xml:space="preserve"><value>Steam</value></data>
+  <data name="PriceSource_Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="Message_LoginRequiredSaleRequest" xml:space="preserve"><value>Steam login is required to create a sale request.</value></data>
+  <data name="Message_TradeUrlRequiredSale" xml:space="preserve"><value>Trade URL must be set before creating a sale request.</value></data>
+  <data name="Message_SelectedItemInvalid" xml:space="preserve"><value>Selected inventory item is invalid.</value></data>
+  <data name="Message_ItemAlreadyHasSaleOperation" xml:space="preserve"><value>This item already has a sale operation.</value></data>
+  <data name="Message_SaleRequestCreated" xml:space="preserve"><value>Sale request created.</value></data>
+  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Steam login is required to create bot intake.</value></data>
+  <data name="Message_SaleRequestInvalid" xml:space="preserve"><value>Sale request is invalid.</value></data>
+  <data name="Message_LoginRequiredCreditBalance" xml:space="preserve"><value>Steam login is required to credit balance.</value></data>
+  <data name="Message_TradeUrlNotSetInventoryStillLoads" xml:space="preserve"><value>Trade URL is not set yet. Inventory still loads by SteamID.</value></data>
+  <data name="Message_SteamIdUnavailable" xml:space="preserve"><value>SteamID is not available for the current session.</value></data>
+  <data name="Message_LocalUserProfileNotFound" xml:space="preserve"><value>Local user profile was not found.</value></data>
+  <data name="Message_LoginRequiredBuyMarketItems" xml:space="preserve"><value>Steam login is required to buy market items.</value></data>
+  <data name="Message_LoginRequiredCreateDeliveryTrade" xml:space="preserve"><value>Steam login is required to create delivery trade.</value></data>
+  <data name="Message_LoginRequiredConfirmDelivery" xml:space="preserve"><value>Steam login is required to confirm delivery.</value></data>
+  <data name="Message_TradeUrlMustBeValid" xml:space="preserve"><value>Trade URL must be a valid Steam trade offer link.</value></data>
+  <data name="Message_TradeUrlSaved" xml:space="preserve"><value>Trade URL saved.</value></data>
+  <data name="Message_SaleRequestNotFound" xml:space="preserve"><value>Sale request was not found.</value></data>
+  <data name="Message_SaleRequestAlreadyCredited" xml:space="preserve"><value>This sale request was already credited.</value></data>
+  <data name="Message_OnlyTradeCreatedCanBeCredited" xml:space="preserve"><value>Only trade-created requests can be credited.</value></data>
+  <data name="Message_BalanceCreditedBy" xml:space="preserve"><value>Balance credited by {0}.</value></data>
+  <data name="Message_TradeIntakeOnlyPending" xml:space="preserve"><value>Trade intake is available only for pending sale requests.</value></data>
+  <data name="Message_BotIntegrationNotConfigured" xml:space="preserve"><value>Bot integration is not fully configured yet. Complete bot settings to enable real trade creation.</value></data>
+  <data name="Message_PurchasedItemNotFound" xml:space="preserve"><value>Purchased item was not found.</value></data>
+  <data name="Message_OnlySoldItemsCanEnterDelivery" xml:space="preserve"><value>Only sold items can enter delivery flow.</value></data>
+  <data name="Message_ItemAlreadyDelivered" xml:space="preserve"><value>Item was already delivered.</value></data>
+  <data name="Message_DeliveryTradeAlreadyExists" xml:space="preserve"><value>Delivery trade already exists for this item.</value></data>
+  <data name="Message_BuyerProfileNotFound" xml:space="preserve"><value>Buyer profile was not found.</value></data>
+  <data name="Message_BuyerTradeUrlRequired" xml:space="preserve"><value>Buyer Trade URL is required before delivery can start.</value></data>
+  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Delivery bot integration is not fully configured yet. Complete bot settings to enable real delivery trade creation.</value></data>
+  <data name="Message_ItemAlreadyMarkedDelivered" xml:space="preserve"><value>Item was already marked as delivered.</value></data>
+  <data name="Message_OnlyDeliveryCreatedCanBeConfirmed" xml:space="preserve"><value>Only delivery-created items can be confirmed as delivered.</value></data>
+  <data name="Message_ItemMarkedDelivered" xml:space="preserve"><value>Item marked as delivered.</value></data>
+  <data name="Message_MarketItemNotFound" xml:space="preserve"><value>Market item was not found.</value></data>
+  <data name="Message_MarketItemNoLongerAvailable" xml:space="preserve"><value>This item is no longer available.</value></data>
+  <data name="Message_BuyOwnItemNotAllowed" xml:space="preserve"><value>Buying your own market item is not allowed.</value></data>
+  <data name="Message_NotEnoughBalance" xml:space="preserve"><value>Not enough balance to buy this item.</value></data>
+  <data name="Message_PurchaseCompletedPendingDelivery" xml:space="preserve"><value>Purchase completed. Item is pending delivery.</value></data>
+  <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes.</value></data>
+  <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Steam inventory response was empty or invalid.</value></data>
+  <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Steam inventory is unavailable or private.</value></data>
+  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam inventory response is incomplete: assets were not returned.</value></data>
+  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Stub bot trade created. Real Steam bot integration is not connected yet.</value></data>
+  <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Stub delivery trade created. Real Steam delivery integration is not connected yet.</value></data>
+</root>

@@ -1,0 +1,169 @@
+@page
+@model SkinMarket.Pages.MarketModel
+@{
+    ViewData["Title"] = L["Page_Market_Title"];
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <span class="section-kicker">@L["Market_Kicker"]</span>
+            <h1>@L["Page_Market_Title"]</h1>
+            <p class="page-description">@L["Market_Description"]</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
+    }
+
+    @if (User.Identity?.IsAuthenticated ?? false)
+    {
+        <div class="summary-card">
+            <span class="section-kicker">@L["Market_BalanceSummary"]</span>
+            <h2>@Model.CurrentBalance</h2>
+            <p>@L["Market_BalanceSummary_Text"]</p>
+        </div>
+    }
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>@L["Market_Empty_Title"]</h2>
+            <p>@L["Market_Empty_Text"]</p>
+        </div>
+    }
+    else
+    {
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["Market_AvailableItems_Title"]</h2>
+                    <p>@L["Market_AvailableItems_Text"]</p>
+                </div>
+            </div>
+            <div class="card-grid">
+                @foreach (var item in Model.Items)
+                {
+                    <article class="content-card item-card">
+                        <div class="item-card-top">
+                            @if (!string.IsNullOrWhiteSpace(item.IconUrl))
+                            {
+                                <img src="@item.IconUrl" alt="@item.ItemName" class="item-icon" />
+                            }
+                            <div>
+                                <h2 class="card-title">@item.ItemName</h2>
+                                <p class="price-tag">$@item.Price.ToString("0.00")</p>
+                            </div>
+                        </div>
+                        <dl class="detail-list compact">
+                            <div class="detail-row">
+                                <dt>AssetId</dt>
+                                <dd class="break-value">@item.AssetId</dd>
+                            </div>
+                            <div class="detail-row">
+                                <dt>@L["Inventory_Column_Status"]</dt>
+                                <dd><span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span></dd>
+                            </div>
+                        </dl>
+
+                        @if (item.Status == "Sold")
+                        {
+                            <p class="meta-note">@UiTextLocalizer.LocalizeStatus(L, "Sold")</p>
+                        }
+                        else if (!(User.Identity?.IsAuthenticated ?? false))
+                        {
+                            <p class="meta-note">@L["Market_LoginRequiredToBuy"]</p>
+                        }
+                        else
+                        {
+                            <form method="post" asp-page-handler="Buy" class="action-row">
+                                <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
+                                <button type="submit" class="btn app-button-primary">@L["Common_Buy"]</button>
+                            </form>
+                        }
+                    </article>
+                }
+            </div>
+        </section>
+    }
+
+    @if (User.Identity?.IsAuthenticated ?? false)
+    {
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["Market_Purchases_Title"]</h2>
+                    <p>@L["Market_Purchases_Text"]</p>
+                </div>
+            </div>
+            @if (Model.Purchases.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>@L["Market_Purchases_Empty_Title"]</h3>
+                    <p>@L["Market_Purchases_Empty_Text"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="stack-grid">
+                    @foreach (var item in Model.Purchases)
+                    {
+                        <article class="content-card history-card">
+                            <div class="card-heading">
+                                <div>
+                                    <h3>@item.ItemName</h3>
+                                    <p class="card-subtitle">@string.Format(L["Market_PurchasedFor"].Value, item.Price.ToString("0.00"))</p>
+                                </div>
+                                <div class="status-group">
+                                    <span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
+                                    {
+                                        <span class="status-badge" data-status="@item.DeliveryStatus">@UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus)</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="history-metrics">
+                                <span><strong>@L["Market_Purchased"]:</strong> @item.PurchasedAtUtc</span>
+                                @if (!string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId))
+                                {
+                                    <span><strong>@L["Market_DeliveryTradeOfferId"]:</strong> <span class="break-value">@item.DeliveryTradeOfferId</span></span>
+                                }
+                                @if (item.DeliveredAtUtc.HasValue)
+                                {
+                                    <span><strong>@L["Market_Delivered"]:</strong> @item.DeliveredAtUtc</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.DeliveryErrorMessage))
+                            {
+                                <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.DeliveryErrorMessage)</div>
+                            }
+                            <div class="action-row">
+                                @if (item.DeliveryStatus == "PendingDelivery")
+                                {
+                                    <form method="post" asp-page-handler="CreateDeliveryTrade">
+                                        <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
+                                        <button type="submit" class="btn app-button-secondary">@L["Market_CreateDeliveryTrade"]</button>
+                                    </form>
+                                }
+                                else if (item.DeliveryStatus == "DeliveryTradeCreated" || item.DeliveryStatus == "AwaitingBuyerAction")
+                                {
+                                    <form method="post" asp-page-handler="ConfirmDelivered">
+                                        <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
+                                        <button type="submit" class="btn app-button-primary">@L["Market_ConfirmDelivered"]</button>
+                                    </form>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>

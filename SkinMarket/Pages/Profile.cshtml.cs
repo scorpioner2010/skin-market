@@ -1,0 +1,117 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
+using SkinMarket.Contracts;
+using SkinMarket.Data;
+using SkinMarket.Localization;
+using SkinMarket.Models;
+
+namespace SkinMarket.Pages;
+
+public class ProfileModel : PageModel
+{
+    private readonly AppDbContext _dbContext;
+    private readonly IBalanceService _balanceService;
+    private readonly IStringLocalizer<SharedResource> _localizer;
+
+    public ProfileModel(AppDbContext dbContext, IBalanceService balanceService, IStringLocalizer<SharedResource> localizer)
+    {
+        _dbContext = dbContext;
+        _balanceService = balanceService;
+        _localizer = localizer;
+    }
+
+    public AppUser? AppUser { get; private set; }
+    public decimal Balance { get; private set; }
+    [BindProperty]
+    public TradeUrlInputModel Input { get; set; } = new();
+    [TempData]
+    public string? SuccessMessage { get; set; }
+
+    public async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        await LoadProfileAsync(cancellationToken);
+    }
+
+    public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
+    {
+        var appUser = await GetCurrentUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return RedirectToPage();
+        }
+
+        if (!string.IsNullOrWhiteSpace(Input.TradeUrl) && !IsValidTradeUrl(Input.TradeUrl))
+        {
+            ModelState.AddModelError(
+                $"{nameof(Input)}.{nameof(Input.TradeUrl)}",
+                UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be a valid Steam trade offer link."));
+        }
+
+        if (!ModelState.IsValid)
+        {
+            AppUser = appUser;
+            Balance = await _balanceService.GetBalanceAsync(appUser.Id, cancellationToken);
+            return Page();
+        }
+
+        appUser.TradeUrl = string.IsNullOrWhiteSpace(Input.TradeUrl) ? null : Input.TradeUrl.Trim();
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL saved.");
+        return RedirectToPage();
+    }
+
+    private async Task LoadProfileAsync(CancellationToken cancellationToken)
+    {
+        AppUser = await GetCurrentUserAsync(cancellationToken);
+        if (AppUser is null)
+        {
+            return;
+        }
+
+        Balance = await _balanceService.GetBalanceAsync(AppUser.Id, cancellationToken);
+        Input = new TradeUrlInputModel
+        {
+            TradeUrl = AppUser.TradeUrl
+        };
+    }
+
+    private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)
+    {
+        if (!(User.Identity?.IsAuthenticated ?? false))
+        {
+            return null;
+        }
+
+        var steamId = User.FindFirst("SteamId")?.Value;
+        if (string.IsNullOrWhiteSpace(steamId))
+        {
+            return null;
+        }
+
+        return await _dbContext.AppUsers
+            .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+    }
+
+    private static bool IsValidTradeUrl(string tradeUrl)
+    {
+        if (!Uri.TryCreate(tradeUrl.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Scheme == Uri.UriSchemeHttps &&
+               uri.Host.Equals("steamcommunity.com", StringComparison.OrdinalIgnoreCase) &&
+               uri.AbsolutePath.Equals("/tradeoffer/new/", StringComparison.OrdinalIgnoreCase) &&
+               uri.Query.Contains("partner=", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public class TradeUrlInputModel
+    {
+        [StringLength(500)]
+        public string? TradeUrl { get; set; }
+    }
+}

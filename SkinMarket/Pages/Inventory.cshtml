@@ -1,0 +1,260 @@
+@page
+@model SkinMarket.Pages.InventoryModel
+@{
+    ViewData["Title"] = L["Page_Inventory_Title"];
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <span class="section-kicker">@L["Inventory_Kicker"]</span>
+            <h1>@L["Page_Inventory_Title"]</h1>
+            <p class="page-description">@L["Inventory_Description"]</p>
+        </div>
+        <div class="status-group">
+            <span class="compact-badge compact-badge-neutral">@Model.CurrentGameDisplayName</span>
+        </div>
+    </div>
+
+    @if (!(User.Identity?.IsAuthenticated ?? false))
+    {
+        <div class="empty-state">
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <p>@L["Inventory_LoginRequired_Text"]</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+        </div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+        {
+            <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.SellErrorMessage))
+        {
+            <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SellErrorMessage)</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.WarningMessage))
+        {
+            <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.WarningMessage)</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
+        }
+        else if (Model.Items.Count == 0)
+        {
+            <div class="empty-state">
+                <h2>@L["Inventory_Empty_Title"]</h2>
+                <p>@L["Inventory_Empty_Text"]</p>
+            </div>
+        }
+        else
+        {
+            <section class="page-section">
+                <div class="section-heading">
+                    <div>
+                        <h2>@L["Inventory_YourItems_Title"]</h2>
+                        <p>@L["Inventory_YourItems_Description"]</p>
+                    </div>
+                </div>
+                <div class="inventory-table-shell">
+                    <div class="inventory-list">
+                        <div class="inventory-row inventory-row-header">
+                            <div class="inventory-cell inventory-item-cell">@L["Inventory_Column_Item"]</div>
+                            <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Tradable"]</div>
+                            <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Marketable"]</div>
+                            <div class="inventory-cell">AssetId</div>
+                            <div class="inventory-cell">ClassId</div>
+                            <div class="inventory-cell">@L["Inventory_Column_RealPrice"]</div>
+                            <div class="inventory-cell inventory-status-cell">@L["Inventory_Column_Status"]</div>
+                            <div class="inventory-cell inventory-actions-cell">@L["Inventory_Column_Action"]</div>
+                        </div>
+                        @foreach (var item in Model.Items)
+                        {
+                            var hasOperation = Model.LatestOperationsByAssetId.TryGetValue(item.AssetId, out var operation);
+
+                            <article class="inventory-row">
+                                <div class="inventory-cell inventory-item-cell" data-label="@L["Inventory_Column_Item"]">
+                                    <div class="inventory-main">
+                                        @if (!string.IsNullOrWhiteSpace(item.IconUrl))
+                                        {
+                                            <img src="@item.IconUrl" alt="@item.Name" class="inventory-icon" />
+                                        }
+                                        else
+                                        {
+                                            <div class="inventory-icon inventory-icon-fallback" aria-hidden="true">
+                                                @((item.Name.FirstOrDefault()).ToString().ToUpperInvariant())
+                                            </div>
+                                        }
+                                        <div class="inventory-main-copy">
+                                            <h2 class="inventory-item-name">@item.Name</h2>
+                                            <div class="inventory-meta">
+                                                <span class="break-value">@L["Inventory_InstanceId"]: @item.InstanceId</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="inventory-cell inventory-flag-cell" data-label="@L["Inventory_Column_Tradable"]">
+                                    <div class="inventory-badges">
+                                        <span class="compact-badge">@((item.Tradable.HasValue ? L[item.Tradable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
+                                    </div>
+                                </div>
+                                <div class="inventory-cell inventory-flag-cell" data-label="@L["Inventory_Column_Marketable"]">
+                                    <div class="inventory-badges">
+                                        <span class="compact-badge">@((item.Marketable.HasValue ? L[item.Marketable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
+                                    </div>
+                                </div>
+                                <div class="inventory-cell inventory-meta break-value" data-label="AssetId">@item.AssetId</div>
+                                <div class="inventory-cell inventory-meta break-value" data-label="ClassId">@item.ClassId</div>
+                                <div class="inventory-cell inventory-meta" data-label="@L["Inventory_Column_RealPrice"]">
+                                    @{
+                                        var resolvedPrice = Model.ResolvedPricesByAssetId.GetValueOrDefault(item.AssetId);
+                                    }
+                                    @if (resolvedPrice?.RealPriceUsd is decimal realPrice)
+                                    {
+                                        <div class="inventory-price-block">
+                                            <span class="price-value">$@realPrice.ToString("0.00")</span>
+                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizePriceSource(L, Model.GetPriceSourceLabel(resolvedPrice.Source))</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="inventory-price-block">
+                                            <span class="inventory-unavailable">@L["Inventory_PriceUnavailable"]</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Common_Unavailable"]</span>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]">
+                                    @if (hasOperation && operation is not null)
+                                    {
+                                        <div class="inventory-status">
+                                            <span class="status-badge" data-status="@operation.Status">@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
+                                            @if (operation.CreditAmount > 0)
+                                            {
+                                                <span class="mini-pill">@L["Inventory_Credited"]: @operation.CreditAmount</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(operation.TradeOfferId))
+                                            {
+                                                <span class="inventory-inline-note break-value">@L["Inventory_TradeOfferId"]: @operation.TradeOfferId</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(operation.ErrorMessage))
+                                            {
+                                                <span class="inventory-inline-note">@UiTextLocalizer.LocalizeMessage(L, operation.ErrorMessage)</span>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">@L["Inventory_Ready"]</span>
+                                    }
+                                </div>
+                                <div class="inventory-cell inventory-actions-cell" data-label="@L["Inventory_Column_Action"]">
+                                    <div class="inventory-actions">
+                                        @if (hasOperation && operation is not null)
+                                        {
+                                            @if (operation.Status == "Pending")
+                                            {
+                                                <form method="post" asp-page-handler="CreateTrade">
+                                                    <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
+                                                    <button type="submit" class="btn app-button-secondary">@L["Inventory_CreateTrade"]</button>
+                                                </form>
+                                            }
+                                            else if (operation.Status == "TradeCreated" || operation.Status == "AwaitingUserAction")
+                                            {
+                                                <form method="post" asp-page-handler="Credit">
+                                                    <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
+                                                    <button type="submit" class="btn app-button-primary">@L["Inventory_ConfirmReceived"]</button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <span class="compact-badge compact-badge-neutral">@L["Inventory_PendingSale"]</span>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <form method="post" asp-page-handler="Sell">
+                                                <input type="hidden" name="Input.AssetId" value="@item.AssetId" />
+                                                <input type="hidden" name="Input.ClassId" value="@item.ClassId" />
+                                                <input type="hidden" name="Input.InstanceId" value="@item.InstanceId" />
+                                                <input type="hidden" name="Input.ItemName" value="@item.Name" />
+                                                <input type="hidden" name="Input.IconUrl" value="@item.IconUrl" />
+                                                <button type="submit" class="btn app-button-primary">@L["Common_Sell"]</button>
+                                            </form>
+                                        }
+                                    </div>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </div>
+            </section>
+        }
+
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["Inventory_RecentSales_Title"]</h2>
+                    <p>@L["Inventory_RecentSales_Description"]</p>
+                </div>
+            </div>
+            @if (Model.RecentOperations.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>@L["Inventory_RecentSales_Empty_Title"]</h3>
+                    <p>@L["Inventory_RecentSales_Empty_Text"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="compact-history-list">
+                    @foreach (var operation in Model.RecentOperations)
+                    {
+                        <article class="compact-history-row">
+                            <div class="compact-history-main">
+                                <h3>@operation.ItemName</h3>
+                                <p class="compact-history-meta break-value">AssetId: @operation.AssetId</p>
+                            </div>
+                            <div class="compact-history-side">
+                                <span class="status-badge" data-status="@operation.Status">@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
+                                @if (operation.CreditAmount > 0)
+                                {
+                                    <span class="mini-pill">@L["Inventory_Credit"]: @operation.CreditAmount</span>
+                                }
+                            </div>
+                            <div class="compact-history-details">
+                                <span><strong>@L["Common_Created"]:</strong> @operation.CreatedAtUtc</span>
+                                @if (operation.CreditedAtUtc.HasValue)
+                                {
+                                    <span><strong>@L["Inventory_Credited"]:</strong> @operation.CreditedAtUtc</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(operation.TradeOfferId))
+                                {
+                                    <span class="break-value"><strong>@L["Inventory_TradeOfferId"]:</strong> @operation.TradeOfferId</span>
+                                }
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(operation.BotTradeUrl) || !string.IsNullOrWhiteSpace(operation.ErrorMessage))
+                            {
+                                <div class="meta-note compact-history-note">
+                                    @if (!string.IsNullOrWhiteSpace(operation.BotTradeUrl))
+                                    {
+                                        <div class="break-value"><strong>@L["Inventory_BotTradeUrl"]:</strong> @operation.BotTradeUrl</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(operation.ErrorMessage))
+                                    {
+                                        <div><strong>@L["Common_Message"]:</strong> @UiTextLocalizer.LocalizeMessage(L, operation.ErrorMessage)</div>
+                                    }
+                                </div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>

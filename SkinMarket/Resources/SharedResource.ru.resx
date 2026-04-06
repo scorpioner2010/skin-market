@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Layout_UserFallback" xml:space="preserve"><value>Пользователь</value></data>
+  <data name="Layout_Subtitle" xml:space="preserve"><value>Маркетплейс игровых предметов</value></data>
+  <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Переключить навигацию</value></data>
+  <data name="Layout_Nav_Home" xml:space="preserve"><value>Главная</value></data>
+  <data name="Layout_Nav_Profile" xml:space="preserve"><value>Профиль</value></data>
+  <data name="Layout_Nav_Market" xml:space="preserve"><value>Маркет</value></data>
+  <data name="Layout_Nav_Inventory" xml:space="preserve"><value>Инвентарь</value></data>
+  <data name="Layout_Nav_History" xml:space="preserve"><value>История</value></data>
+  <data name="Layout_Language" xml:space="preserve"><value>Язык</value></data>
+  <data name="Layout_UserAvatarAlt" xml:space="preserve"><value>Аватар пользователя</value></data>
+  <data name="Layout_Logout" xml:space="preserve"><value>Выйти</value></data>
+  <data name="Layout_Footer_Primary" xml:space="preserve"><value>Маркетплейс для игровых инвентарей, продаж предметов и отслеживания доставки.</value></data>
+  <data name="Layout_Footer_Secondary" xml:space="preserve"><value>Steam-инвентарь, листинги и статусы трейдов в одном интерфейсе.</value></data>
+  <data name="Common_LoginWithSteam" xml:space="preserve"><value>Войти через Steam</value></data>
+  <data name="Common_SteamLoginRequired" xml:space="preserve"><value>Требуется вход через Steam</value></data>
+  <data name="Common_Sell" xml:space="preserve"><value>Продать</value></data>
+  <data name="Common_Buy" xml:space="preserve"><value>Купить</value></data>
+  <data name="Common_Created" xml:space="preserve"><value>Создано</value></data>
+  <data name="Common_Message" xml:space="preserve"><value>Сообщение</value></data>
+  <data name="Common_Yes" xml:space="preserve"><value>Да</value></data>
+  <data name="Common_No" xml:space="preserve"><value>Нет</value></data>
+  <data name="Common_Unknown" xml:space="preserve"><value>Неизвестно</value></data>
+  <data name="Common_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
+  <data name="Page_Home_Title" xml:space="preserve"><value>Главная</value></data>
+  <data name="Page_Profile_Title" xml:space="preserve"><value>Профиль</value></data>
+  <data name="Page_Inventory_Title" xml:space="preserve"><value>Инвентарь</value></data>
+  <data name="Page_Market_Title" xml:space="preserve"><value>Маркет</value></data>
+  <data name="Page_History_Title" xml:space="preserve"><value>История</value></data>
+  <data name="Home_Kicker" xml:space="preserve"><value>Маркетплейс с готовностью к нескольким играм</value></data>
+  <data name="Home_HeroText" xml:space="preserve"><value>Покупайте, продавайте и отслеживайте игровые предметы в понятном маркетплейсе с инвентарём, балансом и статусами доставки.</value></data>
+  <data name="Home_OpenMarket" xml:space="preserve"><value>Открыть маркет</value></data>
+  <data name="Home_ViewInventory" xml:space="preserve"><value>Открыть инвентарь</value></data>
+  <data name="Home_Workflow_Label" xml:space="preserve"><value>Сценарий</value></data>
+  <data name="Home_Workflow_Value" xml:space="preserve"><value>Вход через Steam, выставление предметов, зачисление баланса, покупка и отслеживание доставки</value></data>
+  <data name="Home_Focus_Label" xml:space="preserve"><value>Фокус</value></data>
+  <data name="Home_Focus_Value" xml:space="preserve"><value>Быстрый обзор предметов, предсказуемые действия и понятные состояния маркета</value></data>
+  <data name="Home_Overview_Title" xml:space="preserve"><value>Обзор платформы</value></data>
+  <data name="Home_Overview_Description" xml:space="preserve"><value>Ключевые возможности маркетплейса доступны сквозным сценарием для инвентаря, продаж и отслеживания покупок.</value></data>
+  <data name="Home_Feature_Profile_Title" xml:space="preserve"><value>Steam-авторизация и профиль</value></data>
+  <data name="Home_Feature_Profile_Text" xml:space="preserve"><value>Войдите через Steam, управляйте профилем и держите trade-данные готовыми для передачи предметов.</value></data>
+  <data name="Home_Feature_Inventory_Title" xml:space="preserve"><value>Инвентарь и продажи</value></data>
+  <data name="Home_Feature_Inventory_Text" xml:space="preserve"><value>Просматривайте инвентари поддерживаемых игр, создавайте запросы на продажу и следите за статусами каждого предмета.</value></data>
+  <data name="Home_Feature_Market_Title" xml:space="preserve"><value>Маркет и доставка</value></data>
+  <data name="Home_Feature_Market_Text" xml:space="preserve"><value>Доступные листинги можно покупать за баланс аккаунта и отслеживать доставку.</value></data>
+  <data name="Profile_SteamUserFallback" xml:space="preserve"><value>Пользователь Steam</value></data>
+  <data name="Profile_AvatarAlt" xml:space="preserve"><value>Аватар {0}</value></data>
+  <data name="Profile_Kicker" xml:space="preserve"><value>Профиль пользователя</value></data>
+  <data name="Profile_Description" xml:space="preserve"><value>Управляйте данными аккаунта, текущим балансом и Steam Trade URL в одном месте.</value></data>
+  <data name="Profile_AccountSummary" xml:space="preserve"><value>Сводка аккаунта</value></data>
+  <data name="Profile_SteamProfile" xml:space="preserve"><value>Профиль Steam</value></data>
+  <data name="Profile_Subtitle_Fallback" xml:space="preserve"><value>Данные профиля Steam используют резервные значения.</value></data>
+  <data name="Profile_Subtitle_Synced" xml:space="preserve"><value>Никнейм и аватар синхронизированы со Steam.</value></data>
+  <data name="Profile_PersonaName" xml:space="preserve"><value>Persona name</value></data>
+  <data name="Profile_DisplayName" xml:space="preserve"><value>Display name</value></data>
+  <data name="Profile_AvatarUrl" xml:space="preserve"><value>Avatar URL</value></data>
+  <data name="Profile_AvatarUnavailable" xml:space="preserve"><value>Аватар недоступен.</value></data>
+  <data name="Profile_Balance" xml:space="preserve"><value>Баланс</value></data>
+  <data name="Profile_TradeUrl" xml:space="preserve"><value>Trade URL</value></data>
+  <data name="Profile_TradeUrl_NotSet" xml:space="preserve"><value>Trade URL ещё не задан.</value></data>
+  <data name="Profile_LocalUserId" xml:space="preserve"><value>Локальный ID пользователя</value></data>
+  <data name="Profile_TradeSettings" xml:space="preserve"><value>Настройки трейда</value></data>
+  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Ваш Trade URL нужен для bot intake и сценария доставки.</value></data>
+  <data name="Profile_SteamTradeUrl" xml:space="preserve"><value>Steam Trade URL</value></data>
+  <data name="Profile_TradeUrl_Placeholder" xml:space="preserve"><value>https://steamcommunity.com/tradeoffer/new/...</value></data>
+  <data name="Profile_SaveTradeUrl" xml:space="preserve"><value>Сохранить Trade URL</value></data>
+  <data name="Profile_LoginRequired_Text" xml:space="preserve"><value>Войдите через Steam, чтобы открыть профиль, баланс и торговые настройки.</value></data>
+  <data name="Inventory_Kicker" xml:space="preserve"><value>Steam-инвентарь</value></data>
+  <data name="Inventory_Description" xml:space="preserve"><value>Просматривайте игровые предметы, создавайте запросы на продажу и отслеживайте статусы обработки.</value></data>
+  <data name="Inventory_LoginRequired_Text" xml:space="preserve"><value>Войдите через Steam, чтобы загрузить инвентарь и управлять запросами на продажу.</value></data>
+  <data name="Inventory_Empty_Title" xml:space="preserve"><value>Предметы инвентаря не найдены</value></data>
+  <data name="Inventory_Empty_Text" xml:space="preserve"><value>Steam сейчас не вернул видимые предметы для этого аккаунта.</value></data>
+  <data name="Inventory_YourItems_Title" xml:space="preserve"><value>Ваши предметы</value></data>
+  <data name="Inventory_YourItems_Description" xml:space="preserve"><value>Компактный список инвентаря для быстрого просмотра статуса предмета, идентификаторов и следующего действия.</value></data>
+  <data name="Inventory_Column_Item" xml:space="preserve"><value>Предмет</value></data>
+  <data name="Inventory_Column_Tradable" xml:space="preserve"><value>Trade</value></data>
+  <data name="Inventory_Column_Marketable" xml:space="preserve"><value>Market</value></data>
+  <data name="Inventory_Column_RealPrice" xml:space="preserve"><value>Реальная цена</value></data>
+  <data name="Inventory_Column_Status" xml:space="preserve"><value>Статус</value></data>
+  <data name="Inventory_Column_Action" xml:space="preserve"><value>Действие</value></data>
+  <data name="Inventory_InstanceId" xml:space="preserve"><value>InstanceId</value></data>
+  <data name="Inventory_PriceUnavailable" xml:space="preserve"><value>Цена недоступна</value></data>
+  <data name="Inventory_Credited" xml:space="preserve"><value>Зачислено</value></data>
+  <data name="Inventory_TradeOfferId" xml:space="preserve"><value>TradeOfferId</value></data>
+  <data name="Inventory_Ready" xml:space="preserve"><value>Готово</value></data>
+  <data name="Inventory_CreateTrade" xml:space="preserve"><value>Создать трейд</value></data>
+  <data name="Inventory_ConfirmReceived" xml:space="preserve"><value>Подтвердить получение</value></data>
+  <data name="Inventory_PendingSale" xml:space="preserve"><value>Продажа ожидается</value></data>
+  <data name="Inventory_RecentSales_Title" xml:space="preserve"><value>Последние запросы на продажу</value></data>
+  <data name="Inventory_RecentSales_Description" xml:space="preserve"><value>Последние sell-операции с текущими trade- и credit-статусами.</value></data>
+  <data name="Inventory_RecentSales_Empty_Title" xml:space="preserve"><value>Запросов на продажу пока нет</value></data>
+  <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Создайте продажу из инвентаря, чтобы запустить сценарий маркетплейса.</value></data>
+  <data name="Inventory_Credit" xml:space="preserve"><value>Кредит</value></data>
+  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>BotTradeUrl</value></data>
+  <data name="Market_Kicker" xml:space="preserve"><value>Маркетплейс</value></data>
+  <data name="Market_Description" xml:space="preserve"><value>Просматривайте зачисленные предметы, тратьте баланс аккаунта и отслеживайте доставку покупок.</value></data>
+  <data name="Market_BalanceSummary" xml:space="preserve"><value>Сводка баланса</value></data>
+  <data name="Market_BalanceSummary_Text" xml:space="preserve"><value>Текущий баланс, доступный для покупок на маркете.</value></data>
+  <data name="Market_Empty_Title" xml:space="preserve"><value>На маркете пока нет предметов</value></data>
+  <data name="Market_Empty_Text" xml:space="preserve"><value>Зачисленные предметы автоматически появятся здесь после завершения продажи.</value></data>
+  <data name="Market_AvailableItems_Title" xml:space="preserve"><value>Доступные предметы</value></data>
+  <data name="Market_AvailableItems_Text" xml:space="preserve"><value>Все предложения маркета, которые сейчас открыты для покупки.</value></data>
+  <data name="Market_LoginRequiredToBuy" xml:space="preserve"><value>Для покупки требуется вход.</value></data>
+  <data name="Market_Purchases_Title" xml:space="preserve"><value>Мои покупки</value></data>
+  <data name="Market_Purchases_Text" xml:space="preserve"><value>Отслеживайте купленные предметы, статусы доставки и delivery trade references.</value></data>
+  <data name="Market_Purchases_Empty_Title" xml:space="preserve"><value>Покупок пока нет</value></data>
+  <data name="Market_Purchases_Empty_Text" xml:space="preserve"><value>Купленные предметы появятся здесь вместе с прогрессом доставки.</value></data>
+  <data name="Market_PurchasedFor" xml:space="preserve"><value>Куплено за ${0}</value></data>
+  <data name="Market_Purchased" xml:space="preserve"><value>Куплено</value></data>
+  <data name="Market_DeliveryTradeOfferId" xml:space="preserve"><value>DeliveryTradeOfferId</value></data>
+  <data name="Market_Delivered" xml:space="preserve"><value>Доставлено</value></data>
+  <data name="Market_CreateDeliveryTrade" xml:space="preserve"><value>Создать delivery trade</value></data>
+  <data name="Market_ConfirmDelivered" xml:space="preserve"><value>Подтвердить доставку</value></data>
+  <data name="History_Kicker" xml:space="preserve"><value>Активность аккаунта</value></data>
+  <data name="History_Description" xml:space="preserve"><value>Просматривайте продажи, покупки и изменения баланса, связанные с вашим аккаунтом.</value></data>
+  <data name="History_LoginRequired_Text" xml:space="preserve"><value>Войдите через Steam, чтобы просмотреть историю активности аккаунта.</value></data>
+  <data name="History_CurrentBalance" xml:space="preserve"><value>Текущий баланс</value></data>
+  <data name="History_CurrentBalance_Text" xml:space="preserve"><value>Актуальный баланс на основе зачисленных продаж и покупок на маркете.</value></data>
+  <data name="History_Sales_Title" xml:space="preserve"><value>История продаж</value></data>
+  <data name="History_Sales_Text" xml:space="preserve"><value>Все sell-операции, связанные с предметами вашего Steam-инвентаря.</value></data>
+  <data name="History_Sales_Empty_Title" xml:space="preserve"><value>Продаж пока нет</value></data>
+  <data name="History_Sales_Empty_Text" xml:space="preserve"><value>Запросы на продажу появятся здесь, как только вы начнёте продавать предметы.</value></data>
+  <data name="History_CreditAmount" xml:space="preserve"><value>Сумма зачисления</value></data>
+  <data name="History_Purchases_Title" xml:space="preserve"><value>История покупок</value></data>
+  <data name="History_Purchases_Text" xml:space="preserve"><value>Предметы, которые вы купили на маркете, и прогресс их доставки.</value></data>
+  <data name="History_Purchases_Empty_Title" xml:space="preserve"><value>Покупок пока нет</value></data>
+  <data name="History_Purchases_Empty_Text" xml:space="preserve"><value>Предметы, купленные на маркете, появятся здесь.</value></data>
+  <data name="History_Price" xml:space="preserve"><value>Цена</value></data>
+  <data name="History_Balance_Title" xml:space="preserve"><value>История баланса</value></data>
+  <data name="History_Balance_Text" xml:space="preserve"><value>Все зачисления баланса и списания за покупки на маркете для вашего аккаунта.</value></data>
+  <data name="History_Balance_Empty_Title" xml:space="preserve"><value>Транзакций баланса пока нет</value></data>
+  <data name="History_Balance_Empty_Text" xml:space="preserve"><value>Зачисления и покупки появятся здесь, как только начнётся активность.</value></data>
+  <data name="Status_Pending" xml:space="preserve"><value>Ожидание</value></data>
+  <data name="Status_BotPending" xml:space="preserve"><value>Ожидает бота</value></data>
+  <data name="Status_PendingDelivery" xml:space="preserve"><value>Ожидает доставку</value></data>
+  <data name="Status_DeliveryBotPending" xml:space="preserve"><value>Доставка ожидает бота</value></data>
+  <data name="Status_TradeCreated" xml:space="preserve"><value>Трейд создан</value></data>
+  <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade создан</value></data>
+  <data name="Status_Available" xml:space="preserve"><value>Доступно</value></data>
+  <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Ожидается действие пользователя</value></data>
+  <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Ожидается действие покупателя</value></data>
+  <data name="Status_ReceivedByBot" xml:space="preserve"><value>Получено ботом</value></data>
+  <data name="Status_Credited" xml:space="preserve"><value>Зачислено</value></data>
+  <data name="Status_Delivered" xml:space="preserve"><value>Доставлено</value></data>
+  <data name="Status_Sold" xml:space="preserve"><value>Продано</value></data>
+  <data name="Status_Failed" xml:space="preserve"><value>Ошибка</value></data>
+  <data name="Status_DeliveryFailed" xml:space="preserve"><value>Ошибка доставки</value></data>
+  <data name="BalanceType_CreditFromSale" xml:space="preserve"><value>Зачисление от продажи</value></data>
+  <data name="BalanceType_PurchaseFromMarket" xml:space="preserve"><value>Покупка на маркете</value></data>
+  <data name="PriceSource_Skinport" xml:space="preserve"><value>Skinport</value></data>
+  <data name="PriceSource_Steam" xml:space="preserve"><value>Steam</value></data>
+  <data name="PriceSource_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
+  <data name="Message_LoginRequiredSaleRequest" xml:space="preserve"><value>Для создания запроса на продажу требуется вход через Steam.</value></data>
+  <data name="Message_TradeUrlRequiredSale" xml:space="preserve"><value>Перед созданием запроса на продажу нужно указать Trade URL.</value></data>
+  <data name="Message_SelectedItemInvalid" xml:space="preserve"><value>Выбранный предмет инвентаря некорректен.</value></data>
+  <data name="Message_ItemAlreadyHasSaleOperation" xml:space="preserve"><value>Для этого предмета уже существует операция продажи.</value></data>
+  <data name="Message_SaleRequestCreated" xml:space="preserve"><value>Запрос на продажу создан.</value></data>
+  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Для создания bot intake требуется вход через Steam.</value></data>
+  <data name="Message_SaleRequestInvalid" xml:space="preserve"><value>Запрос на продажу некорректен.</value></data>
+  <data name="Message_LoginRequiredCreditBalance" xml:space="preserve"><value>Для зачисления баланса требуется вход через Steam.</value></data>
+  <data name="Message_TradeUrlNotSetInventoryStillLoads" xml:space="preserve"><value>Trade URL ещё не задан. Инвентарь всё равно загружается по SteamID.</value></data>
+  <data name="Message_SteamIdUnavailable" xml:space="preserve"><value>SteamID недоступен для текущей сессии.</value></data>
+  <data name="Message_LocalUserProfileNotFound" xml:space="preserve"><value>Локальный профиль пользователя не найден.</value></data>
+  <data name="Message_LoginRequiredBuyMarketItems" xml:space="preserve"><value>Для покупки предметов на маркете требуется вход через Steam.</value></data>
+  <data name="Message_LoginRequiredCreateDeliveryTrade" xml:space="preserve"><value>Для создания delivery trade требуется вход через Steam.</value></data>
+  <data name="Message_LoginRequiredConfirmDelivery" xml:space="preserve"><value>Для подтверждения доставки требуется вход через Steam.</value></data>
+  <data name="Message_TradeUrlMustBeValid" xml:space="preserve"><value>Trade URL должен быть корректной ссылкой на Steam trade offer.</value></data>
+  <data name="Message_TradeUrlSaved" xml:space="preserve"><value>Trade URL сохранён.</value></data>
+  <data name="Message_SaleRequestNotFound" xml:space="preserve"><value>Запрос на продажу не найден.</value></data>
+  <data name="Message_SaleRequestAlreadyCredited" xml:space="preserve"><value>Этот запрос на продажу уже зачислен.</value></data>
+  <data name="Message_OnlyTradeCreatedCanBeCredited" xml:space="preserve"><value>Зачислять можно только запросы с созданным трейдом.</value></data>
+  <data name="Message_BalanceCreditedBy" xml:space="preserve"><value>Баланс пополнен на {0}.</value></data>
+  <data name="Message_TradeIntakeOnlyPending" xml:space="preserve"><value>Trade intake доступен только для запросов на продажу в статусе ожидания.</value></data>
+  <data name="Message_BotIntegrationNotConfigured" xml:space="preserve"><value>Интеграция с ботом ещё не настроена. Завершите настройку бота, чтобы включить реальное создание трейда.</value></data>
+  <data name="Message_PurchasedItemNotFound" xml:space="preserve"><value>Купленный предмет не найден.</value></data>
+  <data name="Message_OnlySoldItemsCanEnterDelivery" xml:space="preserve"><value>В доставку могут переходить только проданные предметы.</value></data>
+  <data name="Message_ItemAlreadyDelivered" xml:space="preserve"><value>Предмет уже доставлен.</value></data>
+  <data name="Message_DeliveryTradeAlreadyExists" xml:space="preserve"><value>Для этого предмета delivery trade уже существует.</value></data>
+  <data name="Message_BuyerProfileNotFound" xml:space="preserve"><value>Профиль покупателя не найден.</value></data>
+  <data name="Message_BuyerTradeUrlRequired" xml:space="preserve"><value>Перед началом доставки нужно указать Trade URL покупателя.</value></data>
+  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Интеграция delivery-бота ещё не настроена. Завершите настройку бота, чтобы включить реальное создание доставки.</value></data>
+  <data name="Message_ItemAlreadyMarkedDelivered" xml:space="preserve"><value>Предмет уже отмечен как доставленный.</value></data>
+  <data name="Message_OnlyDeliveryCreatedCanBeConfirmed" xml:space="preserve"><value>Подтвердить можно только предметы с созданной доставкой.</value></data>
+  <data name="Message_ItemMarkedDelivered" xml:space="preserve"><value>Предмет отмечен как доставленный.</value></data>
+  <data name="Message_MarketItemNotFound" xml:space="preserve"><value>Предмет на маркете не найден.</value></data>
+  <data name="Message_MarketItemNoLongerAvailable" xml:space="preserve"><value>Этот предмет больше недоступен.</value></data>
+  <data name="Message_BuyOwnItemNotAllowed" xml:space="preserve"><value>Покупать собственный предмет на маркете нельзя.</value></data>
+  <data name="Message_NotEnoughBalance" xml:space="preserve"><value>Недостаточно баланса для покупки этого предмета.</value></data>
+  <data name="Message_PurchaseCompletedPendingDelivery" xml:space="preserve"><value>Покупка завершена. Предмет ожидает доставку.</value></data>
+  <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam временно ограничивает запросы к инвентарю. Попробуйте снова через несколько минут.</value></data>
+  <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Ответ инвентаря Steam пустой или некорректный.</value></data>
+  <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Инвентарь Steam недоступен или приватный.</value></data>
+  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Ответ инвентаря Steam неполный: assets не были возвращены.</value></data>
+  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Создан stub bot trade. Реальная интеграция со Steam-ботом ещё не подключена.</value></data>
+  <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Создан stub delivery trade. Реальная Steam-интеграция доставки ещё не подключена.</value></data>
+</root>

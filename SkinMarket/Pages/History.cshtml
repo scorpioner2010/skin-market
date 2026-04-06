@@ -1,0 +1,154 @@
+@page
+@model SkinMarket.Pages.HistoryModel
+@{
+    ViewData["Title"] = L["Page_History_Title"];
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <span class="section-kicker">@L["History_Kicker"]</span>
+            <h1>@L["Page_History_Title"]</h1>
+            <p class="page-description">@L["History_Description"]</p>
+        </div>
+    </div>
+
+    @if (!(User.Identity?.IsAuthenticated ?? false))
+    {
+        <div class="empty-state">
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <p>@L["History_LoginRequired_Text"]</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+        </div>
+    }
+    else
+    {
+        <div class="summary-card">
+            <span class="section-kicker">@L["History_CurrentBalance"]</span>
+            <h2>@Model.CurrentBalance</h2>
+            <p>@L["History_CurrentBalance_Text"]</p>
+        </div>
+
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["History_Sales_Title"]</h2>
+                    <p>@L["History_Sales_Text"]</p>
+                </div>
+            </div>
+            @if (Model.Sales.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>@L["History_Sales_Empty_Title"]</h3>
+                    <p>@L["History_Sales_Empty_Text"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="stack-grid">
+                    @foreach (var item in Model.Sales)
+                    {
+                        <article class="content-card history-card">
+                            <div class="card-heading">
+                                <div>
+                                    <h3>@item.ItemName</h3>
+                                    <p class="card-subtitle break-value">@item.AssetId</p>
+                                </div>
+                                <span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span>
+                            </div>
+                            <div class="history-metrics">
+                                <span><strong>@L["History_CreditAmount"]:</strong> @item.CreditAmount</span>
+                                <span><strong>@L["Common_Created"]:</strong> @item.CreatedAtUtc</span>
+                                <span><strong>@L["Inventory_Credited"]:</strong> @item.CreditedAtUtc</span>
+                                <span><strong>@L["Inventory_TradeOfferId"]:</strong> <span class="break-value">@item.TradeOfferId</span></span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.ErrorMessage))
+                            {
+                                <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.ErrorMessage)</div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["History_Purchases_Title"]</h2>
+                    <p>@L["History_Purchases_Text"]</p>
+                </div>
+            </div>
+            @if (Model.Purchases.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>@L["History_Purchases_Empty_Title"]</h3>
+                    <p>@L["History_Purchases_Empty_Text"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="stack-grid">
+                    @foreach (var item in Model.Purchases)
+                    {
+                        <article class="content-card history-card">
+                            <div class="card-heading">
+                                <div>
+                                    <h3>@item.ItemName</h3>
+                                    <p class="card-subtitle">@L["History_Price"]: @item.Price</p>
+                                </div>
+                                <div class="status-group">
+                                    <span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
+                                    {
+                                        <span class="status-badge" data-status="@item.DeliveryStatus">@UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus)</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="history-metrics">
+                                <span><strong>@L["Market_Purchased"]:</strong> @item.PurchasedAtUtc</span>
+                                <span><strong>@L["Market_Delivered"]:</strong> @item.DeliveredAtUtc</span>
+                                <span><strong>@L["Market_DeliveryTradeOfferId"]:</strong> <span class="break-value">@item.DeliveryTradeOfferId</span></span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.DeliveryErrorMessage))
+                            {
+                                <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.DeliveryErrorMessage)</div>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>@L["History_Balance_Title"]</h2>
+                    <p>@L["History_Balance_Text"]</p>
+                </div>
+            </div>
+            @if (Model.BalanceTransactions.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>@L["History_Balance_Empty_Title"]</h3>
+                    <p>@L["History_Balance_Empty_Text"]</p>
+                </div>
+            }
+            else
+            {
+                <div class="stack-grid narrow">
+                    @foreach (var item in Model.BalanceTransactions)
+                    {
+                        <article class="content-card history-card">
+                            <div class="card-heading">
+                                <h3>@UiTextLocalizer.LocalizeBalanceTransactionType(L, item.Type)</h3>
+                                <span class="amount-pill @(item.Amount >= 0 ? "positive" : "negative")">@item.Amount</span>
+                            </div>
+                            <p class="card-subtitle">@L["Common_Created"]: @item.CreatedAtUtc</p>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>

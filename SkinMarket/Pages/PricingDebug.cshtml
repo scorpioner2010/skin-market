@@ -1,0 +1,86 @@
+@page
+@model SkinMarket.Pages.PricingDebugModel
+@{
+    ViewData["Title"] = "Pricing Debug";
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <span class="section-kicker">Pricing diagnostics</span>
+            <h1>PricingDebug</h1>
+            <p class="page-description">Compare Steam Market and Skinport price resolution for your current inventory.</p>
+        </div>
+    </div>
+
+    @if (!(User.Identity?.IsAuthenticated ?? false))
+    {
+        <div class="empty-state">
+            <h2>Steam login required</h2>
+            <p>Sign in with Steam to run pricing diagnostics for your inventory.</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+    else if (Model.Items.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No diagnostic items</h2>
+            <p>Steam inventory did not return items for diagnostics.</p>
+        </div>
+    }
+    else
+    {
+        <div class="debug-table-wrap">
+            <table class="table debug-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>AssetId</th>
+                        <th>ClassId</th>
+                        <th>MarketHashName</th>
+                        <th>MarketName</th>
+                        <th>Steam Market</th>
+                        <th>Skinport</th>
+                        <th>Final</th>
+                        <th>Source</th>
+                        <th>Errors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    <tr>
+                        <td class="break-value">@item.ItemName</td>
+                        <td class="break-value">@item.AssetId</td>
+                        <td class="break-value">@item.ClassId</td>
+                        <td class="break-value">@item.MarketHashName</td>
+                        <td class="break-value">@item.MarketName</td>
+                        <td>@(item.SteamPrice.HasValue ? $"${item.SteamPrice.Value:0.00}" : "-")</td>
+                        <td>@(item.SkinportPrice.HasValue ? $"${item.SkinportPrice.Value:0.00}" : "-")</td>
+                        <td>@(item.FinalPrice.HasValue ? $"${item.FinalPrice.Value:0.00}" : "-")</td>
+                        <td><span class="compact-badge compact-badge-neutral">@item.FinalSource</span></td>
+                        <td class="debug-errors">
+                            @if (!string.IsNullOrWhiteSpace(item.SteamError))
+                            {
+                                <div><strong>Steam:</strong> @item.SteamError</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.SkinportError))
+                            {
+                                <div><strong>Skinport:</strong> @item.SkinportError</div>
+                            }
+                            @if (string.IsNullOrWhiteSpace(item.SteamError) && string.IsNullOrWhiteSpace(item.SkinportError))
+                            {
+                                <span>-</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
