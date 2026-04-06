@@ -4,7 +4,7 @@ namespace SkinMarket.Infrastructure;
 
 public static class DatabaseConnectionStringFactory
 {
-    public static string Resolve(IConfiguration configuration)
+    public static string? ResolveOptional(IConfiguration configuration)
     {
         var databaseUrl = configuration["DATABASE_URL"];
         if (!string.IsNullOrWhiteSpace(databaseUrl))
@@ -13,9 +13,15 @@ public static class DatabaseConnectionStringFactory
         }
 
         var configuredConnectionString = configuration.GetConnectionString("DefaultConnection");
-        if (!string.IsNullOrWhiteSpace(configuredConnectionString))
+        return string.IsNullOrWhiteSpace(configuredConnectionString) ? null : configuredConnectionString;
+    }
+
+    public static string Resolve(IConfiguration configuration)
+    {
+        var connectionString = ResolveOptional(configuration);
+        if (!string.IsNullOrWhiteSpace(connectionString))
         {
-            return configuredConnectionString;
+            return connectionString;
         }
 
         throw new InvalidOperationException("Database connection string is not configured. Set DATABASE_URL or ConnectionStrings__DefaultConnection.");

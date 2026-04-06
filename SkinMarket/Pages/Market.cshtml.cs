@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc;
 using SkinMarket.Models;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Localization;
 
 namespace SkinMarket.Pages;
@@ -17,6 +18,7 @@ public class MarketModel : PageModel
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
     private readonly IStringLocalizer<SharedResource> _localizer;
+    private readonly AppRuntimeState _runtimeState;
 
     public MarketModel(
         IMarketService marketService,
@@ -24,7 +26,8 @@ public class MarketModel : PageModel
         IMarketDeliveryService marketDeliveryService,
         AppDbContext dbContext,
         IBalanceService balanceService,
-        IStringLocalizer<SharedResource> localizer)
+        IStringLocalizer<SharedResource> localizer,
+        AppRuntimeState runtimeState)
     {
         _marketService = marketService;
         _marketPurchaseService = marketPurchaseService;
@@ -32,6 +35,7 @@ public class MarketModel : PageModel
         _dbContext = dbContext;
         _balanceService = balanceService;
         _localizer = localizer;
+        _runtimeState = runtimeState;
     }
 
     public List<MarketItem> Items { get; private set; } = new();
@@ -47,6 +51,12 @@ public class MarketModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return;
+        }
+
         await LoadCurrentUserAsync(cancellationToken);
         Items = await _marketService.GetAvailableItemsAsync(cancellationToken);
         if (CurrentUserId.HasValue)
@@ -57,6 +67,12 @@ public class MarketModel : PageModel
 
     public async Task<IActionResult> OnPostBuyAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {
@@ -79,6 +95,12 @@ public class MarketModel : PageModel
 
     public async Task<IActionResult> OnPostCreateDeliveryTradeAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {
@@ -101,6 +123,12 @@ public class MarketModel : PageModel
 
     public async Task<IActionResult> OnPostConfirmDeliveredAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {

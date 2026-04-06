@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Pages.Auth;
@@ -15,19 +16,27 @@ public class CallbackModel : PageModel
     private readonly ISteamOpenIdService _steamOpenIdService;
     private readonly ISteamProfileService _steamProfileService;
     private readonly AppDbContext _dbContext;
+    private readonly AppRuntimeState _runtimeState;
 
     public CallbackModel(
         ISteamOpenIdService steamOpenIdService,
         ISteamProfileService steamProfileService,
-        AppDbContext dbContext)
+        AppDbContext dbContext,
+        AppRuntimeState runtimeState)
     {
         _steamOpenIdService = steamOpenIdService;
         _steamProfileService = steamProfileService;
         _dbContext = dbContext;
+        _runtimeState = runtimeState;
     }
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            return RedirectToPage("/Index");
+        }
+
         var steamId = await _steamOpenIdService.ValidateAndExtractSteamIdAsync(Request.Query, cancellationToken);
         if (string.IsNullOrWhiteSpace(steamId))
         {

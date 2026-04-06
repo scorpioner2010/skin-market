@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Localization;
 using SkinMarket.Models;
 
@@ -15,12 +16,14 @@ public class ProfileModel : PageModel
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
     private readonly IStringLocalizer<SharedResource> _localizer;
+    private readonly AppRuntimeState _runtimeState;
 
-    public ProfileModel(AppDbContext dbContext, IBalanceService balanceService, IStringLocalizer<SharedResource> localizer)
+    public ProfileModel(AppDbContext dbContext, IBalanceService balanceService, IStringLocalizer<SharedResource> localizer, AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _balanceService = balanceService;
         _localizer = localizer;
+        _runtimeState = runtimeState;
     }
 
     public AppUser? AppUser { get; private set; }
@@ -29,14 +32,27 @@ public class ProfileModel : PageModel
     public TradeUrlInputModel Input { get; set; } = new();
     [TempData]
     public string? SuccessMessage { get; set; }
+    public string? ErrorMessage { get; private set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return;
+        }
+
         await LoadProfileAsync(cancellationToken);
     }
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return Page();
+        }
+
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {

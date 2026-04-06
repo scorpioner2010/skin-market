@@ -14,6 +14,10 @@
             <p class="page-description">@L["Profile_Description"]</p>
         </div>
     </div>
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
+    }
     @if (User.Identity?.IsAuthenticated ?? false)
     {
         @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))

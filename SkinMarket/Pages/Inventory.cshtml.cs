@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Localization;
 using SkinMarket.Models;
 using SkinMarket.Services;
@@ -21,6 +22,7 @@ public class InventoryModel : PageModel
     private readonly ICreditService _creditService;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly IGameCatalog _gameCatalog;
+    private readonly AppRuntimeState _runtimeState;
 
     public InventoryModel(
         AppDbContext dbContext,
@@ -30,7 +32,8 @@ public class InventoryModel : PageModel
         ISteamBotIntakeService steamBotIntakeService,
         ICreditService creditService,
         IStringLocalizer<SharedResource> localizer,
-        IGameCatalog gameCatalog)
+        IGameCatalog gameCatalog,
+        AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _steamInventoryService = steamInventoryService;
@@ -40,6 +43,7 @@ public class InventoryModel : PageModel
         _creditService = creditService;
         _localizer = localizer;
         _gameCatalog = gameCatalog;
+        _runtimeState = runtimeState;
     }
 
     public List<SteamInventoryItemDto> Items { get; private set; } = new();
@@ -60,6 +64,12 @@ public class InventoryModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return;
+        }
+
         await LoadPageAsync(cancellationToken);
     }
 
@@ -76,6 +86,12 @@ public class InventoryModel : PageModel
 
     public async Task<IActionResult> OnPostSellAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
@@ -118,6 +134,12 @@ public class InventoryModel : PageModel
 
     public async Task<IActionResult> OnPostCreateTradeAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
@@ -146,6 +168,12 @@ public class InventoryModel : PageModel
 
     public async Task<IActionResult> OnPostCreditAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {

@@ -35,9 +35,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
     });
-var connectionString = DatabaseConnectionStringFactory.Resolve(builder.Configuration);
+builder.Services.Configure<AppRuntimeOptions>(builder.Configuration.GetSection(AppRuntimeOptions.SectionName));
+var runtimeOptions = builder.Configuration.GetSection(AppRuntimeOptions.SectionName).Get<AppRuntimeOptions>() ?? new AppRuntimeOptions();
+var connectionString = DatabaseConnectionStringFactory.ResolveOptional(builder.Configuration);
+var isDatabaseAvailable = !runtimeOptions.DisableDatabase && !string.IsNullOrWhiteSpace(connectionString);
+builder.Services.AddSingleton(new AppRuntimeState
+{
+    IsDatabaseAvailable = isDatabaseAvailable
+});
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    if (isDatabaseAvailable)
+    {
+        options.UseNpgsql(connectionString);
+        return;
+    }
+
+    options.UseInMemoryDatabase("SkinMarketDegraded");
+});
 builder.Services.Configure<SteamBotOptions>(builder.Configuration.GetSection(SteamBotOptions.SectionName));
 builder.Services.Configure<SteamApiOptions>(builder.Configuration.GetSection(SteamApiOptions.SectionName));
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
@@ -100,17 +115,25 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-    try
+    var runtimeState = scope.ServiceProvider.GetRequiredService<AppRuntimeState>();
+    if (!runtimeState.IsDatabaseAvailable)
     {
-        logger.LogInformation("Applying database migrations.");
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        dbContext.Database.Migrate();
-        logger.LogInformation("Database migrations applied successfully.");
+        logger.LogWarning("Starting application in degraded mode without a configured database.");
     }
-    catch (Exception exception)
+    else
     {
-        logger.LogCritical(exception, "Application startup failed during database migration.");
-        throw;
+        try
+        {
+            logger.LogInformation("Applying database migrations.");
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            dbContext.Database.Migrate();
+            logger.LogInformation("Database migrations applied successfully.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogCritical(exception, "Application startup failed during database migration.");
+            throw;
+        }
     }
 }
 

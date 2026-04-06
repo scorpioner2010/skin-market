@@ -23,6 +23,11 @@
     }
     else
     {
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
+        }
+
         <div class="summary-card">
             <span class="section-kicker">@L["History_CurrentBalance"]</span>
             <h2>@Model.CurrentBalance</h2>

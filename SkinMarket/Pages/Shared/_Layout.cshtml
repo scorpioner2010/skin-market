@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="~/SkinMarket.styles.css" asp-append-version="true" />
 </head>
 <body class="app-body">
+    @inject SkinMarket.Infrastructure.AppRuntimeState RuntimeState
     @{
         var userAvatarUrl = User.FindFirst("AvatarUrl")?.Value;
         var userDisplayName = User.Identity?.Name ?? User.FindFirst("SteamId")?.Value ?? L["Layout_UserFallback"];
@@ -83,6 +84,10 @@
     </header>
 
     <div class="container app-shell">
+        @if (RuntimeState.IsDegradedMode)
+        {
+            <div class="app-alert alert-warning mt-3" role="alert">@RuntimeState.ServiceUnavailableMessage</div>
+        }
         <main role="main" class="app-main">
             @RenderBody()
         </main>

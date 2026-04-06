@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 using SkinMarket.Services;
 
@@ -16,6 +17,7 @@ public class PricingDebugModel : PageModel
     private readonly ICsFloatPriceService _csFloatPriceService;
     private readonly ISkinportPricingService _skinportPricingService;
     private readonly IGameCatalog _gameCatalog;
+    private readonly AppRuntimeState _runtimeState;
 
     public PricingDebugModel(
         AppDbContext dbContext,
@@ -24,7 +26,8 @@ public class PricingDebugModel : PageModel
         ISteamMarketPriceService steamMarketPriceService,
         ICsFloatPriceService csFloatPriceService,
         ISkinportPricingService skinportPricingService,
-        IGameCatalog gameCatalog)
+        IGameCatalog gameCatalog,
+        AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _steamInventoryService = steamInventoryService;
@@ -33,6 +36,7 @@ public class PricingDebugModel : PageModel
         _csFloatPriceService = csFloatPriceService;
         _skinportPricingService = skinportPricingService;
         _gameCatalog = gameCatalog;
+        _runtimeState = runtimeState;
     }
 
     public List<ItemPriceDiagnosticsResult> Items { get; private set; } = new();
@@ -40,6 +44,12 @@ public class PricingDebugModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return;
+        }
+
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {

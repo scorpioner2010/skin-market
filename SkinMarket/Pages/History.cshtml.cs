@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Pages;
@@ -10,20 +11,29 @@ public class HistoryModel : PageModel
 {
     private readonly AppDbContext _dbContext;
     private readonly IHistoryService _historyService;
+    private readonly AppRuntimeState _runtimeState;
 
-    public HistoryModel(AppDbContext dbContext, IHistoryService historyService)
+    public HistoryModel(AppDbContext dbContext, IHistoryService historyService, AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _historyService = historyService;
+        _runtimeState = runtimeState;
     }
 
     public decimal CurrentBalance { get; private set; }
     public List<SaleHistoryItem> Sales { get; private set; } = new();
     public List<PurchaseHistoryItem> Purchases { get; private set; } = new();
     public List<BalanceHistoryItem> BalanceTransactions { get; private set; } = new();
+    public string? ErrorMessage { get; private set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return;
+        }
+
         if (!(User.Identity?.IsAuthenticated ?? false))
         {
             return;
