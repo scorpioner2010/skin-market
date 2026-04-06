@@ -14,7 +14,9 @@
 **/*.db
 **/*.db-shm
 **/*.db-wal
-.git
-.gitignore
+.git/
+.vs/
+.idea/
+.vscode/
 README*
 AGENTS.md
