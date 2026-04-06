@@ -99,8 +99,19 @@ var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    dbContext.Database.Migrate();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    try
+    {
+        logger.LogInformation("Applying database migrations.");
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        dbContext.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully.");
+    }
+    catch (Exception exception)
+    {
+        logger.LogCritical(exception, "Application startup failed during database migration.");
+        throw;
+    }
 }
 
 // Configure the HTTP request pipeline.
@@ -111,8 +122,8 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
 app.UseForwardedHeaders();
+app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseRouting();
@@ -139,6 +150,8 @@ app.MapGet("/set-language", (HttpContext httpContext, string culture, string? re
     var targetUrl = string.IsNullOrWhiteSpace(returnUrl) ? "/" : returnUrl;
     return Results.LocalRedirect(targetUrl);
 });
+
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
 
 app.MapPost("/api/inventory/prices/refresh", async (
     HttpContext httpContext,
