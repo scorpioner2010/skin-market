@@ -15,23 +15,15 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
             .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = configuration["DATABASE_URL"];
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            connectionString = configuration.GetConnectionString("DefaultConnection");
-        }
-
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            connectionString = "Host=localhost;Port=5432;Database=skinmarket_dev;Username=postgres";
-        }
-        else
-        {
-            connectionString = DatabaseConnectionStringFactory.Resolve(configuration);
-        }
+        var connectionString = DatabaseConnectionStringFactory.Resolve(configuration);
 
         var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-        optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.UseNpgsql(
+            connectionString,
+            npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null));
         return new AppDbContext(optionsBuilder.Options);
     }
 }

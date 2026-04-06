@@ -47,7 +47,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {
     if (isDatabaseAvailable)
     {
-        options.UseNpgsql(connectionString);
+        options.UseNpgsql(
+            connectionString,
+            npgsqlOptions => npgsqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorCodesToAdd: null));
         return;
     }
 
@@ -118,20 +123,27 @@ using (var scope = app.Services.CreateScope())
     var runtimeState = scope.ServiceProvider.GetRequiredService<AppRuntimeState>();
     if (!runtimeState.IsDatabaseAvailable)
     {
-        logger.LogWarning("Starting application in degraded mode without a configured database.");
+        logger.LogWarning("Database mode: DISABLED. Starting application in degraded mode.");
     }
     else
     {
         try
         {
-            logger.LogInformation("Applying database migrations.");
+            logger.LogInformation("Database mode: ENABLED. Using PostgreSQL and applying migrations.");
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             dbContext.Database.Migrate();
+            var canConnect = dbContext.Database.CanConnect();
+            if (!canConnect)
+            {
+                throw new InvalidOperationException("Database migration completed, but connectivity check failed.");
+            }
+
+            logger.LogInformation("Database connection succeeded.");
             logger.LogInformation("Database migrations applied successfully.");
         }
         catch (Exception exception)
         {
-            logger.LogCritical(exception, "Application startup failed during database migration.");
+            logger.LogCritical(exception, "Application startup failed while initializing PostgreSQL.");
             throw;
         }
     }
