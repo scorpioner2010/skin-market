@@ -35,6 +35,8 @@ public class ProfileModel : PageModel
 
     public AppUser? AppUser { get; private set; }
     public decimal Balance { get; private set; }
+    public string? SteamPersonaName { get; private set; }
+    public string? SteamAvatarUrl { get; private set; }
     [BindProperty]
     public TradeUrlInputModel Input { get; set; } = new();
     [TempData]
@@ -77,6 +79,8 @@ public class ProfileModel : PageModel
         {
             AppUser = appUser;
             Balance = await _balanceService.GetBalanceAsync(appUser.Id, cancellationToken);
+            SteamPersonaName = appUser.PersonaName ?? appUser.DisplayName;
+            SteamAvatarUrl = appUser.AvatarUrl;
             return Page();
         }
 
@@ -96,11 +100,14 @@ public class ProfileModel : PageModel
         }
 
         Balance = await _balanceService.GetBalanceAsync(AppUser.Id, cancellationToken);
+        SteamPersonaName = AppUser.PersonaName ?? AppUser.DisplayName;
+        SteamAvatarUrl = AppUser.AvatarUrl;
+
         var profileSummary = await _steamProfileService.GetProfileAsync(AppUser.SteamId, cancellationToken);
         if (profileSummary is not null)
         {
-            AppUser.PersonaName = profileSummary.PersonaName;
-            AppUser.AvatarUrl = profileSummary.AvatarFull;
+            SteamPersonaName = profileSummary.PersonaName;
+            SteamAvatarUrl = profileSummary.AvatarFull;
         }
 
         Input = new TradeUrlInputModel

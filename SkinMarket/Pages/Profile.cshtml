@@ -2,7 +2,7 @@
 @model SkinMarket.Pages.ProfileModel
 @{
     ViewData["Title"] = L["Page_Profile_Title"];
-    var profileName = string.IsNullOrWhiteSpace(Model.AppUser?.PersonaName) ? Model.AppUser?.DisplayName : Model.AppUser?.PersonaName;
+    var profileName = string.IsNullOrWhiteSpace(Model.SteamPersonaName) ? Model.AppUser?.DisplayName : Model.SteamPersonaName;
     profileName ??= L["Profile_SteamUserFallback"].Value;
     var avatarAlt = string.Format(L["Profile_AvatarAlt"].Value, profileName ?? L["Profile_SteamUserFallback"].Value);
 }
@@ -34,9 +34,9 @@
                     <span class="status-badge" data-status="Credited">@UiTextLocalizer.LocalizeStatus(L, "Credited")</span>
                 </div>
                 <div class="profile-identity">
-                    @if (!string.IsNullOrWhiteSpace(Model.AppUser?.AvatarUrl))
+                    @if (!string.IsNullOrWhiteSpace(Model.SteamAvatarUrl))
                     {
-                        <img class="profile-avatar" src="@Model.AppUser.AvatarUrl" alt="@avatarAlt" />
+                        <img class="profile-avatar" src="@Model.SteamAvatarUrl" alt="@avatarAlt" />
                     }
                     else
                     {
@@ -63,7 +63,7 @@
                     </div>
                     <div class="detail-row">
                         <dt>@L["Profile_AvatarUrl"]</dt>
-                        <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.AppUser?.AvatarUrl) ? L["Profile_AvatarUnavailable"] : Model.AppUser?.AvatarUrl)</dd>
+                        <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.SteamAvatarUrl) ? L["Profile_AvatarUnavailable"] : Model.SteamAvatarUrl)</dd>
                     </div>
                     <div class="detail-row">
                         <dt>@L["Profile_Balance"]</dt>
