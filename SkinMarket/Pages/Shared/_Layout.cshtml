@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - SkinMarket</title>
+    <title>@ViewData["Title"] - x-mania</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
           integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
@@ -17,88 +17,93 @@
         var userAvatarUrl = User.FindFirst("AvatarUrl")?.Value;
         var userDisplayName = User.Identity?.Name ?? User.FindFirst("SteamId")?.Value ?? L["Layout_UserFallback"];
         var currentCulture = System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+        var layoutSubtitle = currentCulture switch
+        {
+            "uk" => "Сервіс ігрових предметів",
+            "ru" => "Сервис игровых предметов",
+            _ => "Game item service"
+        };
         var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
+        var currentPath = Context.Request.Path.Value ?? string.Empty;
+        string IsActivePage(string path) => currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty;
     }
     <header class="app-header">
-        <nav class="navbar navbar-expand-lg navbar-dark app-navbar">
-            <div class="container app-shell">
-                <a class="navbar-brand app-brand" asp-area="" asp-page="/Index">
+        <div class="app-shell">
+            <div class="app-topbar">
+                <a class="app-brand" asp-area="" asp-page="/Index">
                     <span class="app-brand-mark">SM</span>
-                    <span>
-                        <span class="app-brand-title">SkinMarket</span>
-                        <span class="app-brand-subtitle">@L["Layout_Subtitle"]</span>
+                    <span class="app-brand-copy">
+                        <span class="app-brand-title">x-mania</span>
+                        <span class="app-brand-subtitle">@layoutSubtitle</span>
                     </span>
                 </a>
-                <button class="navbar-toggler app-navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#app-nav" aria-controls="app-nav"
-                        aria-expanded="false" aria-label="@L["Layout_ToggleNavigation"]">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="collapse navbar-collapse" id="app-nav">
-                    <ul class="navbar-nav app-nav-links">
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Market">@L["Layout_Nav_Market"]</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/History">@L["Layout_Nav_History"]</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link app-nav-link" asp-area="" asp-page="/Admin/Logs">Admin</a>
-                        </li>
-                    </ul>
-                    <div class="app-toolbar">
-                        <div class="language-switch" role="group" aria-label="@L["Layout_Language"]">
-                            <a class="language-switch-link @(currentCulture == "en" ? "active" : null)" href="/set-language?culture=en&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">EN</a>
-                            <a class="language-switch-link @(currentCulture == "uk" ? "active" : null)" href="/set-language?culture=uk&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">UA</a>
-                            <a class="language-switch-link @(currentCulture == "ru" ? "active" : null)" href="/set-language?culture=ru&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">RU</a>
-                        </div>
-                        <div class="app-auth-panel">
-                            @if (User.Identity?.IsAuthenticated ?? false)
-                            {
-                                <span class="app-auth-chip">
-                                    @if (!string.IsNullOrWhiteSpace(userAvatarUrl))
-                                    {
-                                        <img class="app-auth-avatar" src="@userAvatarUrl" alt="@L["Layout_UserAvatarAlt"]" />
-                                    }
-                                    else
-                                    {
-                                        <span class="app-auth-avatar app-auth-avatar-fallback" aria-hidden="true">
-                                            @((userDisplayName.FirstOrDefault()).ToString().ToUpperInvariant())
-                                        </span>
-                                    }
-                                    <span class="break-value">@userDisplayName</span>
-                                </span>
-                                <a class="btn btn-outline-secondary btn-sm app-button-secondary" asp-page="/Auth/Logout">@L["Layout_Logout"]</a>
-                            }
-                            else
-                            {
-                                <a class="btn btn-dark btn-sm app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
-                            }
-                        </div>
+                <div class="app-topbar-right">
+                    <div class="language-switch" role="group" aria-label="@L["Layout_Language"]">
+                        <a class="language-switch-link @(currentCulture == "en" ? "active" : null)" href="/set-language?culture=en&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">EN</a>
+                        <a class="language-switch-link @(currentCulture == "uk" ? "active" : null)" href="/set-language?culture=uk&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">UA</a>
+                        <a class="language-switch-link @(currentCulture == "ru" ? "active" : null)" href="/set-language?culture=ru&amp;returnUrl=@Uri.EscapeDataString(returnUrl)">RU</a>
+                    </div>
+                    <div class="app-auth-panel">
+                        @if (User.Identity?.IsAuthenticated ?? false)
+                        {
+                            <span class="app-auth-chip">
+                                @if (!string.IsNullOrWhiteSpace(userAvatarUrl))
+                                {
+                                    <img class="app-auth-avatar" src="@userAvatarUrl" alt="@L["Layout_UserAvatarAlt"]" />
+                                }
+                                else
+                                {
+                                    <span class="app-auth-avatar app-auth-avatar-fallback" aria-hidden="true">
+                                        @((userDisplayName.FirstOrDefault()).ToString().ToUpperInvariant())
+                                    </span>
+                                }
+                                <span class="break-value">@userDisplayName</span>
+                            </span>
+                            <a class="btn btn-sm app-button-secondary" asp-page="/Auth/Logout">@L["Layout_Logout"]</a>
+                        }
+                        else
+                        {
+                            <a class="btn btn-sm app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+                        }
                     </div>
                 </div>
             </div>
-        </nav>
+        </div>
     </header>
 
-    <div class="container app-shell">
-        @if (RuntimeState.IsDegradedMode)
-        {
-            <div class="app-alert alert-warning mt-3" role="alert">@RuntimeState.ServiceUnavailableMessage</div>
-        }
-        <main role="main" class="app-main">
-            @RenderBody()
-        </main>
+    <div class="app-shell">
+        <div class="app-body-wrap">
+            <aside class="app-sidebar">
+                <nav class="app-side-nav">
+                    <a class="app-side-link @IsActivePage("/Profile")" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
+                    <a class="app-side-link @IsActivePage("/Market")" asp-page="/Market">@L["Layout_Nav_Market"]</a>
+                    <a class="app-side-link @IsActivePage("/Inventory")" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
+                    <a class="app-side-link @IsActivePage("/History")" asp-page="/History">@L["Layout_Nav_History"]</a>
+                    <a class="app-side-link @IsActivePage("/Admin/Logs")" asp-page="/Admin/Logs">Admin</a>
+                </nav>
+                <div class="app-sidebar-card">
+                    <div><strong>x-mania</strong></div>
+                    <div>@layoutSubtitle</div>
+                </div>
+            </aside>
+
+            <main role="main" class="app-main">
+                <div class="app-content-column">
+                    @if (RuntimeState.IsDegradedMode)
+                    {
+                        <div class="app-alert alert-warning mt-3" role="alert">@RuntimeState.ServiceUnavailableMessage</div>
+                    }
+
+                    @RenderBody()
+                </div>
+            </main>
+        </div>
     </div>
 
     <footer class="app-footer">
-        <div class="container app-shell app-footer-inner">
-            <div><strong>SkinMarket</strong></div>
+        <div class="app-shell app-footer-inner">
+            <div><strong>x-mania</strong></div>
+            <div class="app-footer-text">@layoutSubtitle</div>
         </div>
     </footer>
 

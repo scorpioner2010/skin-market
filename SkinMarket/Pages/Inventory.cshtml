@@ -87,8 +87,8 @@
                                         }
                                         <div class="inventory-main-copy">
                                             <h2 class="inventory-item-name">@item.Name</h2>
-                                            <div class="inventory-meta">
-                                                <span class="break-value">@L["Inventory_InstanceId"]: @item.InstanceId</span>
+                                            <div class="inventory-meta inventory-instance-line">
+                                                <span class="break-value">Instance ID: @item.InstanceId</span>
                                             </div>
                                         </div>
                                     </div>
@@ -120,17 +120,6 @@
                                     {
                                         <div class="inventory-price-block">
                                             <span class="price-value">@(resolvedPrice.IsEstimated ? "~" : string.Empty)$@realPrice.ToString("0.00")</span>
-                                            <div class="inventory-badges">
-                                                <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizePriceSource(L, Model.GetPriceSourceLabel(resolvedPrice.Source))</span>
-                                                @if (resolvedPrice.IsCached)
-                                                {
-                                                    <span class="compact-badge compact-badge-neutral">@L["PriceStatus_Cached"]</span>
-                                                }
-                                                else if (resolvedPrice.IsEstimated)
-                                                {
-                                                    <span class="compact-badge compact-badge-neutral">@L["PriceStatus_Estimated"]</span>
-                                                }
-                                            </div>
                                             @if (!string.IsNullOrWhiteSpace(resolvedPrice.FailureReason) && (resolvedPrice.IsCached || resolvedPrice.IsEstimated))
                                             {
                                                 <span class="inventory-inline-note break-value">@resolvedPrice.FailureReason</span>
@@ -317,19 +306,11 @@
 
                 if (entry.hasPrice && entry.price !== null) {
                     const prefix = entry.isEstimated ? '~' : '';
-                    const tags = [];
-                    tags.push(`<span class="compact-badge compact-badge-neutral">${entry.source}</span>`);
-                    if (entry.isCached) {
-                        tags.push(`<span class="compact-badge compact-badge-neutral">@L["PriceStatus_Cached"]</span>`);
-                    } else if (entry.isEstimated) {
-                        tags.push(`<span class="compact-badge compact-badge-neutral">@L["PriceStatus_Estimated"]</span>`);
-                    }
-
                     const reason = entry.failureReason
                         ? `<span class="inventory-inline-note break-value">${entry.failureReason}</span>`
                         : '';
 
-                    cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${prefix}$${Number(entry.price).toFixed(2)}</span><div class="inventory-badges">${tags.join('')}</div>${reason}</div>`;
+                    cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${prefix}$${Number(entry.price).toFixed(2)}</span>${reason}</div>`;
                     return;
                 }
 

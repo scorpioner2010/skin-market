@@ -13,7 +13,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Layout_UserFallback" xml:space="preserve"><value>Logged in</value></data>
-  <data name="Layout_Subtitle" xml:space="preserve"><value>Game item marketplace</value></data>
+  <data name="Layout_Subtitle" xml:space="preserve"><value>Game item service</value></data>
   <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Toggle navigation</value></data>
   <data name="Layout_Nav_Home" xml:space="preserve"><value>Home</value></data>
   <data name="Layout_Nav_Profile" xml:space="preserve"><value>Profile</value></data>
@@ -23,7 +23,7 @@
   <data name="Layout_Language" xml:space="preserve"><value>Language</value></data>
   <data name="Layout_UserAvatarAlt" xml:space="preserve"><value>User avatar</value></data>
   <data name="Layout_Logout" xml:space="preserve"><value>Logout</value></data>
-  <data name="Layout_Footer_Primary" xml:space="preserve"><value>Marketplace for game inventories, item sales and delivery tracking.</value></data>
+  <data name="Layout_Footer_Primary" xml:space="preserve"><value>Service for game inventories, item sales, purchases and delivery tracking.</value></data>
   <data name="Layout_Footer_Secondary" xml:space="preserve"><value>Steam inventory, listings and trade status in one workspace.</value></data>
   <data name="Common_LoginWithSteam" xml:space="preserve"><value>Login with Steam</value></data>
   <data name="Common_SteamLoginRequired" xml:space="preserve"><value>Steam login required</value></data>
@@ -40,16 +40,16 @@
   <data name="Page_Inventory_Title" xml:space="preserve"><value>Inventory</value></data>
   <data name="Page_Market_Title" xml:space="preserve"><value>Market</value></data>
   <data name="Page_History_Title" xml:space="preserve"><value>History</value></data>
-  <data name="Home_Kicker" xml:space="preserve"><value>Multi-game ready marketplace</value></data>
-  <data name="Home_HeroText" xml:space="preserve"><value>Buy, sell and track game items with a clear marketplace workflow for inventory, balance and delivery states.</value></data>
+  <data name="Home_Kicker" xml:space="preserve"><value>Multi-game ready service</value></data>
+  <data name="Home_HeroText" xml:space="preserve"><value>Buy, sell and track game items in a single service with clear inventory, balance and delivery flows.</value></data>
   <data name="Home_OpenMarket" xml:space="preserve"><value>Open Market</value></data>
   <data name="Home_ViewInventory" xml:space="preserve"><value>View Inventory</value></data>
   <data name="Home_Workflow_Label" xml:space="preserve"><value>Workflow</value></data>
   <data name="Home_Workflow_Value" xml:space="preserve"><value>Steam sign-in, item listing, balance credit, purchase and delivery tracking</value></data>
   <data name="Home_Focus_Label" xml:space="preserve"><value>Focus</value></data>
-  <data name="Home_Focus_Value" xml:space="preserve"><value>Fast item review, predictable actions and clear marketplace states</value></data>
+  <data name="Home_Focus_Value" xml:space="preserve"><value>Fast item review, predictable actions and clear service states</value></data>
   <data name="Home_Overview_Title" xml:space="preserve"><value>Platform overview</value></data>
-  <data name="Home_Overview_Description" xml:space="preserve"><value>Core marketplace features are available end-to-end for inventory management, selling and purchase tracking.</value></data>
+  <data name="Home_Overview_Description" xml:space="preserve"><value>Core service flows are available end-to-end for inventory management, selling and purchase tracking.</value></data>
   <data name="Home_Feature_Profile_Title" xml:space="preserve"><value>Steam auth and profile</value></data>
   <data name="Home_Feature_Profile_Text" xml:space="preserve"><value>Sign in with Steam, manage your profile and keep trade details ready for item transfers.</value></data>
   <data name="Home_Feature_Inventory_Title" xml:space="preserve"><value>Inventory and sales</value></data>
@@ -102,10 +102,10 @@
   <data name="Inventory_RecentSales_Title" xml:space="preserve"><value>Recent sale requests</value></data>
   <data name="Inventory_RecentSales_Description" xml:space="preserve"><value>Latest sell operations with current trade and credit statuses.</value></data>
   <data name="Inventory_RecentSales_Empty_Title" xml:space="preserve"><value>No sale requests yet</value></data>
-  <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Create a sale from your inventory to start the marketplace flow.</value></data>
+  <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Create a sale from your inventory to start the service flow.</value></data>
   <data name="Inventory_Credit" xml:space="preserve"><value>Credit</value></data>
   <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>BotTradeUrl</value></data>
-  <data name="Market_Kicker" xml:space="preserve"><value>Marketplace</value></data>
+  <data name="Market_Kicker" xml:space="preserve"><value>Market</value></data>
   <data name="Market_Description" xml:space="preserve"><value>Browse credited items, spend account balance and track delivery progress for your purchases.</value></data>
   <data name="Market_BalanceSummary" xml:space="preserve"><value>Balance summary</value></data>
   <data name="Market_BalanceSummary_Text" xml:space="preserve"><value>Current balance available for market purchases.</value></data>
