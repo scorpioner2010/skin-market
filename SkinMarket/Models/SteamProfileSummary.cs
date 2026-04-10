@@ -4,5 +4,5 @@ public class SteamProfileSummary
 {
     public string SteamId { get; set; } = string.Empty;
     public string PersonaName { get; set; } = string.Empty;
-    public string? AvatarUrl { get; set; }
+    public string? AvatarFull { get; set; }
 }

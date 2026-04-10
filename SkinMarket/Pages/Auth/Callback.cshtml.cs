@@ -77,7 +77,7 @@ public class CallbackModel : PageModel
         if (profileSummary is not null)
         {
             appUser.PersonaName = profileSummary.PersonaName;
-            appUser.AvatarUrl = profileSummary.AvatarUrl;
+            appUser.AvatarUrl = profileSummary.AvatarFull;
             appUser.DisplayName = profileSummary.PersonaName;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }

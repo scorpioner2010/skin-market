@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = L["Page_Profile_Title"];
     var profileName = string.IsNullOrWhiteSpace(Model.AppUser?.PersonaName) ? Model.AppUser?.DisplayName : Model.AppUser?.PersonaName;
+    profileName ??= L["Profile_SteamUserFallback"].Value;
     var avatarAlt = string.Format(L["Profile_AvatarAlt"].Value, profileName ?? L["Profile_SteamUserFallback"].Value);
 }
 

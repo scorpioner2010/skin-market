@@ -1,26 +1,25 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
-using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
 
 public class SteamProfileService : ISteamProfileService
 {
+    private const string SteamApiKeyEnvironmentVariable = "STEAM_API_KEY";
     private readonly HttpClient _httpClient;
-    private readonly SteamApiOptions _options;
+    private readonly IAppLogService _appLogService;
     private readonly ILogger<SteamProfileService> _logger;
 
     public SteamProfileService(
         HttpClient httpClient,
-        IOptions<SteamApiOptions> options,
+        IAppLogService appLogService,
         ILogger<SteamProfileService> logger)
     {
         _httpClient = httpClient;
-        _options = options.Value;
+        _appLogService = appLogService;
         _logger = logger;
     }
 
@@ -32,24 +31,29 @@ public class SteamProfileService : ISteamProfileService
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        var apiKey = Environment.GetEnvironmentVariable(SteamApiKeyEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            _logger.LogWarning("Steam profile loading skipped for SteamId {SteamId} because SteamApi:ApiKey is missing or empty.", steamId);
+            const string message = "Steam profile loading skipped because STEAM_API_KEY is missing or empty.";
+            _logger.LogWarning("{Message} SteamId {SteamId}.", message, steamId);
+            await _appLogService.WriteAsync("Warning", $"{message} SteamId={steamId}", nameof(SteamProfileService), cancellationToken: cancellationToken);
             return null;
         }
 
         var requestUri =
-            $"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={Uri.EscapeDataString(_options.ApiKey)}&steamids={Uri.EscapeDataString(steamId)}";
+            $"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={Uri.EscapeDataString(apiKey)}&steamids={Uri.EscapeDataString(steamId)}";
 
         try
         {
             using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                var message = $"Steam profile API returned status {(int)response.StatusCode} for SteamId={steamId}.";
                 _logger.LogWarning(
                     "Steam profile API returned non-success status code {StatusCode} for SteamId {SteamId}.",
                     (int)response.StatusCode,
                     steamId);
+                await _appLogService.WriteAsync("Warning", message, nameof(SteamProfileService), cancellationToken: cancellationToken);
                 return null;
             }
 
@@ -65,7 +69,9 @@ public class SteamProfileService : ISteamProfileService
             var player = payload?.Response?.Players?.FirstOrDefault();
             if (player is null || string.IsNullOrWhiteSpace(player.SteamId) || string.IsNullOrWhiteSpace(player.PersonaName))
             {
+                var message = $"Steam profile API returned no usable player summary for SteamId={steamId}.";
                 _logger.LogWarning("Steam profile API returned no usable player summary for SteamId {SteamId}.", steamId);
+                await _appLogService.WriteAsync("Warning", message, nameof(SteamProfileService), cancellationToken: cancellationToken);
                 return null;
             }
 
@@ -73,7 +79,7 @@ public class SteamProfileService : ISteamProfileService
             {
                 SteamId = player.SteamId,
                 PersonaName = player.PersonaName,
-                AvatarUrl = string.IsNullOrWhiteSpace(player.AvatarFull)
+                AvatarFull = string.IsNullOrWhiteSpace(player.AvatarFull)
                     ? player.Avatar
                     : player.AvatarFull
             };
@@ -81,11 +87,13 @@ public class SteamProfileService : ISteamProfileService
         catch (JsonException exception)
         {
             _logger.LogError(exception, "Steam profile API JSON parsing failed for SteamId {SteamId}.", steamId);
+            await _appLogService.WriteAsync("Error", $"Steam profile API JSON parsing failed for SteamId={steamId}.", nameof(SteamProfileService), exception, cancellationToken);
             return null;
         }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Steam profile API request failed unexpectedly for SteamId {SteamId}.", steamId);
+            await _appLogService.WriteAsync("Error", $"Steam profile API request failed for SteamId={steamId}.", nameof(SteamProfileService), exception, cancellationToken);
             return null;
         }
     }

@@ -15,13 +15,20 @@ public class ProfileModel : PageModel
 {
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
+    private readonly ISteamProfileService _steamProfileService;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly AppRuntimeState _runtimeState;
 
-    public ProfileModel(AppDbContext dbContext, IBalanceService balanceService, IStringLocalizer<SharedResource> localizer, AppRuntimeState runtimeState)
+    public ProfileModel(
+        AppDbContext dbContext,
+        IBalanceService balanceService,
+        ISteamProfileService steamProfileService,
+        IStringLocalizer<SharedResource> localizer,
+        AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _balanceService = balanceService;
+        _steamProfileService = steamProfileService;
         _localizer = localizer;
         _runtimeState = runtimeState;
     }
@@ -89,6 +96,13 @@ public class ProfileModel : PageModel
         }
 
         Balance = await _balanceService.GetBalanceAsync(AppUser.Id, cancellationToken);
+        var profileSummary = await _steamProfileService.GetProfileAsync(AppUser.SteamId, cancellationToken);
+        if (profileSummary is not null)
+        {
+            AppUser.PersonaName = profileSummary.PersonaName;
+            AppUser.AvatarUrl = profileSummary.AvatarFull;
+        }
+
         Input = new TradeUrlInputModel
         {
             TradeUrl = AppUser.TradeUrl
