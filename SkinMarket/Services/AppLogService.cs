@@ -32,7 +32,7 @@ public class AppLogService : IAppLogService
 
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (Exception logException) when (logException is DbUpdateException or InvalidOperationException)
+        catch (Exception logException)
         {
             _logger.LogError(logException, "Failed to persist application log. Level={Level} Source={Source} Message={Message}", level, source, message);
         }

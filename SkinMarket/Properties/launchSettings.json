@@ -9,35 +9,36 @@
     }
   },
   "profiles": {
-    "http": {
-      "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "applicationUrl": "http://localhost:5271",
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
-        "App__DisableDatabase": "false",
-        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
-      }
-    },
-    "https": {
+    "local-real-https": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "applicationUrl": "https://localhost:7252;http://localhost:5271",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_ENVIRONMENT": "Production",
         "App__DisableDatabase": "false",
-        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
+        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
+        "SteamApi__ApiKey": "8EE91234BF59B5D170263F804C9EF211"
+      }
+    },
+    "local-degraded-http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "http://localhost:5271",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "App__DisableDatabase": "true"
       }
     },
     "IIS Express": {
       "commandName": "IISExpress",
       "launchBrowser": true,
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_ENVIRONMENT": "Production",
         "App__DisableDatabase": "false",
-        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres"
+        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
+        "SteamApi__ApiKey": "8EE91234BF59B5D170263F804C9EF211"
       }
     }
   }

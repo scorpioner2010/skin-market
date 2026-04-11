@@ -13,19 +13,23 @@ namespace SkinMarket.Pages.Auth;
 
 public class CallbackModel : PageModel
 {
+    private const string DiagnosticsSource = "AuthCallbackDiagnostics";
     private readonly ISteamOpenIdService _steamOpenIdService;
     private readonly ISteamProfileService _steamProfileService;
+    private readonly IAppLogService _appLogService;
     private readonly AppDbContext _dbContext;
     private readonly AppRuntimeState _runtimeState;
 
     public CallbackModel(
         ISteamOpenIdService steamOpenIdService,
         ISteamProfileService steamProfileService,
+        IAppLogService appLogService,
         AppDbContext dbContext,
         AppRuntimeState runtimeState)
     {
         _steamOpenIdService = steamOpenIdService;
         _steamProfileService = steamProfileService;
+        _appLogService = appLogService;
         _dbContext = dbContext;
         _runtimeState = runtimeState;
     }
@@ -40,11 +44,17 @@ public class CallbackModel : PageModel
         var steamId = await _steamOpenIdService.ValidateAndExtractSteamIdAsync(Request.Query, cancellationToken);
         if (string.IsNullOrWhiteSpace(steamId))
         {
+            await _appLogService.WriteAsync(
+                "Warning",
+                "Auth callback did not resolve a SteamId from the OpenID response.",
+                DiagnosticsSource,
+                cancellationToken: cancellationToken);
             return RedirectToPage("/Profile");
         }
 
         var appUser = await _dbContext.AppUsers
             .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+        var existingUser = appUser is not null;
 
         if (appUser is null)
         {
@@ -73,13 +83,33 @@ public class CallbackModel : PageModel
             }
         }
 
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Auth callback loaded user snapshot. SteamId={steamId}; ExistingUser={existingUser}; AppUserId={appUser.Id}; DisplayName={appUser.DisplayName}; PersonaName={appUser.PersonaName ?? "<null>"}; AvatarUrl={appUser.AvatarUrl ?? "<null>"}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
+
         var profileSummary = await _steamProfileService.GetProfileAsync(steamId, cancellationToken);
+        await _appLogService.WriteAsync(
+            "Info",
+            profileSummary is null
+                ? $"Auth callback received no Steam profile summary. SteamId={steamId}"
+                : $"Auth callback received Steam profile summary. SteamId={steamId}; PersonaName={profileSummary.PersonaName}; AvatarUrl={profileSummary.AvatarFull ?? "<null>"}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
+
         if (profileSummary is not null)
         {
             appUser.PersonaName = profileSummary.PersonaName;
             appUser.AvatarUrl = profileSummary.AvatarFull;
             appUser.DisplayName = profileSummary.PersonaName;
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await _appLogService.WriteAsync(
+                "Info",
+                $"Auth callback persisted refreshed Steam profile. SteamId={steamId}; AppUserId={appUser.Id}; DisplayName={appUser.DisplayName}; PersonaName={appUser.PersonaName ?? "<null>"}; AvatarUrl={appUser.AvatarUrl ?? "<null>"}",
+                DiagnosticsSource,
+                cancellationToken: cancellationToken);
         }
 
         var displayName = string.IsNullOrWhiteSpace(appUser.PersonaName)
@@ -94,6 +124,12 @@ public class CallbackModel : PageModel
             new(ClaimTypes.Name, displayName),
             new("AvatarUrl", appUser.AvatarUrl ?? string.Empty)
         };
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Auth callback issuing auth cookie. SteamId={steamId}; ClaimName={displayName}; ClaimAvatarUrl={appUser.AvatarUrl ?? "<empty>"}; AppUserId={appUser.Id}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
 
         var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);

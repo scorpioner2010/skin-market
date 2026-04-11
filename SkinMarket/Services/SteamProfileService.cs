@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
+using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
@@ -12,14 +14,17 @@ public class SteamProfileService : ISteamProfileService
     private readonly HttpClient _httpClient;
     private readonly IAppLogService _appLogService;
     private readonly ILogger<SteamProfileService> _logger;
+    private readonly SteamApiOptions _steamApiOptions;
 
     public SteamProfileService(
         HttpClient httpClient,
         IAppLogService appLogService,
+        IOptions<SteamApiOptions> steamApiOptions,
         ILogger<SteamProfileService> logger)
     {
         _httpClient = httpClient;
         _appLogService = appLogService;
+        _steamApiOptions = steamApiOptions.Value;
         _logger = logger;
     }
 
@@ -31,14 +36,23 @@ public class SteamProfileService : ISteamProfileService
             return null;
         }
 
-        var apiKey = Environment.GetEnvironmentVariable(SteamApiKeyEnvironmentVariable);
+        var apiKey = string.IsNullOrWhiteSpace(_steamApiOptions.ApiKey)
+            ? Environment.GetEnvironmentVariable(SteamApiKeyEnvironmentVariable)
+            : _steamApiOptions.ApiKey;
+        var apiKeySource = string.IsNullOrWhiteSpace(_steamApiOptions.ApiKey) ? "Environment" : "Configuration";
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            const string message = "Steam profile loading skipped because STEAM_API_KEY is missing or empty.";
+            const string message = "Steam profile loading skipped because SteamApi:ApiKey and STEAM_API_KEY are missing or empty.";
             _logger.LogWarning("{Message} SteamId {SteamId}.", message, steamId);
             await _appLogService.WriteAsync("Warning", $"{message} SteamId={steamId}", nameof(SteamProfileService), cancellationToken: cancellationToken);
             return null;
         }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Steam profile request started. SteamId={steamId}; ApiKeySource={apiKeySource}",
+            nameof(SteamProfileService),
+            cancellationToken: cancellationToken);
 
         var requestUri =
             $"https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key={Uri.EscapeDataString(apiKey)}&steamids={Uri.EscapeDataString(steamId)}";
@@ -74,6 +88,12 @@ public class SteamProfileService : ISteamProfileService
                 await _appLogService.WriteAsync("Warning", message, nameof(SteamProfileService), cancellationToken: cancellationToken);
                 return null;
             }
+
+            await _appLogService.WriteAsync(
+                "Info",
+                $"Steam profile API returned player summary. SteamId={player.SteamId}; PersonaName={player.PersonaName}; Avatar={player.Avatar ?? "<null>"}; AvatarFull={player.AvatarFull ?? "<null>"}",
+                nameof(SteamProfileService),
+                cancellationToken: cancellationToken);
 
             return new SteamProfileSummary
             {

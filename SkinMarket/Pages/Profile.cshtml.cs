@@ -13,9 +13,11 @@ namespace SkinMarket.Pages;
 
 public class ProfileModel : PageModel
 {
+    private const string DiagnosticsSource = "ProfileDiagnostics";
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
     private readonly ISteamProfileService _steamProfileService;
+    private readonly IAppLogService _appLogService;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly AppRuntimeState _runtimeState;
 
@@ -23,12 +25,14 @@ public class ProfileModel : PageModel
         AppDbContext dbContext,
         IBalanceService balanceService,
         ISteamProfileService steamProfileService,
+        IAppLogService appLogService,
         IStringLocalizer<SharedResource> localizer,
         AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
         _balanceService = balanceService;
         _steamProfileService = steamProfileService;
+        _appLogService = appLogService;
         _localizer = localizer;
         _runtimeState = runtimeState;
     }
@@ -93,9 +97,24 @@ public class ProfileModel : PageModel
 
     private async Task LoadProfileAsync(CancellationToken cancellationToken)
     {
+        var claimSteamId = User.FindFirst("SteamId")?.Value ?? "<null>";
+        var claimName = User.Identity?.Name ?? "<null>";
+        var claimAvatarUrl = User.FindFirst("AvatarUrl")?.Value ?? "<null>";
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Profile page claims snapshot. IsAuthenticated={User.Identity?.IsAuthenticated ?? false}; ClaimSteamId={claimSteamId}; ClaimName={claimName}; ClaimAvatarUrl={claimAvatarUrl}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
+
         AppUser = await GetCurrentUserAsync(cancellationToken);
         if (AppUser is null)
         {
+            await _appLogService.WriteAsync(
+                "Warning",
+                "Profile page could not load AppUser for current claims.",
+                DiagnosticsSource,
+                cancellationToken: cancellationToken);
             return;
         }
 
@@ -103,12 +122,32 @@ public class ProfileModel : PageModel
         SteamPersonaName = AppUser.PersonaName ?? AppUser.DisplayName;
         SteamAvatarUrl = AppUser.AvatarUrl;
 
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Profile page database snapshot. AppUserId={AppUser.Id}; SteamId={AppUser.SteamId}; DisplayName={AppUser.DisplayName}; PersonaName={AppUser.PersonaName ?? "<null>"}; AvatarUrl={AppUser.AvatarUrl ?? "<null>"}; TradeUrl={AppUser.TradeUrl ?? "<null>"}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
+
         var profileSummary = await _steamProfileService.GetProfileAsync(AppUser.SteamId, cancellationToken);
+        await _appLogService.WriteAsync(
+            "Info",
+            profileSummary is null
+                ? $"Profile page Steam API snapshot is empty. SteamId={AppUser.SteamId}"
+                : $"Profile page Steam API snapshot. SteamId={AppUser.SteamId}; PersonaName={profileSummary.PersonaName}; AvatarUrl={profileSummary.AvatarFull ?? "<null>"}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
+
         if (profileSummary is not null)
         {
             SteamPersonaName = profileSummary.PersonaName;
             SteamAvatarUrl = profileSummary.AvatarFull;
         }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Profile page render snapshot. SteamId={AppUser.SteamId}; RenderedPersonaName={SteamPersonaName ?? "<null>"}; RenderedAvatarUrl={SteamAvatarUrl ?? "<null>"}; DisplayName={AppUser.DisplayName}; ClaimName={claimName}; ClaimAvatarUrl={claimAvatarUrl}",
+            DiagnosticsSource,
+            cancellationToken: cancellationToken);
 
         Input = new TradeUrlInputModel
         {
