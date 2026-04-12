@@ -29,6 +29,6 @@ ENV ASPNETCORE_ENVIRONMENT=Production
 
 COPY --from=build /app/publish .
 COPY --from=build /src/SkinMarket/bot-service ./bot-service
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
+COPY SkinMarket/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 ENTRYPOINT ["./docker-entrypoint.sh"]
