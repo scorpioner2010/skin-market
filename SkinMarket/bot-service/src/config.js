@@ -54,6 +54,11 @@ module.exports = {
   port: parseInteger(process.env.STEAM_BOT_SERVICE_PORT, 5174),
   steamApiKey: process.env.STEAM_API_KEY || "",
   dataDirectory: path.join(rootDir, "data"),
+  polling: {
+    pollInterval: parseInteger(process.env.STEAM_BOT_POLL_INTERVAL_MS, 60000),
+    minimumPollInterval: parseInteger(process.env.STEAM_BOT_MINIMUM_POLL_INTERVAL_MS, 15000),
+    pollFullUpdateInterval: parseInteger(process.env.STEAM_BOT_POLL_FULL_UPDATE_INTERVAL_MS, 300000)
+  },
   bot: {
     enabled: parseBoolean(process.env.STEAM_BOT_ENABLED, false),
     username: process.env.STEAM_BOT_USERNAME || "",

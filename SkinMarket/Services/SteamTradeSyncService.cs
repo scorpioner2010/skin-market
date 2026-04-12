@@ -9,7 +9,7 @@ namespace SkinMarket.Services;
 
 public class SteamTradeSyncService : BackgroundService
 {
-    private static readonly TimeSpan SyncInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan SyncInterval = TimeSpan.FromSeconds(60);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SteamTradeSyncService> _logger;
 

@@ -12,6 +12,7 @@ namespace SkinMarket.Services;
 
 public class SteamMarketPriceService : ISteamMarketPriceService
 {
+    private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromMinutes(15);
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SteamMarketPriceService> _logger;
@@ -50,10 +51,20 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         }
 
         var cacheKey = $"steam-market-price::{game.Key}::{normalizedName}";
+        var cooldownKey = $"steam-market-price-cooldown::{game.Key}";
         if (_memoryCache.TryGetValue<PriceSourceResult>(cacheKey, out var cachedResult) && cachedResult is not null)
         {
             cachedResult.IsCached = true;
             return cachedResult;
+        }
+
+        if (_memoryCache.TryGetValue<DateTimeOffset>(cooldownKey, out var cooldownUntil) &&
+            cooldownUntil > DateTimeOffset.UtcNow)
+        {
+            var cooledDown = Failure("Steam", "RateLimited", $"Steam market cooldown is active until {cooldownUntil.UtcDateTime:O}.", normalizedName);
+            await _appLogService.WriteAsync("Warning", $"Cooldown skip. GameType={(int)gameType}; MarketHashName={normalizedName}; CooldownUntil={cooldownUntil.UtcDateTime:O}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+            Cache(cacheKey, cooledDown);
+            return cooledDown;
         }
 
         var requestUri =
@@ -86,14 +97,9 @@ public class SteamMarketPriceService : ISteamMarketPriceService
 
                 if (response.StatusCode == (HttpStatusCode)429)
                 {
-                    if (attempt < _options.SteamRetryCount)
-                    {
-                        await DelayForRetryAsync(cancellationToken);
-                        continue;
-                    }
-
+                    _memoryCache.Set(cooldownKey, DateTimeOffset.UtcNow.Add(RateLimitCooldown), RateLimitCooldown);
                     var rateLimited = Failure("Steam", "RateLimited", "Steam market is rate limiting requests.", normalizedName);
-                    await _appLogService.WriteAsync("Warning", $"Fail. Status=RateLimited; Url={requestUri}; MarketHashName={normalizedName}; Reason={rateLimited.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await _appLogService.WriteAsync("Warning", $"Fail. Status=RateLimited; Url={requestUri}; MarketHashName={normalizedName}; CooldownMinutes={(int)RateLimitCooldown.TotalMinutes}; Reason={rateLimited.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, rateLimited);
                     return rateLimited;
                 }

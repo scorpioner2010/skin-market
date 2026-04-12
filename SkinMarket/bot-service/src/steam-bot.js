@@ -43,9 +43,9 @@ class SteamBot {
       community: this.community,
       language: "en",
       useAccessToken: true,
-      pollInterval: 10000,
-      minimumPollInterval: 2000,
-      pollFullUpdateInterval: 30000,
+      pollInterval: this.config.polling.pollInterval,
+      minimumPollInterval: this.config.polling.minimumPollInterval,
+      pollFullUpdateInterval: this.config.polling.pollFullUpdateInterval,
       dataDirectory: this.config.dataDirectory,
       savePollData: true
     });
@@ -62,7 +62,10 @@ class SteamBot {
       usernameConfigured: Boolean(this.config.bot.username),
       identitySecretConfigured: Boolean(this.config.bot.identitySecret),
       sharedSecretConfigured: Boolean(this.config.bot.sharedSecret),
-      steamApiKeyConfigured: Boolean(this.config.steamApiKey)
+      steamApiKeyConfigured: Boolean(this.config.steamApiKey),
+      pollInterval: this.config.polling.pollInterval,
+      minimumPollInterval: this.config.polling.minimumPollInterval,
+      pollFullUpdateInterval: this.config.polling.pollFullUpdateInterval
     });
 
     if (!this.config.bot.enabled) {

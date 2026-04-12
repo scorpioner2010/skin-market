@@ -128,7 +128,12 @@ builder.Services.AddHttpClient<ISteamTradeClient, BotServiceSteamTradeClient>((s
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
 builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();
-builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>();
+builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
+});
 builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>();
 builder.Services.AddHttpClient<ISkinportPricingService, SkinportPricingService>(client =>
 {
