@@ -8,7 +8,7 @@
     <div class="page-header">
         <div>
             <h1>Inventory Logs</h1>
-            <p class="text-muted mb-0">Only the inventory loading path is shown here: Steam response, cache usage, and page-level failures.</p>
+            <p class="text-muted mb-0">Only the current process is shown here. Logs live in memory, reset on restart, and cover the inventory loading path in detail.</p>
         </div>
     </div>
 
@@ -43,11 +43,19 @@
                 @foreach (var item in Model.Items)
                 {
                     <tr>
-                        <td>@item.TimestampUtc</td>
+                        <td>@item.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")</td>
                         <td>@item.Level</td>
                         <td class="break-value">@item.Source</td>
                         <td class="break-value">@item.Message</td>
-                        <td class="break-value">@(string.IsNullOrWhiteSpace(item.StackTrace) ? string.Empty : item.StackTrace.Split('\n').FirstOrDefault())</td>
+                        <td class="break-value">
+                            @if (!string.IsNullOrWhiteSpace(item.StackTrace))
+                            {
+                                <details>
+                                    <summary>Show</summary>
+                                    <pre class="mb-0">@item.StackTrace</pre>
+                                </details>
+                            }
+                        </td>
                     </tr>
                 }
                 </tbody>
@@ -57,7 +65,7 @@
     else
     {
         <div class="alert alert-secondary mb-0">
-            Inventory logs have not been recorded yet.
+            Inventory logs have not been recorded in the current process yet.
         </div>
     }
 </div>

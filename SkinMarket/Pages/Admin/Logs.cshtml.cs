@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using SkinMarket.Data;
+using SkinMarket.Contracts;
 using SkinMarket.Models;
 using SkinMarket.Services;
 using SkinMarket.Pages;
@@ -16,11 +15,11 @@ public class LogsModel : PageModel
         nameof(InventoryModel)
     ];
 
-    private readonly AppDbContext _dbContext;
+    private readonly IAppLogReader _appLogReader;
 
-    public LogsModel(AppDbContext dbContext)
+    public LogsModel(IAppLogReader appLogReader)
     {
-        _dbContext = dbContext;
+        _appLogReader = appLogReader;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -29,22 +28,9 @@ public class LogsModel : PageModel
     public int Limit { get; set; } = 100;
     public List<AppLog> Items { get; private set; } = new();
 
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    public void OnGet()
     {
-        var query = _dbContext.Logs
-            .AsNoTracking()
-            .Where(item => item.Source != null && InventorySources.Contains(item.Source))
-            .AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(Level))
-        {
-            query = query.Where(item => item.Level == Level);
-        }
-
         var take = Limit is 500 ? 500 : 100;
-        Items = await query
-            .OrderByDescending(item => item.TimestampUtc)
-            .Take(take)
-            .ToListAsync(cancellationToken);
+        Items = _appLogReader.GetRecent(take, Level, InventorySources).ToList();
     }
 }

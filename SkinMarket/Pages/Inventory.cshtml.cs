@@ -70,6 +70,11 @@ public class InventoryModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            await _appLogService.WriteAsync(
+                "Warning",
+                "Inventory page request blocked because the application is running in degraded mode.",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
             return;
         }
 
@@ -214,6 +219,11 @@ public class InventoryModel : PageModel
         var currentGame = _gameCatalog.Get(_gameCatalog.DefaultGameType);
         CurrentGameType = currentGame.Type;
         CurrentGameDisplayName = currentGame.DisplayName;
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Inventory page request started. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; GameKey={currentGame.Key}; TradeUrlConfigured={!string.IsNullOrWhiteSpace(appUser.TradeUrl)}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
 
         if (string.IsNullOrWhiteSpace(appUser.TradeUrl))
         {
@@ -222,6 +232,11 @@ public class InventoryModel : PageModel
 
         RecentOperations = await _tradeOperationService.GetRecentOperationsAsync(appUser.Id, 10, cancellationToken);
         LatestOperationsByAssetId = await _tradeOperationService.GetLatestOperationsByAssetIdAsync(appUser.Id, cancellationToken);
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Inventory prerequisites loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; RecentOperations={RecentOperations.Count}; LatestOperationAssets={LatestOperationsByAssetId.Count}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
 
         var result = await _steamInventoryService.GetInventoryAsync(appUser.SteamId, CurrentGameType, cancellationToken);
         if (!result.IsSuccess)
@@ -242,6 +257,11 @@ public class InventoryModel : PageModel
             .Cast<string>()
             .Distinct(StringComparer.Ordinal)
             .ToList();
+        await _appLogService.WriteAsync(
+            Items.Count == 0 ? "Warning" : "Info",
+            $"Inventory data accepted by page. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ItemCount={Items.Count}; DistinctMarketHashes={marketHashNames.Count}; Sample={BuildInventorySample(Items)}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
 
         var pricesByMarketHashName = await _inventoryPriceRefreshService.GetCurrentPricesAsync(marketHashNames, CurrentGameType, cancellationToken);
         var refreshTargets = new List<string>();
@@ -295,9 +315,18 @@ public class InventoryModel : PageModel
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
 
+        var distinctRefreshTargets = refreshTargets
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Inventory price state prepared. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ResolvedItems={ResolvedPricesByAssetId.Count}; PricePollingCount={PricePollingItems.Count}; RefreshTargets={distinctRefreshTargets.Count}; StatusSummary={BuildPriceStatusSummary(ResolvedPricesByAssetId.Values)}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
+
         await _appLogService.WriteAsync(
             Items.Count == 0 ? "Warning" : "Info",
-            $"Inventory page loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ItemCount={Items.Count}; RecentOperations={RecentOperations.Count}; PricePollingCount={PricePollingItems.Count}",
+            $"Inventory page loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ItemCount={Items.Count}; RecentOperations={RecentOperations.Count}; PricePollingCount={PricePollingItems.Count}; RefreshTargets={distinctRefreshTargets.Count}",
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
     }
@@ -336,6 +365,43 @@ public class InventoryModel : PageModel
         }
 
         return appUser;
+    }
+
+    private static string BuildInventorySample(IEnumerable<SteamInventoryItemDto> items)
+    {
+        var sample = items
+            .Take(5)
+            .Select(item => $"Asset={item.AssetId}; Name={TruncateForLog(item.Name, 60)}; Hash={item.MarketHashName ?? item.MarketName ?? "<null>"}; Tradable={FormatNullableBool(item.Tradable)}; Marketable={FormatNullableBool(item.Marketable)}")
+            .ToList();
+
+        return sample.Count == 0 ? "<none>" : string.Join(" | ", sample);
+    }
+
+    private static string BuildPriceStatusSummary(IEnumerable<ItemPriceResolutionResult> results)
+    {
+        var summary = results
+            .GroupBy(result => $"{result.Status}/{result.Source}")
+            .OrderByDescending(group => group.Count())
+            .Take(8)
+            .Select(group => $"{group.Key}={group.Count()}")
+            .ToList();
+
+        return summary.Count == 0 ? "<none>" : string.Join(" | ", summary);
+    }
+
+    private static string FormatNullableBool(bool? value)
+    {
+        return value.HasValue ? value.Value.ToString() : "<null>";
+    }
+
+    private static string TruncateForLog(string value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength] + "...";
     }
 
     public class SellInputModel

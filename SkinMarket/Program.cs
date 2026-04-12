@@ -109,7 +109,9 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
 });
 builder.Services.AddSingleton<IGameCatalog, GameCatalog>();
 builder.Services.AddScoped<IBalanceService, BalanceService>();
-builder.Services.AddScoped<IAppLogService, AppLogService>();
+builder.Services.AddSingleton<AppLogService>();
+builder.Services.AddSingleton<IAppLogService>(provider => provider.GetRequiredService<AppLogService>());
+builder.Services.AddSingleton<IAppLogReader>(provider => provider.GetRequiredService<AppLogService>());
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
 builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();

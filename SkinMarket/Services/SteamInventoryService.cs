@@ -195,10 +195,13 @@ public class SteamInventoryService : ISteamInventoryService
                 };
             }
 
+            var rawAssetCount = assetsElement.GetArrayLength();
             var descriptions = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            var rawDescriptionCount = 0;
             if (root.TryGetProperty("descriptions", out var descriptionsElement) &&
                 descriptionsElement.ValueKind == JsonValueKind.Array)
             {
+                rawDescriptionCount = descriptionsElement.GetArrayLength();
                 foreach (var description in descriptionsElement.EnumerateArray())
                 {
                     var classId = GetString(description, "classid");
@@ -220,7 +223,16 @@ public class SteamInventoryService : ISteamInventoryService
                     cancellationToken: cancellationToken);
             }
 
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Payload parsed. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Success={FormatInt(GetInt32(root, "success"))}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; AssetCount={rawAssetCount}; DescriptionArrayCount={rawDescriptionCount}; LastAssetId={GetString(root, "last_assetid") ?? "<null>"}; MoreItems={FormatNullableBool(GetBooleanFlag(root, "more_items"))}",
+                cancellationToken: cancellationToken);
+
             var items = new List<SteamInventoryItemDto>();
+            var missingDescriptionCount = 0;
+            var missingMarketNameCount = 0;
+            var skippedAssetsWithoutAssetId = 0;
+            var sampleItems = new List<string>();
             foreach (var asset in assetsElement.EnumerateArray())
             {
                 var assetId = GetString(asset, "assetid");
@@ -229,24 +241,44 @@ public class SteamInventoryService : ISteamInventoryService
 
                 if (string.IsNullOrWhiteSpace(assetId))
                 {
+                    skippedAssetsWithoutAssetId++;
                     continue;
                 }
 
                 descriptions.TryGetValue($"{classId}_{instanceId}", out var description);
+                var hasDescription = description.ValueKind != JsonValueKind.Undefined;
+                if (!hasDescription)
+                {
+                    missingDescriptionCount++;
+                }
 
-                items.Add(new SteamInventoryItemDto
+                var marketHashName = MarketHashNameUtility.Normalize(GetString(description, "market_hash_name"));
+                var marketName = MarketHashNameUtility.Normalize(GetString(description, "market_name"));
+                if (string.IsNullOrWhiteSpace(marketHashName) && string.IsNullOrWhiteSpace(marketName))
+                {
+                    missingMarketNameCount++;
+                }
+
+                var item = new SteamInventoryItemDto
                 {
                     GameType = gameType,
                     AssetId = assetId,
                     ClassId = classId,
                     InstanceId = instanceId,
                     Name = GetString(description, "name") ?? "Unknown Item",
-                    MarketHashName = MarketHashNameUtility.Normalize(GetString(description, "market_hash_name")),
-                    MarketName = MarketHashNameUtility.Normalize(GetString(description, "market_name")),
+                    MarketHashName = marketHashName,
+                    MarketName = marketName,
                     IconUrl = BuildIconUrl(GetString(description, "icon_url")),
                     Tradable = GetBooleanFlag(description, "tradable"),
                     Marketable = GetBooleanFlag(description, "marketable")
-                });
+                };
+                if (sampleItems.Count < 5)
+                {
+                    sampleItems.Add(
+                        $"Asset={item.AssetId}; Name={Truncate(item.Name, 60)}; Hash={item.MarketHashName ?? item.MarketName ?? "<null>"}; Tradable={FormatNullableBool(item.Tradable)}; Marketable={FormatNullableBool(item.Marketable)}; HasDescription={hasDescription}");
+                }
+
+                items.Add(item);
             }
 
             var result = new SteamInventoryResultDto
@@ -259,7 +291,7 @@ public class SteamInventoryService : ISteamInventoryService
             _memoryCache.Set(staleCacheKey, result, StaleCacheDuration);
             await WriteInventoryLogAsync(
                 items.Count == 0 ? "Warning" : "Info",
-                $"Request finished. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={items.Count}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; DescriptionCount={descriptions.Count}; TradableCount={items.Count(item => item.Tradable == true)}; MarketableCount={items.Count(item => item.Marketable == true)}; FreshCacheSeconds={(int)FreshCacheDuration.TotalSeconds}; StaleCacheHours={(int)StaleCacheDuration.TotalHours}; ElapsedMs={stopwatch.ElapsedMilliseconds}",
+                $"Request finished. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={items.Count}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; AssetCount={rawAssetCount}; DescriptionCount={descriptions.Count}; MissingDescriptionCount={missingDescriptionCount}; MissingMarketNameCount={missingMarketNameCount}; SkippedAssetsWithoutAssetId={skippedAssetsWithoutAssetId}; TradableCount={items.Count(item => item.Tradable == true)}; MarketableCount={items.Count(item => item.Marketable == true)}; Sample={FormatSample(sampleItems)}; FreshCacheSeconds={(int)FreshCacheDuration.TotalSeconds}; StaleCacheHours={(int)StaleCacheDuration.TotalHours}; ElapsedMs={stopwatch.ElapsedMilliseconds}{(items.Count == 0 ? $"; Body={BuildBodySnippet(rawContent)}" : string.Empty)}",
                 cancellationToken: cancellationToken);
             return result;
         }
@@ -405,6 +437,16 @@ public class SteamInventoryService : ISteamInventoryService
     private static string FormatInt(int? value)
     {
         return value?.ToString() ?? "<null>";
+    }
+
+    private static string FormatNullableBool(bool? value)
+    {
+        return value.HasValue ? value.Value.ToString() : "<null>";
+    }
+
+    private static string FormatSample(IReadOnlyCollection<string> items)
+    {
+        return items.Count == 0 ? "<none>" : string.Join(" | ", items);
     }
 
     private static string BuildBodySnippet(string? body)
