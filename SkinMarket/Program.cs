@@ -43,6 +43,17 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.Configure<AppRuntimeOptions>(builder.Configuration.GetSection(AppRuntimeOptions.SectionName));
 var runtimeOptions = builder.Configuration.GetSection(AppRuntimeOptions.SectionName).Get<AppRuntimeOptions>() ?? new AppRuntimeOptions();
 var connectionString = DatabaseConnectionStringFactory.ResolveOptional(builder.Configuration);
+var usedDevelopmentDatabaseFallback = false;
+if (!runtimeOptions.DisableDatabase &&
+    string.IsNullOrWhiteSpace(connectionString) &&
+    builder.Environment.IsDevelopment())
+{
+    runtimeOptions.DisableDatabase = true;
+    usedDevelopmentDatabaseFallback = true;
+}
+
+builder.Services.PostConfigure<AppRuntimeOptions>(options => options.DisableDatabase = runtimeOptions.DisableDatabase);
+
 if (!runtimeOptions.DisableDatabase && string.IsNullOrWhiteSpace(connectionString))
 {
     throw new InvalidOperationException(
@@ -164,6 +175,12 @@ using (var scope = app.Services.CreateScope())
     var runtimeState = scope.ServiceProvider.GetRequiredService<AppRuntimeState>();
     if (!runtimeState.IsDatabaseAvailable)
     {
+        if (usedDevelopmentDatabaseFallback)
+        {
+            logger.LogWarning(
+                "No PostgreSQL connection string was configured in Development. Starting application in degraded mode. Set DATABASE_URL or ConnectionStrings__DefaultConnection to enable PostgreSQL locally.");
+        }
+
         logger.LogWarning("Database mode: DISABLED. Starting application in degraded mode.");
     }
     else

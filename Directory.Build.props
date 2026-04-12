@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**\buildcheck*\**;**/buildcheck*/**;buildcheck*\**;buildcheck*/**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

@@ -55,10 +55,6 @@ build/Release
 out/
 .nuxt
 
-# dotenv environment variable files
-.env
-.env.local
-.env.*.local
 
 # npm cache directory
 .npm
