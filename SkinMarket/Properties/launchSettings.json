@@ -18,7 +18,7 @@
         "ASPNETCORE_ENVIRONMENT": "Production",
         "App__DisableDatabase": "false",
         "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
-        "SteamApi__ApiKey": "8EE91234BF59B5D170263F804C9EF211"
+        "SteamApi__ApiKey": "268B4F1FAC396F7381BE94FF7F71F7C8"
       }
     },
     "local-degraded-http": {
@@ -38,7 +38,7 @@
         "ASPNETCORE_ENVIRONMENT": "Production",
         "App__DisableDatabase": "false",
         "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
-        "SteamApi__ApiKey": "8EE91234BF59B5D170263F804C9EF211"
+        "SteamApi__ApiKey": "268B4F1FAC396F7381BE94FF7F71F7C8"
       }
     }
   }
