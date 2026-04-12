@@ -20,6 +20,7 @@ public class InventoryModel : PageModel
     private readonly ITradeOperationService _tradeOperationService;
     private readonly ISteamBotIntakeService _steamBotIntakeService;
     private readonly ICreditService _creditService;
+    private readonly IAppLogService _appLogService;
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly IGameCatalog _gameCatalog;
     private readonly AppRuntimeState _runtimeState;
@@ -31,6 +32,7 @@ public class InventoryModel : PageModel
         ITradeOperationService tradeOperationService,
         ISteamBotIntakeService steamBotIntakeService,
         ICreditService creditService,
+        IAppLogService appLogService,
         IStringLocalizer<SharedResource> localizer,
         IGameCatalog gameCatalog,
         AppRuntimeState runtimeState)
@@ -41,6 +43,7 @@ public class InventoryModel : PageModel
         _tradeOperationService = tradeOperationService;
         _steamBotIntakeService = steamBotIntakeService;
         _creditService = creditService;
+        _appLogService = appLogService;
         _localizer = localizer;
         _gameCatalog = gameCatalog;
         _runtimeState = runtimeState;
@@ -224,6 +227,11 @@ public class InventoryModel : PageModel
         if (!result.IsSuccess)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.ErrorMessage);
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory page load failed. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; Error={result.ErrorMessage}",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
             return;
         }
 
@@ -286,6 +294,12 @@ public class InventoryModel : PageModel
         {
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
+
+        await _appLogService.WriteAsync(
+            Items.Count == 0 ? "Warning" : "Info",
+            $"Inventory page loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ItemCount={Items.Count}; RecentOperations={RecentOperations.Count}; PricePollingCount={PricePollingItems.Count}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
     }
 
     private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)
@@ -299,6 +313,11 @@ public class InventoryModel : PageModel
         if (string.IsNullOrWhiteSpace(steamId))
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "SteamID is not available for the current session.");
+            await _appLogService.WriteAsync(
+                "Warning",
+                "Inventory page could not resolve SteamId from the authenticated session.",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
             return null;
         }
 
@@ -309,6 +328,11 @@ public class InventoryModel : PageModel
         if (appUser is null)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Local user profile was not found.");
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory page could not find a local user profile for SteamId={steamId}.",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
         }
 
         return appUser;

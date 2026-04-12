@@ -10,17 +10,25 @@ public class SteamInventoryService : ISteamInventoryService
 {
     private const string IconBaseUrl = "https://community.akamai.steamstatic.com/economy/image/";
     private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(2);
+    private const int BodySnippetLength = 280;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SteamInventoryService> _logger;
     private readonly IGameCatalog _gameCatalog;
+    private readonly IAppLogService _appLogService;
 
-    public SteamInventoryService(HttpClient httpClient, IMemoryCache memoryCache, ILogger<SteamInventoryService> logger, IGameCatalog gameCatalog)
+    public SteamInventoryService(
+        HttpClient httpClient,
+        IMemoryCache memoryCache,
+        ILogger<SteamInventoryService> logger,
+        IGameCatalog gameCatalog,
+        IAppLogService appLogService)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
+        _appLogService = appLogService;
     }
 
     public async Task<SteamInventoryResultDto> GetInventoryAsync(string steamId, GameType gameType, CancellationToken cancellationToken = default)
@@ -30,11 +38,21 @@ public class SteamInventoryService : ISteamInventoryService
         if (_memoryCache.TryGetValue<SteamInventoryResultDto>(cacheKey, out var cachedInventory) && cachedInventory is not null)
         {
             _logger.LogInformation("Steam inventory cache hit for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Cache hit. SteamId={steamId}; Game={game.Key}; ItemCount={cachedInventory.Items.Count}",
+                cancellationToken: cancellationToken);
             return cachedInventory;
         }
 
         _logger.LogInformation("Steam inventory cache miss for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
         var requestUrl = $"https://steamcommunity.com/inventory/{steamId}/{game.SteamAppId}/{game.SteamContextId}?l=english&count=2000";
+        string? rawContent = null;
+
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Request started. SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; Url={requestUrl}",
+            cancellationToken: cancellationToken);
 
         try
         {
@@ -42,9 +60,20 @@ public class SteamInventoryService : ISteamInventoryService
             if ((int)response.StatusCode == 429)
             {
                 _logger.LogWarning("Steam inventory request returned 429 for SteamId {SteamId}. Endpoint: {RequestUrl}", steamId, requestUrl);
+                var retryAfter = GetRetryAfterValue(response);
+                var bodySnippet = await ReadBodySnippetAsync(response, cancellationToken);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Rate limited. SteamId={steamId}; Game={game.Key}; Http=429; RetryAfter={retryAfter}; Url={requestUrl}; Body={bodySnippet}",
+                    cancellationToken: cancellationToken);
+
                 if (_memoryCache.TryGetValue<SteamInventoryResultDto>(cacheKey, out var staleInventory) && staleInventory is not null)
                 {
                     _logger.LogWarning("Falling back to cached Steam inventory after 429 for SteamId {SteamId}.", steamId);
+                    await WriteInventoryLogAsync(
+                        "Warning",
+                        $"Stale cache returned after 429. SteamId={steamId}; Game={game.Key}; ItemCount={staleInventory.Items.Count}",
+                        cancellationToken: cancellationToken);
                     return staleInventory;
                 }
 
@@ -57,6 +86,10 @@ public class SteamInventoryService : ISteamInventoryService
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 _logger.LogWarning("Steam inventory request returned 403 for SteamId {SteamId}. Endpoint: {RequestUrl}", steamId, requestUrl);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Forbidden or private inventory. SteamId={steamId}; Game={game.Key}; Http=403; Url={requestUrl}; Body={await ReadBodySnippetAsync(response, cancellationToken)}",
+                    cancellationToken: cancellationToken);
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = "Steam inventory is private or unavailable. Status code: 403."
@@ -70,19 +103,27 @@ public class SteamInventoryService : ISteamInventoryService
                     steamId,
                     (int)response.StatusCode,
                     requestUrl);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"HTTP failure. SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; Url={requestUrl}; Body={await ReadBodySnippetAsync(response, cancellationToken)}",
+                    cancellationToken: cancellationToken);
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = $"Steam inventory request failed. Status code: {(int)response.StatusCode}."
                 };
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(rawContent);
             var root = document.RootElement;
 
             if (root.ValueKind != JsonValueKind.Object)
             {
                 _logger.LogWarning("Steam inventory response root is not an object for SteamId {SteamId}.", steamId);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Invalid payload root. SteamId={steamId}; Game={game.Key}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
+                    cancellationToken: cancellationToken);
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = "Steam inventory response was empty or invalid."
@@ -94,6 +135,10 @@ public class SteamInventoryService : ISteamInventoryService
                 successElement.GetInt32() != 1)
             {
                 _logger.LogWarning("Steam inventory response reported success != 1 for SteamId {SteamId}.", steamId);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Payload returned success != 1. SteamId={steamId}; Game={game.Key}; SuccessValue={successElement.GetInt32()}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
+                    cancellationToken: cancellationToken);
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = "Steam inventory is unavailable or private."
@@ -103,6 +148,10 @@ public class SteamInventoryService : ISteamInventoryService
             if (!root.TryGetProperty("assets", out var assetsElement) || assetsElement.ValueKind != JsonValueKind.Array)
             {
                 _logger.LogWarning("Steam inventory response does not contain a valid assets array for SteamId {SteamId}.", steamId);
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Assets array missing. SteamId={steamId}; Game={game.Key}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
+                    cancellationToken: cancellationToken);
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = "Steam inventory response is incomplete: assets were not returned."
@@ -128,6 +177,10 @@ public class SteamInventoryService : ISteamInventoryService
             else
             {
                 _logger.LogInformation("Steam inventory response did not include descriptions for SteamId {SteamId}. Items will use fallback values.", steamId);
+                await WriteInventoryLogAsync(
+                    "Info",
+                    $"Descriptions are missing. SteamId={steamId}; Game={game.Key}; Url={requestUrl}",
+                    cancellationToken: cancellationToken);
             }
 
             var items = new List<SteamInventoryItemDto>();
@@ -166,11 +219,20 @@ public class SteamInventoryService : ISteamInventoryService
             };
 
             _memoryCache.Set(cacheKey, result, CacheDuration);
+            await WriteInventoryLogAsync(
+                items.Count == 0 ? "Warning" : "Info",
+                $"Request finished. SteamId={steamId}; Game={game.Key}; ItemCount={items.Count}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; DescriptionCount={descriptions.Count}; TradableCount={items.Count(item => item.Tradable == true)}; MarketableCount={items.Count(item => item.Marketable == true)}; CacheSeconds={(int)CacheDuration.TotalSeconds}",
+                cancellationToken: cancellationToken);
             return result;
         }
         catch (HttpRequestException exception)
         {
             _logger.LogError(exception, "Steam inventory HTTP request failed for SteamId {SteamId}. Endpoint: {RequestUrl}", steamId, requestUrl);
+            await WriteInventoryLogAsync(
+                "Error",
+                $"HTTP request exception. SteamId={steamId}; Game={game.Key}; Url={requestUrl}; ExceptionType={exception.GetType().Name}; Message={exception.Message}",
+                exception,
+                cancellationToken);
             return new SteamInventoryResultDto
             {
                 ErrorMessage = $"Failed to reach Steam inventory endpoint: {exception.Message}"
@@ -179,6 +241,11 @@ public class SteamInventoryService : ISteamInventoryService
         catch (JsonException exception)
         {
             _logger.LogError(exception, "Steam inventory JSON parsing failed for SteamId {SteamId}. Endpoint: {RequestUrl}", steamId, requestUrl);
+            await WriteInventoryLogAsync(
+                "Error",
+                $"JSON parsing failed. SteamId={steamId}; Game={game.Key}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
+                exception,
+                cancellationToken);
             return new SteamInventoryResultDto
             {
                 ErrorMessage = "Steam inventory returned invalid JSON."
@@ -187,6 +254,11 @@ public class SteamInventoryService : ISteamInventoryService
         catch (Exception exception)
         {
             _logger.LogError(exception, "Unexpected Steam inventory error for SteamId {SteamId}. Endpoint: {RequestUrl}", steamId, requestUrl);
+            await WriteInventoryLogAsync(
+                "Error",
+                $"Unexpected error. SteamId={steamId}; Game={game.Key}; Url={requestUrl}; ExceptionType={exception.GetType().Name}; Message={exception.Message}",
+                exception,
+                cancellationToken);
             return new SteamInventoryResultDto
             {
                 ErrorMessage = $"Steam inventory failed unexpectedly: {exception.GetType().Name}."
@@ -220,5 +292,84 @@ public class SteamInventoryService : ISteamInventoryService
     private static string? BuildIconUrl(string? iconPath)
     {
         return string.IsNullOrWhiteSpace(iconPath) ? null : $"{IconBaseUrl}{iconPath}";
+    }
+
+    private Task WriteInventoryLogAsync(
+        string level,
+        string message,
+        Exception? exception = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _appLogService.WriteAsync(level, Truncate(message, 3900), nameof(SteamInventoryService), exception, cancellationToken);
+    }
+
+    private static async Task<string> ReadBodySnippetAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return BuildBodySnippet(body);
+    }
+
+    private static string GetRetryAfterValue(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is TimeSpan delta)
+        {
+            return $"{Math.Max(0, (int)delta.TotalSeconds)}s";
+        }
+
+        if (retryAfter?.Date is DateTimeOffset date)
+        {
+            return date.UtcDateTime.ToString("O");
+        }
+
+        return "<none>";
+    }
+
+    private static int? GetInt32(JsonElement element, string propertyName)
+    {
+        if (element.ValueKind == JsonValueKind.Undefined ||
+            !element.TryGetProperty(propertyName, out var property) ||
+            property.ValueKind != JsonValueKind.Number ||
+            !property.TryGetInt32(out var value))
+        {
+            return null;
+        }
+
+        return value;
+    }
+
+    private static string FormatInt(int? value)
+    {
+        return value?.ToString() ?? "<null>";
+    }
+
+    private static string BuildBodySnippet(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "<empty>";
+        }
+
+        var compact = body
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("\t", " ", StringComparison.Ordinal);
+
+        while (compact.Contains("  ", StringComparison.Ordinal))
+        {
+            compact = compact.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        return Truncate(compact.Trim(), BodySnippetLength);
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        return value[..maxLength] + "...";
     }
 }

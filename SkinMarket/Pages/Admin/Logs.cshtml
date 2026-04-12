@@ -1,12 +1,15 @@
 @page
 @model SkinMarket.Pages.Admin.LogsModel
 @{
-    ViewData["Title"] = "Logs";
+    ViewData["Title"] = "Inventory Logs";
 }
 
 <div class="py-4">
     <div class="page-header">
-        <div><h1>Logs</h1></div>
+        <div>
+            <h1>Inventory Logs</h1>
+            <p class="text-muted mb-0">Only the inventory loading path is shown here: Steam response, cache usage, and page-level failures.</p>
+        </div>
     </div>
 
     <form method="get" class="action-row mb-3">
@@ -16,7 +19,6 @@
             <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
             <option value="Error" selected="@(Model.Level == "Error")">Error</option>
         </select>
-        <input name="Source" value="@Model.Source" class="form-control app-input" style="max-width: 220px;" placeholder="Source" />
         <select name="Limit" class="form-select app-input" style="max-width: 120px;">
             <option value="100" selected="@(Model.Limit != 500)">100</option>
             <option value="500" selected="@(Model.Limit == 500)">500</option>
@@ -50,6 +52,12 @@
                 }
                 </tbody>
             </table>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-secondary mb-0">
+            Inventory logs have not been recorded yet.
         </div>
     }
 </div>
