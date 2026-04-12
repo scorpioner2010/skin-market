@@ -166,19 +166,16 @@
                                     <div class="inventory-actions">
                                         @if (hasOperation && operation is not null)
                                         {
-                                            @if (operation.Status == "Pending")
+                                            @if (operation.Status == "Pending" || operation.Status == "Failed")
                                             {
                                                 <form method="post" asp-page-handler="CreateTrade">
                                                     <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
                                                     <button type="submit" class="btn app-button-secondary">@L["Inventory_CreateTrade"]</button>
                                                 </form>
                                             }
-                                            else if (operation.Status == "TradeCreated" || operation.Status == "AwaitingUserAction")
+                                            else if (operation.Status == "ReceivedByBot" && !operation.CreditedAtUtc.HasValue)
                                             {
-                                                <form method="post" asp-page-handler="Credit">
-                                                    <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
-                                                    <button type="submit" class="btn app-button-primary">@L["Inventory_ConfirmReceived"]</button>
-                                                </form>
+                                                <span class="compact-badge compact-badge-neutral">Waiting for balance credit</span>
                                             }
                                             else
                                             {

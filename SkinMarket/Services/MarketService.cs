@@ -38,9 +38,9 @@ public class MarketService : IMarketService
         {
             Id = Guid.NewGuid(),
             SourceTradeOperationId = operation.Id,
-            AssetId = operation.AssetId,
-            ClassId = operation.ClassId,
-            InstanceId = operation.InstanceId,
+            AssetId = operation.BotAssetId ?? operation.AssetId,
+            ClassId = operation.BotClassId ?? operation.ClassId,
+            InstanceId = operation.BotInstanceId ?? operation.InstanceId,
             ItemName = operation.ItemName,
             MarketHashName = operation.MarketHashName,
             IconUrl = operation.IconUrl,

@@ -10,6 +10,9 @@ using SkinMarket.Models;
 using SkinMarket.Services;
 using System.Globalization;
 using System.Net.Http.Headers;
+using Microsoft.Extensions.Options;
+
+LocalEnvFileLoader.TryLoad(Directory.GetCurrentDirectory());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,8 +69,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
     options.UseInMemoryDatabase("SkinMarketDegraded");
 });
-builder.Services.Configure<SteamBotOptions>(builder.Configuration.GetSection(SteamBotOptions.SectionName));
-builder.Services.Configure<SteamApiOptions>(builder.Configuration.GetSection(SteamApiOptions.SectionName));
+var steamBotOptions = SteamConfigurationResolver.ResolveSteamBotOptions(builder.Configuration);
+var steamApiOptions = SteamConfigurationResolver.ResolveSteamApiOptions(builder.Configuration);
+builder.Services.AddSingleton(Options.Create(steamBotOptions));
+builder.Services.AddSingleton(Options.Create(steamApiOptions));
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
@@ -107,12 +112,19 @@ builder.Services.AddScoped<IMarketDeliveryService, MarketDeliveryService>();
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();
-builder.Services.AddSingleton<ISteamTradeClient, StubSteamTradeClient>();
+builder.Services.AddHostedService<SteamTradeSyncService>();
 builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
     client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(pricing-refresh)"));
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
+builder.Services.AddHttpClient<ISteamTradeClient, BotServiceSteamTradeClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<SteamBotOptions>>().Value;
+    client.BaseAddress = new Uri(options.ServiceUrl, UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
 builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();

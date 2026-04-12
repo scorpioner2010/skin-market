@@ -58,11 +58,16 @@ public class AppDbContext : DbContext
             entity.Property(operation => operation.AssetId).IsRequired();
             entity.Property(operation => operation.ClassId).IsRequired();
             entity.Property(operation => operation.InstanceId).IsRequired();
+            entity.Property(operation => operation.AppId).HasDefaultValue(730);
+            entity.Property(operation => operation.ContextId).IsRequired().HasMaxLength(20).HasDefaultValue("2");
             entity.Property(operation => operation.ItemName).IsRequired();
             entity.Property(operation => operation.MarketHashName).HasMaxLength(300);
             entity.Property(operation => operation.Status).IsRequired();
             entity.Property(operation => operation.TradeOfferId).HasMaxLength(100);
             entity.Property(operation => operation.BotTradeUrl).HasMaxLength(500);
+            entity.Property(operation => operation.BotAssetId).HasMaxLength(100);
+            entity.Property(operation => operation.BotClassId).HasMaxLength(100);
+            entity.Property(operation => operation.BotInstanceId).HasMaxLength(100);
             entity.Property(operation => operation.CreditAmount).HasDefaultValue(0m);
             entity.HasIndex(operation => new { operation.AppUserId, operation.AssetId, operation.Status });
             entity.HasOne(operation => operation.AppUser)

@@ -44,13 +44,13 @@ public class CreditService : ICreditService
             };
         }
 
-        if (operation.Status != "TradeCreated" && operation.Status != "AwaitingUserAction" && operation.Status != "ReceivedByBot")
+        if (operation.Status != "ReceivedByBot")
         {
             return new BotIntakeResult
             {
                 NewStatus = operation.Status,
                 TradeOfferId = operation.TradeOfferId,
-                Message = "Only trade-created requests can be credited."
+                Message = "Only Steam-confirmed intake requests can be credited."
             };
         }
 
@@ -64,12 +64,6 @@ public class CreditService : ICreditService
                 NewStatus = "Failed",
                 Message = "Local user profile was not found."
             };
-        }
-
-        if (operation.Status != "ReceivedByBot")
-        {
-            operation.Status = "ReceivedByBot";
-            operation.UpdatedAtUtc = DateTime.UtcNow;
         }
 
         var amount = await _itemPricingService.CalculatePriceAsync(operation, cancellationToken);

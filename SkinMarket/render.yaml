@@ -5,7 +5,7 @@ services:
     plan: starter
     dockerfilePath: ./Dockerfile
     autoDeploy: true
-    healthCheckPath: /
+    healthCheckPath: /healthz
     envVars:
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
@@ -13,19 +13,21 @@ services:
         fromDatabase:
           name: skinmarket-db
           property: connectionString
-      - key: SteamApi__ApiKey
+      - key: STEAM_API_KEY
         sync: false
-      - key: SteamBot__Enabled
-        value: false
-      - key: SteamBot__BotSteamId
+      - key: STEAM_BOT_ENABLED
+        value: "true"
+      - key: STEAM_BOT_USERNAME
         sync: false
-      - key: SteamBot__BotTradeUrl
+      - key: STEAM_BOT_PASSWORD
         sync: false
-      - key: SteamBot__ApiKey
+      - key: STEAM_BOT_STEAM_ID
         sync: false
-      - key: SteamBot__SharedSecret
+      - key: STEAM_BOT_TRADE_URL
         sync: false
-      - key: SteamBot__IdentitySecret
+      - key: STEAM_BOT_SHARED_SECRET
+        sync: false
+      - key: STEAM_BOT_IDENTITY_SECRET
         sync: false
 
 databases:

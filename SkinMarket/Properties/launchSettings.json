@@ -9,16 +9,14 @@
     }
   },
   "profiles": {
-    "local-real-https": {
+    "local-real-bot": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "applicationUrl": "https://localhost:7252;http://localhost:5271",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Production",
-        "App__DisableDatabase": "false",
-        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
-        "SteamApi__ApiKey": "268B4F1FAC396F7381BE94FF7F71F7C8"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "App__DisableDatabase": "false"
       }
     },
     "local-degraded-http": {
@@ -27,7 +25,7 @@
       "launchBrowser": true,
       "applicationUrl": "http://localhost:5271",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Production",
+        "ASPNETCORE_ENVIRONMENT": "Development",
         "App__DisableDatabase": "true"
       }
     },
@@ -35,10 +33,8 @@
       "commandName": "IISExpress",
       "launchBrowser": true,
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Production",
-        "App__DisableDatabase": "false",
-        "DATABASE_URL": "postgresql://postgres.lrmvklysgpncnwmxedws:77896280Saurex@aws-0-eu-west-1.pooler.supabase.com:5432/postgres",
-        "SteamApi__ApiKey": "268B4F1FAC396F7381BE94FF7F71F7C8"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "App__DisableDatabase": "false"
       }
     }
   }

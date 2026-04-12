@@ -39,48 +39,69 @@ public class SteamBotIntakeService : ISteamBotIntakeService
             };
         }
 
-        if (!string.Equals(operation.Status, "Pending", StringComparison.Ordinal))
+        if (!string.Equals(operation.Status, "Pending", StringComparison.Ordinal) &&
+            !string.Equals(operation.Status, "Failed", StringComparison.Ordinal))
         {
             return new BotIntakeResult
             {
                 NewStatus = operation.Status,
                 TradeOfferId = operation.TradeOfferId,
-                Message = "Trade intake is available only for pending sale requests."
+                Message = "Trade intake is available only for pending or failed sale requests."
             };
         }
 
-        operation.Status = "BotPending";
-        operation.UpdatedAtUtc = DateTime.UtcNow;
-        operation.ErrorMessage = null;
-        operation.BotTradeUrl = string.IsNullOrWhiteSpace(_options.BotTradeUrl) ? null : _options.BotTradeUrl;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
         if (!_options.Enabled || !HasConfiguredCredentials())
         {
-            operation.Status = "AwaitingUserAction";
+            operation.Status = "Failed";
             operation.UpdatedAtUtc = DateTime.UtcNow;
             operation.ErrorMessage = "Bot integration is not fully configured yet. Complete bot settings to enable real trade creation.";
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return new BotIntakeResult
             {
-                Success = true,
+                Success = false,
                 NewStatus = operation.Status,
                 Message = operation.ErrorMessage
             };
         }
 
-        var intakeResult = await _steamTradeClient.CreateIntakeTradeAsync(operation, cancellationToken);
-        operation.Status = intakeResult.NewStatus;
+        var seller = await _dbContext.AppUsers
+            .SingleOrDefaultAsync(user => user.Id == appUserId, cancellationToken);
+
+        if (seller is null)
+        {
+            return new BotIntakeResult
+            {
+                NewStatus = "Failed",
+                Message = "Local user profile was not found."
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(seller.TradeUrl))
+        {
+            return new BotIntakeResult
+            {
+                NewStatus = "Failed",
+                Message = "Seller Trade URL is required before intake can start."
+            };
+        }
+
+        operation.Status = "BotPending";
+        operation.UpdatedAtUtc = DateTime.UtcNow;
+        operation.ErrorMessage = null;
+        operation.TradeOfferId = null;
+        operation.BotAssetId = null;
+        operation.BotClassId = null;
+        operation.BotInstanceId = null;
+        operation.BotTradeUrl = string.IsNullOrWhiteSpace(_options.BotTradeUrl) ? null : _options.BotTradeUrl;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var intakeResult = await _steamTradeClient.CreateIntakeTradeAsync(operation, seller, cancellationToken);
+        operation.Status = intakeResult.Success ? intakeResult.NewStatus : "Failed";
         operation.TradeOfferId = intakeResult.TradeOfferId;
         operation.UpdatedAtUtc = DateTime.UtcNow;
         operation.BotTradeUrl = string.IsNullOrWhiteSpace(_options.BotTradeUrl) ? null : _options.BotTradeUrl;
         operation.ErrorMessage = intakeResult.Success ? null : intakeResult.Message;
-
-        if (!intakeResult.Success && string.IsNullOrWhiteSpace(operation.Status))
-        {
-            operation.Status = "Failed";
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -89,8 +110,8 @@ public class SteamBotIntakeService : ISteamBotIntakeService
 
     private bool HasConfiguredCredentials()
     {
-        return !string.IsNullOrWhiteSpace(_options.BotSteamId) &&
-               !string.IsNullOrWhiteSpace(_options.BotTradeUrl) &&
-               !string.IsNullOrWhiteSpace(_options.ApiKey);
+        return !string.IsNullOrWhiteSpace(_options.Username) &&
+               !string.IsNullOrWhiteSpace(_options.Password) &&
+               !string.IsNullOrWhiteSpace(_options.BotSteamId);
     }
 }

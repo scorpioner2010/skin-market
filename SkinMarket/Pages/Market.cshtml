@@ -133,19 +133,19 @@
                                 <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.DeliveryErrorMessage)</div>
                             }
                             <div class="action-row">
-                                @if (item.DeliveryStatus == "PendingDelivery")
+                                @if (item.DeliveryStatus == "PendingDelivery" || item.DeliveryStatus == "DeliveryFailed")
                                 {
                                     <form method="post" asp-page-handler="CreateDeliveryTrade">
                                         <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
                                         <button type="submit" class="btn app-button-secondary">@L["Market_CreateDeliveryTrade"]</button>
                                     </form>
                                 }
-                                else if (item.DeliveryStatus == "DeliveryTradeCreated" || item.DeliveryStatus == "AwaitingBuyerAction")
+                                else if (item.DeliveryStatus == "DeliveryTradeCreated" ||
+                                         item.DeliveryStatus == "AwaitingBuyerAction" ||
+                                         item.DeliveryStatus == "AwaitingBotConfirmation" ||
+                                         item.DeliveryStatus == "DeliveryInEscrow")
                                 {
-                                    <form method="post" asp-page-handler="ConfirmDelivered">
-                                        <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
-                                        <button type="submit" class="btn app-button-primary">@L["Market_ConfirmDelivered"]</button>
-                                    </form>
+                                    <span class="compact-badge compact-badge-neutral">Waiting for Steam delivery sync</span>
                                 }
                             </div>
                         </article>

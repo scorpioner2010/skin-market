@@ -8,10 +8,12 @@ namespace SkinMarket.Services;
 public class TradeOperationService : ITradeOperationService
 {
     private readonly AppDbContext _dbContext;
+    private readonly IGameCatalog _gameCatalog;
 
-    public TradeOperationService(AppDbContext dbContext)
+    public TradeOperationService(AppDbContext dbContext, IGameCatalog gameCatalog)
     {
         _dbContext = dbContext;
+        _gameCatalog = gameCatalog;
     }
 
     public Task<bool> HasExistingSaleAsync(Guid appUserId, string assetId, CancellationToken cancellationToken = default)
@@ -34,6 +36,7 @@ public class TradeOperationService : ITradeOperationService
 
     public async Task CreatePendingSaleAsync(AppUser appUser, SteamInventoryItemDto item, CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(_gameCatalog.DefaultGameType);
         var operation = new TradeOperation
         {
             Id = Guid.NewGuid(),
@@ -42,6 +45,8 @@ public class TradeOperationService : ITradeOperationService
             AssetId = item.AssetId,
             ClassId = item.ClassId,
             InstanceId = item.InstanceId,
+            AppId = game.SteamAppId,
+            ContextId = game.SteamContextId.ToString(),
             ItemName = string.IsNullOrWhiteSpace(item.Name) ? "Unknown Item" : item.Name,
             MarketHashName = MarketHashNameUtility.ResolvePrimary(item),
             IconUrl = item.IconUrl,

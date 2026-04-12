@@ -26,6 +26,7 @@ public class MarketDeliveryService : IMarketDeliveryService
     public async Task<MarketDeliveryResult> CreateDeliveryTradeAsync(Guid marketItemId, Guid buyerAppUserId, CancellationToken cancellationToken = default)
     {
         var marketItem = await _dbContext.MarketItems
+            .Include(item => item.SourceTradeOperation)
             .SingleOrDefaultAsync(item => item.Id == marketItemId && item.BuyerAppUserId == buyerAppUserId, cancellationToken);
 
         if (marketItem is null)
@@ -49,7 +50,9 @@ public class MarketDeliveryService : IMarketDeliveryService
             };
         }
 
-        if (marketItem.DeliveryStatus == "DeliveryTradeCreated" || marketItem.DeliveryStatus == "AwaitingBuyerAction")
+        if (marketItem.DeliveryStatus == "DeliveryTradeCreated" ||
+            marketItem.DeliveryStatus == "AwaitingBuyerAction" ||
+            marketItem.DeliveryStatus == "AwaitingBotConfirmation")
         {
             return new MarketDeliveryResult
             {
@@ -77,36 +80,50 @@ public class MarketDeliveryService : IMarketDeliveryService
             return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
         }
 
-        marketItem.DeliveryStatus = "DeliveryBotPending";
-        marketItem.UpdatedAtUtc = DateTime.UtcNow;
-        marketItem.DeliveryErrorMessage = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (marketItem.SourceTradeOperation is null)
+        {
+            marketItem.UpdatedAtUtc = DateTime.UtcNow;
+            marketItem.DeliveryErrorMessage = "Source trade operation was not found for this market item.";
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
+        }
+
+        if (string.IsNullOrWhiteSpace(marketItem.SourceTradeOperation.BotAssetId))
+        {
+            marketItem.UpdatedAtUtc = DateTime.UtcNow;
+            marketItem.DeliveryErrorMessage = "Bot inventory asset mapping is missing for this market item.";
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
+        }
 
         if (!_options.Enabled || !HasConfiguredCredentials())
         {
-            marketItem.DeliveryStatus = "AwaitingBuyerAction";
+            marketItem.DeliveryStatus = "DeliveryFailed";
             marketItem.UpdatedAtUtc = DateTime.UtcNow;
             marketItem.DeliveryErrorMessage = "Delivery bot integration is not fully configured yet. Complete bot settings to enable real delivery trade creation.";
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return new MarketDeliveryResult
             {
-                Success = true,
+                Success = false,
                 NewStatus = marketItem.DeliveryStatus,
                 Message = marketItem.DeliveryErrorMessage
             };
         }
 
-        var deliveryResult = await _steamTradeClient.CreateDeliveryTradeAsync(marketItem, buyer, cancellationToken);
-        marketItem.DeliveryStatus = deliveryResult.NewStatus;
+        marketItem.DeliveryStatus = "DeliveryBotPending";
+        marketItem.UpdatedAtUtc = DateTime.UtcNow;
+        marketItem.DeliveryErrorMessage = null;
+        marketItem.DeliveryTradeOfferId = null;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var deliveryResult = await _steamTradeClient.CreateDeliveryTradeAsync(marketItem, marketItem.SourceTradeOperation, buyer, cancellationToken);
+        marketItem.DeliveryStatus = deliveryResult.Success ? deliveryResult.NewStatus : "DeliveryFailed";
         marketItem.DeliveryTradeOfferId = deliveryResult.DeliveryTradeOfferId;
         marketItem.UpdatedAtUtc = DateTime.UtcNow;
         marketItem.DeliveryErrorMessage = deliveryResult.Success ? null : deliveryResult.Message;
-
-        if (!deliveryResult.Success && string.IsNullOrWhiteSpace(marketItem.DeliveryStatus))
-        {
-            marketItem.DeliveryStatus = "DeliveryFailed";
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return deliveryResult;
@@ -133,35 +150,19 @@ public class MarketDeliveryService : IMarketDeliveryService
             };
         }
 
-        if (marketItem.DeliveryStatus != "DeliveryTradeCreated" && marketItem.DeliveryStatus != "AwaitingBuyerAction")
-        {
-            return new MarketDeliveryResult
-            {
-                NewStatus = marketItem.DeliveryStatus ?? "DeliveryFailed",
-                DeliveryTradeOfferId = marketItem.DeliveryTradeOfferId,
-                Message = "Only delivery-created items can be confirmed as delivered."
-            };
-        }
-
-        marketItem.DeliveryStatus = "Delivered";
-        marketItem.DeliveredAtUtc = DateTime.UtcNow;
-        marketItem.UpdatedAtUtc = DateTime.UtcNow;
-        marketItem.DeliveryErrorMessage = null;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
         return new MarketDeliveryResult
         {
-            Success = true,
-            NewStatus = marketItem.DeliveryStatus,
+            Success = false,
+            NewStatus = marketItem.DeliveryStatus ?? "DeliveryFailed",
             DeliveryTradeOfferId = marketItem.DeliveryTradeOfferId,
-            Message = "Item marked as delivered."
+            Message = "Delivery completion is synchronized from Steam automatically."
         };
     }
 
     private bool HasConfiguredCredentials()
     {
-        return !string.IsNullOrWhiteSpace(_options.BotSteamId) &&
-               !string.IsNullOrWhiteSpace(_options.BotTradeUrl) &&
-               !string.IsNullOrWhiteSpace(_options.ApiKey);
+        return !string.IsNullOrWhiteSpace(_options.Username) &&
+               !string.IsNullOrWhiteSpace(_options.Password) &&
+               !string.IsNullOrWhiteSpace(_options.BotSteamId);
     }
 }
