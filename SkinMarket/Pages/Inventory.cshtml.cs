@@ -50,6 +50,7 @@ public class InventoryModel : PageModel
     }
 
     public List<SteamInventoryItemDto> Items { get; private set; } = new();
+    public List<GroupedInventoryItem> GroupedItems { get; private set; } = new();
     public Dictionary<string, ItemPriceResolutionResult> ResolvedPricesByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public List<InventoryPriceItemRequest> PricePollingItems { get; private set; } = new();
     public List<TradeOperation> RecentOperations { get; private set; } = new();
@@ -136,7 +137,7 @@ public class InventoryModel : PageModel
         };
 
         await _tradeOperationService.CreatePendingSaleAsync(appUser, item, cancellationToken);
-        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request created.");
+        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request created. Intake trade will start automatically.");
         return RedirectToPage();
     }
 
@@ -315,6 +316,28 @@ public class InventoryModel : PageModel
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
 
+        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId);
+        PricePollingItems = GroupedItems
+            .Select(group =>
+            {
+                ResolvedPricesByAssetId.TryGetValue(group.RepresentativeAssetId, out var resolvedPrice);
+                return new
+                {
+                    Group = group,
+                    Price = resolvedPrice
+                };
+            })
+            .Where(item =>
+                item.Price is not null &&
+                !string.IsNullOrWhiteSpace(item.Group.MarketHashName) &&
+                (item.Price.NeedsRefresh || item.Price.Status == "Refreshing"))
+            .Select(item => new InventoryPriceItemRequest
+            {
+                AssetId = item.Group.RepresentativeAssetId,
+                MarketHashName = item.Group.MarketHashName!
+            })
+            .ToList();
+
         var distinctRefreshTargets = refreshTargets
             .Distinct(StringComparer.Ordinal)
             .ToList();
@@ -375,6 +398,95 @@ public class InventoryModel : PageModel
             .ToList();
 
         return sample.Count == 0 ? "<none>" : string.Join(" | ", sample);
+    }
+
+    private static List<GroupedInventoryItem> BuildGroupedItems(
+        IReadOnlyCollection<SteamInventoryItemDto> items,
+        IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId)
+    {
+        return items
+            .GroupBy(ItemGroupingKeyUtility.ForInventory, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var entries = group.ToList();
+                var representativeItem = entries.First();
+                var availableItem = entries.FirstOrDefault(item => !latestOperationsByAssetId.ContainsKey(item.AssetId));
+                var createTradeOperation = entries
+                    .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
+                    .Where(operation => operation is not null && (operation.Status == "Pending" || operation.Status == "Failed"))
+                    .OrderByDescending(operation => operation!.CreatedAtUtc)
+                    .FirstOrDefault();
+
+                var statusItems = entries
+                    .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
+                    .Where(operation => operation is not null)
+                    .GroupBy(operation => operation!.Status, StringComparer.Ordinal)
+                    .Select(statusGroup => new GroupedInventoryStatusItem
+                    {
+                        Status = statusGroup.Key,
+                        Quantity = statusGroup.Count(),
+                        CreditAmountTotal = statusGroup.Sum(operation => operation!.CreditAmount)
+                    })
+                    .OrderBy(item => GetInventoryStatusOrder(item.Status))
+                    .ThenBy(item => item.Status, StringComparer.Ordinal)
+                    .ToList();
+
+                var readyCount = entries.Count - statusItems.Sum(item => item.Quantity);
+                if (readyCount > 0)
+                {
+                    statusItems.Insert(0, new GroupedInventoryStatusItem
+                    {
+                        IsReady = true,
+                        Status = "Ready",
+                        Quantity = readyCount
+                    });
+                }
+
+                return new GroupedInventoryItem
+                {
+                    GroupKey = group.Key,
+                    RepresentativeAssetId = representativeItem.AssetId,
+                    ItemName = representativeItem.Name,
+                    MarketHashName = MarketHashNameUtility.ResolvePrimary(representativeItem),
+                    IconUrl = representativeItem.IconUrl,
+                    ClassId = representativeItem.ClassId,
+                    InstanceId = representativeItem.InstanceId,
+                    Tradable = representativeItem.Tradable,
+                    Marketable = representativeItem.Marketable,
+                    Quantity = entries.Count,
+                    SellAssetId = availableItem?.AssetId,
+                    SellClassId = availableItem?.ClassId,
+                    SellInstanceId = availableItem?.InstanceId,
+                    SellItemName = availableItem?.Name,
+                    SellMarketHashName = availableItem is null ? null : MarketHashNameUtility.ResolvePrimary(availableItem),
+                    SellIconUrl = availableItem?.IconUrl,
+                    CreateTradeOperationId = createTradeOperation?.Id,
+                    CreateTradeStatus = createTradeOperation?.Status,
+                    HasWaitingForCredit = entries
+                        .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
+                        .Any(operation => operation is not null && operation.Status == "ReceivedByBot" && !operation.CreditedAtUtc.HasValue),
+                    StatusItems = statusItems
+                };
+            })
+            .OrderBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.MarketHashName, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static int GetInventoryStatusOrder(string status)
+    {
+        return status switch
+        {
+            "Pending" => 1,
+            "Failed" => 2,
+            "BotPending" => 3,
+            "AwaitingBotConfirmation" => 4,
+            "TradeCreated" => 5,
+            "AwaitingUserAction" => 6,
+            "ReceivedByBot" => 7,
+            "Credited" => 8,
+            _ => 20
+        };
     }
 
     private static string BuildPriceStatusSummary(IEnumerable<ItemPriceResolutionResult> results)

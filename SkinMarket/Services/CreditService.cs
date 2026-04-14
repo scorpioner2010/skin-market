@@ -9,13 +9,11 @@ public class CreditService : ICreditService
 {
     private readonly AppDbContext _dbContext;
     private readonly IItemPricingService _itemPricingService;
-    private readonly IMarketService _marketService;
 
-    public CreditService(AppDbContext dbContext, IItemPricingService itemPricingService, IMarketService marketService)
+    public CreditService(AppDbContext dbContext, IItemPricingService itemPricingService)
     {
         _dbContext = dbContext;
         _itemPricingService = itemPricingService;
-        _marketService = marketService;
     }
 
     public async Task<BotIntakeResult> ConfirmReceivedAndCreditAsync(Guid tradeOperationId, Guid appUserId, CancellationToken cancellationToken = default)
@@ -85,7 +83,6 @@ public class CreditService : ICreditService
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await _marketService.CreateFromTradeOperationAsync(operation.Id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         return new BotIntakeResult

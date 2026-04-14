@@ -51,9 +51,13 @@ app.post("/api/inventory/user", async (req, res, next) => {
   }
 });
 
-app.use((error, _req, res, _next) => {
+app.use((error, req, res, _next) => {
   const statusCode = error instanceof HttpError ? error.statusCode : 500;
+  if (statusCode >= 500 || statusCode === 429) {
+    bot.recordRequestFailure(req.path, statusCode, error.message);
+  }
   logger.error("Bot service request failed.", {
+    route: req.path,
     statusCode,
     error: error.message
   });

@@ -85,6 +85,7 @@ var steamBotOptions = SteamConfigurationResolver.ResolveSteamBotOptions(builder.
 var steamApiOptions = SteamConfigurationResolver.ResolveSteamApiOptions(builder.Configuration);
 builder.Services.AddSingleton(Options.Create(steamBotOptions));
 builder.Services.AddSingleton(Options.Create(steamApiOptions));
+builder.Services.AddSingleton<BotServiceAvailabilityTracker>();
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
@@ -113,6 +114,7 @@ builder.Services.AddScoped<IBalanceService, BalanceService>();
 builder.Services.AddSingleton<AppLogService>();
 builder.Services.AddSingleton<IAppLogService>(provider => provider.GetRequiredService<AppLogService>());
 builder.Services.AddSingleton<IAppLogReader>(provider => provider.GetRequiredService<AppLogService>());
+builder.Services.AddHostedService<LocalSteamBotHostService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
 builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
@@ -126,6 +128,7 @@ builder.Services.AddScoped<IMarketDeliveryService, MarketDeliveryService>();
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();
+builder.Services.AddHostedService<SteamTradeAutomationService>();
 builder.Services.AddHostedService<SteamTradeSyncService>();
 builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>(client =>
 {
@@ -139,6 +142,13 @@ builder.Services.AddHttpClient<ISteamTradeClient, BotServiceSteamTradeClient>((s
     var options = serviceProvider.GetRequiredService<IOptions<SteamBotOptions>>().Value;
     client.BaseAddress = new Uri(options.ServiceUrl, UriKind.Absolute);
     client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
+builder.Services.AddHttpClient<IBotServiceStatusClient, BotServiceStatusClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<SteamBotOptions>>().Value;
+    client.BaseAddress = new Uri(options.ServiceUrl, UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
 builder.Services.AddHttpClient<ISteamBotInventoryClient, BotServiceSteamInventoryClient>((serviceProvider, client) =>

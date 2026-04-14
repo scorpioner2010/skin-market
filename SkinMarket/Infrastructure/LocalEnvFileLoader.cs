@@ -31,6 +31,11 @@ public static class LocalEnvFileLoader
                 continue;
             }
 
+            if (Environment.GetEnvironmentVariable(name) is not null)
+            {
+                continue;
+            }
+
             if ((value.StartsWith('"') && value.EndsWith('"')) ||
                 (value.StartsWith('\'') && value.EndsWith('\'')))
             {

@@ -1,71 +1,124 @@
 @page
 @model SkinMarket.Pages.Admin.LogsModel
 @{
-    ViewData["Title"] = "Inventory Logs";
+    ViewData["Title"] = "Bot Logs";
+    var recentBotIssues = Model.BotStatus.Bot.RecentIssues ?? new List<SkinMarket.Models.BotServiceIssueSnapshot>();
 }
 
 <div class="py-4">
     <div class="page-header">
         <div>
-            <h1>Inventory Logs</h1>
-            <p class="text-muted mb-0">Only the current process is shown here. Logs live in memory, reset on restart, and cover the inventory loading path in detail.</p>
+            <h1>Bot Logs</h1>
+            <p class="text-muted mb-0">Only bot-related warnings and errors are shown here.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Logs">Logs</a>
         </div>
     </div>
 
-    <form method="get" class="action-row mb-3">
-        <select name="Level" class="form-select app-input" style="max-width: 140px;">
-            <option value="">All</option>
-            <option value="Info" selected="@(Model.Level == "Info")">Info</option>
-            <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
-            <option value="Error" selected="@(Model.Level == "Error")">Error</option>
-        </select>
-        <select name="Limit" class="form-select app-input" style="max-width: 120px;">
-            <option value="100" selected="@(Model.Limit != 500)">100</option>
-            <option value="500" selected="@(Model.Limit == 500)">500</option>
-        </select>
-        <button type="submit" class="btn app-button-primary">Apply</button>
-    </form>
+    <div class="content-card mb-4">
+        <div class="card-heading">
+            <h2>Service Snapshot</h2>
+            <span class="status-badge" data-status="@(!Model.BotStatus.Reachable ? "Failed" : Model.BotStatus.IsActive ? "Credited" : "Pending")">
+                @(!Model.BotStatus.Reachable ? "Unavailable" : Model.BotStatus.Bot.ServiceState ?? "Unknown")
+            </span>
+        </div>
+        <div class="history-metrics">
+            <span><strong>Reachable:</strong> @(Model.BotStatus.Reachable ? "Yes" : "No")</span>
+            <span><strong>Ready:</strong> @(Model.BotStatus.Bot.Ready ? "Yes" : "No")</span>
+            <span><strong>Logged On:</strong> @(Model.BotStatus.Bot.LoggedOn ? "Yes" : "No")</span>
+            <span><strong>Active Work:</strong> @Model.BotStatus.Bot.ActiveActivityCount</span>
+            <span><strong>Last Error:</strong> @(string.IsNullOrWhiteSpace(Model.BotStatus.Bot.LastError) ? "None" : Model.BotStatus.Bot.LastError)</span>
+        </div>
+        @if (!Model.BotStatus.Reachable && !string.IsNullOrWhiteSpace(Model.BotStatus.ReachabilityError))
+        {
+            <div class="meta-note mt-3">@Model.BotStatus.ReachabilityError</div>
+        }
+    </div>
 
-    @if (Model.Items.Count > 0)
-    {
-        <div class="debug-table-wrap">
-            <table class="table debug-table">
-                <thead>
-                <tr>
-                    <th>Timestamp</th>
-                    <th>Level</th>
-                    <th>Source</th>
-                    <th>Message</th>
-                    <th>Details</th>
-                </tr>
-                </thead>
-                <tbody>
-                @foreach (var item in Model.Items)
+    <section class="page-section">
+        <div class="section-heading">
+            <div><h2>bot-service Issues</h2></div>
+            <form method="get" class="action-row">
+                <select name="Limit" class="form-select app-input" style="max-width: 120px;">
+                    <option value="25" selected="@(Model.Limit == 25)">25</option>
+                    <option value="50" selected="@(Model.Limit != 25 && Model.Limit != 100)">50</option>
+                    <option value="100" selected="@(Model.Limit == 100)">100</option>
+                </select>
+                <button type="submit" class="btn app-button-secondary">Apply</button>
+            </form>
+        </div>
+
+        @if (recentBotIssues.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No current bot-service issues.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var issue in recentBotIssues.Take(Model.Limit <= 0 ? 50 : Math.Min(Model.Limit, 200)))
                 {
-                    <tr>
-                        <td>@item.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")</td>
-                        <td>@item.Level</td>
-                        <td class="break-value">@item.Source</td>
-                        <td class="break-value">@item.Message</td>
-                        <td class="break-value">
-                            @if (!string.IsNullOrWhiteSpace(item.StackTrace))
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@issue.Message</h3>
+                                <p class="card-subtitle">bot-service</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                            @foreach (var detail in issue.Details)
                             {
-                                <details>
-                                    <summary>Show</summary>
-                                    <pre class="mb-0">@item.StackTrace</pre>
-                                </details>
+                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
                             }
-                        </td>
-                    </tr>
+                        </div>
+                    </article>
                 }
-                </tbody>
-            </table>
+            </div>
+        }
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div><h2>Application Issues</h2></div>
         </div>
-    }
-    else
-    {
-        <div class="alert alert-secondary mb-0">
-            Inventory logs have not been recorded in the current process yet.
-        </div>
-    }
+
+        @if (Model.AppEntries.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No app-side bot issues recorded.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var entry in Model.AppEntries)
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@entry.Message</h3>
+                                <p class="card-subtitle">@entry.Source</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                        {
+                            <details class="mt-2">
+                                <summary>Stack trace</summary>
+                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                            </details>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
 </div>

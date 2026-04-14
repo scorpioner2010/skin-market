@@ -1,0 +1,342 @@
+@page
+@model SkinMarket.Pages.Admin.BotStatusModel
+@{
+    ViewData["Title"] = "Bot Status";
+    var botName = Model.BotProfile?.PersonaName ?? Model.BotSteamId ?? "Steam Bot";
+    var serviceState = !Model.ServiceStatus.Reachable
+        ? "Unavailable"
+        : Model.ServiceStatus.Bot.ServiceState ?? "Unknown";
+    var serviceBadgeStatus = !Model.ServiceStatus.Reachable
+        ? "Failed"
+        : Model.ServiceStatus.IsActive
+            ? "Credited"
+            : Model.ServiceStatus.Bot.Enabled
+                ? "Pending"
+                : "Failed";
+    var activeActivities = Model.ServiceStatus.Bot.ActiveActivities ?? new List<SkinMarket.Models.BotServiceActivitySnapshot>();
+    var recentBotIssues = Model.ServiceStatus.Bot.RecentIssues ?? new List<SkinMarket.Models.BotServiceIssueSnapshot>();
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>Bot Status</h1>
+            <p class="text-muted mb-0">Live Steam bot state, current work, and only the important failures.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-primary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (!Model.ServiceStatus.Reachable)
+    {
+        <div class="app-alert alert-danger" role="alert">
+            Bot service is unreachable. @(Model.ServiceStatus.ReachabilityError ?? "No response from bot service.")
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.InventoryErrorMessage))
+    {
+        <div class="app-alert alert-warning" role="alert">@Model.InventoryErrorMessage</div>
+    }
+
+    <div class="profile-grid">
+        <section class="content-card profile-card">
+            <div class="card-heading">
+                <h2>Account</h2>
+                <span class="status-badge" data-status="@serviceBadgeStatus">@serviceState</span>
+            </div>
+            <div class="profile-identity">
+                @if (!string.IsNullOrWhiteSpace(Model.BotProfile?.AvatarFull))
+                {
+                    <img class="profile-avatar" src="@Model.BotProfile.AvatarFull" alt="@botName" />
+                }
+                else
+                {
+                    <div class="profile-avatar profile-avatar-fallback" aria-hidden="true">
+                        @((botName.FirstOrDefault()).ToString().ToUpperInvariant())
+                    </div>
+                }
+                <div>
+                    <h3 class="profile-name">@botName</h3>
+                    <p class="card-subtitle mb-0 break-value">@Model.BotSteamId</p>
+                </div>
+            </div>
+            <dl class="detail-list">
+                <div class="detail-row">
+                    <dt>Service Reachable</dt>
+                    <dd>@(Model.ServiceStatus.Reachable ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Bot Enabled</dt>
+                    <dd>@(Model.BotEnabled ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Steam Session Ready</dt>
+                    <dd>@(Model.ServiceStatus.Bot.Ready ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Logged On</dt>
+                    <dd>@(Model.ServiceStatus.Bot.LoggedOn ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>State</dt>
+                    <dd>@(Model.ServiceStatus.Bot.ServiceStateDescription ?? "Unavailable")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Last Ready</dt>
+                    <dd>@(Model.ServiceStatus.Bot.LastReadyAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Never")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Last Error</dt>
+                    <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.LastError) ? "None" : Model.ServiceStatus.Bot.LastError)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Trade URL</dt>
+                    <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.BotTradeUrl) ? "Not configured" : Model.BotTradeUrl)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Service URL</dt>
+                    <dd class="break-value">@Model.ServiceUrl</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Inventory Items</dt>
+                    <dd>@Model.InventoryItemCount</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Visible In Market</dt>
+                    <dd>@Model.AvailableMarketItemCount</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="content-card">
+            <div class="card-heading">
+                <h2>Current Work</h2>
+                <span class="compact-badge compact-badge-neutral">Active @Model.ServiceStatus.Bot.ActiveActivityCount</span>
+            </div>
+
+            @if (activeActivities.Count == 0)
+            {
+                <div class="meta-note mb-3">Bot is currently idle.</div>
+            }
+            else
+            {
+                <div class="stack-grid">
+                    @foreach (var activity in activeActivities)
+                    {
+                        <article class="history-card">
+                            <div class="card-heading">
+                                <div>
+                                    <h3>@activity.Description</h3>
+                                    <p class="card-subtitle">@activity.Type</p>
+                                </div>
+                                <span class="status-badge" data-status="Pending">Running</span>
+                            </div>
+                            <div class="history-metrics">
+                                <span><strong>Started:</strong> @(activity.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                                @foreach (var detail in activity.Meta)
+                                {
+                                    <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+
+            <div class="mt-4">
+                <h3>Last Completed</h3>
+                @if (Model.ServiceStatus.Bot.LastCompletedActivity is null)
+                {
+                    <div class="meta-note">No completed bot activity recorded yet.</div>
+                }
+                else
+                {
+                    var activity = Model.ServiceStatus.Bot.LastCompletedActivity;
+                    <article class="history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@activity.Description</h3>
+                                <p class="card-subtitle">@activity.Type</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(activity.Result, "Succeeded", StringComparison.OrdinalIgnoreCase) ? "Credited" : "Failed")">@activity.Result</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>Started:</strong> @(activity.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                            <span><strong>Finished:</strong> @(activity.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                            @foreach (var detail in activity.Meta)
+                            {
+                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        </section>
+    </div>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Important Issues</h2>
+                <p class="section-description">Only warning and error level problems are shown here.</p>
+            </div>
+            <div class="action-row">
+                <a class="btn app-button-secondary" asp-page="/Admin/Logs">Open Full Logs</a>
+            </div>
+        </div>
+
+        @if (recentBotIssues.Count == 0 && Model.RecentAppIssues.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No important bot issues right now.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var issue in recentBotIssues)
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@issue.Message</h3>
+                                <p class="card-subtitle">bot-service</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                            @foreach (var detail in issue.Details)
+                            {
+                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                            }
+                        </div>
+                    </article>
+                }
+
+                @foreach (var entry in Model.RecentAppIssues)
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@entry.Message</h3>
+                                <p class="card-subtitle">@entry.Source</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                        {
+                            <details class="mt-2">
+                                <summary>Stack trace</summary>
+                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                            </details>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div><h2>Bot Purchases</h2></div>
+        </div>
+        @if (Model.PurchaseHistory.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No bot purchase history yet.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var item in Model.PurchaseHistory)
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@item.ItemName</h3>
+                                <p class="card-subtitle break-value">@item.AssetId</p>
+                            </div>
+                            <span class="status-badge" data-status="@item.Status">@item.Status</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>Seller:</strong> @item.SellerDisplayName</span>
+                            <span><strong>SteamID:</strong> <span class="break-value">@item.SellerSteamId</span></span>
+                            <span><strong>Credit:</strong> @item.CreditAmount</span>
+                            <span><strong>Created:</strong> @item.CreatedAtUtc</span>
+                            <span><strong>Credited:</strong> @item.CreditedAtUtc</span>
+                            <span><strong>Trade Offer:</strong> <span class="break-value">@item.TradeOfferId</span></span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.ErrorMessage))
+                        {
+                            <div class="meta-note">@item.ErrorMessage</div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div><h2>Bot Sales</h2></div>
+        </div>
+        @if (Model.SaleHistory.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No bot sale history yet.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var item in Model.SaleHistory)
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@item.ItemName</h3>
+                                <p class="card-subtitle break-value">@item.AssetId</p>
+                            </div>
+                            <div class="status-group">
+                                <span class="status-badge" data-status="@item.Status">@item.Status</span>
+                                @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
+                                {
+                                    <span class="status-badge" data-status="@item.DeliveryStatus">@item.DeliveryStatus</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>Buyer:</strong> @item.BuyerDisplayName</span>
+                            <span><strong>Buyer SteamID:</strong> <span class="break-value">@item.BuyerSteamId</span></span>
+                            @if (!string.IsNullOrWhiteSpace(item.SourceSellerDisplayName))
+                            {
+                                <span><strong>Source Seller:</strong> @item.SourceSellerDisplayName</span>
+                            }
+                            <span><strong>Price:</strong> @item.Price</span>
+                            <span><strong>Purchased:</strong> @item.PurchasedAtUtc</span>
+                            <span><strong>Delivered:</strong> @item.DeliveredAtUtc</span>
+                            <span><strong>Trade Offer:</strong> <span class="break-value">@item.DeliveryTradeOfferId</span></span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.DeliveryErrorMessage))
+                        {
+                            <div class="meta-note">@item.DeliveryErrorMessage</div>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</div>

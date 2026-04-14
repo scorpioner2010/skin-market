@@ -12,7 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<AppLog> Logs => Set<AppLog>();
     public DbSet<BalanceTransaction> BalanceTransactions => Set<BalanceTransaction>();
-    public DbSet<MarketItem> MarketItems => Set<MarketItem>();
+    public DbSet<MarketPurchaseRecord> MarketPurchaseRecords => Set<MarketPurchaseRecord>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<TradeOperation> TradeOperations => Set<TradeOperation>();
 
@@ -75,9 +75,12 @@ public class AppDbContext : DbContext
                 .HasForeignKey(operation => operation.AppUserId);
         });
 
-        modelBuilder.Entity<MarketItem>(entity =>
+        modelBuilder.Entity<MarketPurchaseRecord>(entity =>
         {
+            entity.ToTable("MarketPurchaseRecords");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.AppId).HasDefaultValue(730);
+            entity.Property(item => item.ContextId).IsRequired().HasMaxLength(20).HasDefaultValue("2");
             entity.Property(item => item.AssetId).IsRequired();
             entity.Property(item => item.ClassId).IsRequired();
             entity.Property(item => item.InstanceId).IsRequired();
@@ -86,6 +89,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Status).IsRequired();
             entity.Property(item => item.DeliveryStatus).HasMaxLength(100);
             entity.Property(item => item.DeliveryTradeOfferId).HasMaxLength(100);
+            entity.HasIndex(item => new { item.AppId, item.ContextId, item.AssetId }).IsUnique();
             entity.HasIndex(item => item.SourceTradeOperationId).IsUnique();
             entity.HasOne(item => item.SourceTradeOperation)
                 .WithMany()

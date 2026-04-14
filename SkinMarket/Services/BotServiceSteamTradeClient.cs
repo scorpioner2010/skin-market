@@ -12,17 +12,20 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly HttpClient _httpClient;
     private readonly SteamBotOptions _options;
+    private readonly BotServiceAvailabilityTracker _availabilityTracker;
     private readonly IAppLogService _appLogService;
     private readonly ILogger<BotServiceSteamTradeClient> _logger;
 
     public BotServiceSteamTradeClient(
         HttpClient httpClient,
         IOptions<SteamBotOptions> options,
+        BotServiceAvailabilityTracker availabilityTracker,
         IAppLogService appLogService,
         ILogger<BotServiceSteamTradeClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _availabilityTracker = availabilityTracker;
         _appLogService = appLogService;
         _logger = logger;
     }
@@ -60,6 +63,7 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
         try
         {
             using var response = await _httpClient.PostAsJsonAsync("/api/trades/intake", request, SerializerOptions, cancellationToken);
+            MarkServiceReachable();
             var payload = await DeserializeAsync<CreateTradeResponse>(response, cancellationToken);
             if (!response.IsSuccessStatusCode || payload is null)
             {
@@ -86,8 +90,25 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
                 Message = payload.Message ?? "Bot intake request failed."
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
+            if (await TryHandleConnectivityFailureAsync(
+                    "Bot intake request",
+                    $"Bot intake request could not reach bot service. TradeOperationId={operation.Id}",
+                    exception,
+                    cancellationToken))
+            {
+                return new BotIntakeResult
+                {
+                    NewStatus = "Failed",
+                    Message = "Bot service is unreachable."
+                };
+            }
+
             _logger.LogError(exception, "Bot intake request failed for TradeOperationId {TradeOperationId}.", operation.Id);
             await _appLogService.WriteAsync(
                 "Error",
@@ -105,8 +126,7 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
     }
 
     public async Task<MarketDeliveryResult> CreateDeliveryTradeAsync(
-        MarketItem marketItem,
-        TradeOperation sourceOperation,
+        MarketPurchaseRecord marketItem,
         AppUser buyer,
         CancellationToken cancellationToken = default)
     {
@@ -119,9 +139,9 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
             };
         }
 
-        if (string.IsNullOrWhiteSpace(sourceOperation.BotAssetId) ||
-            string.IsNullOrWhiteSpace(sourceOperation.BotClassId) ||
-            string.IsNullOrWhiteSpace(sourceOperation.BotInstanceId))
+        if (string.IsNullOrWhiteSpace(marketItem.AssetId) ||
+            string.IsNullOrWhiteSpace(marketItem.ClassId) ||
+            string.IsNullOrWhiteSpace(marketItem.InstanceId))
         {
             return new MarketDeliveryResult
             {
@@ -135,23 +155,24 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
             MarketItemId = marketItem.Id,
             BuyerSteamId = buyer.SteamId,
             BuyerTradeUrl = buyer.TradeUrl!,
-            AppId = sourceOperation.AppId,
-            ContextId = sourceOperation.ContextId,
-            AssetId = sourceOperation.BotAssetId,
-            ClassId = sourceOperation.BotClassId,
-            InstanceId = sourceOperation.BotInstanceId,
+            AppId = marketItem.AppId,
+            ContextId = marketItem.ContextId,
+            AssetId = marketItem.AssetId,
+            ClassId = marketItem.ClassId,
+            InstanceId = marketItem.InstanceId,
             ItemName = marketItem.ItemName
         };
 
         await _appLogService.WriteAsync(
             "Info",
-            $"Bot delivery request started. MarketItemId={marketItem.Id}; BuyerSteamId={buyer.SteamId}; AssetId={request.AssetId}; AppId={request.AppId}; ContextId={request.ContextId}",
+            $"Bot delivery request started. MarketPurchaseId={marketItem.Id}; BuyerSteamId={buyer.SteamId}; AssetId={request.AssetId}; AppId={request.AppId}; ContextId={request.ContextId}",
             nameof(BotServiceSteamTradeClient),
             cancellationToken: cancellationToken);
 
         try
         {
             using var response = await _httpClient.PostAsJsonAsync("/api/trades/delivery", request, SerializerOptions, cancellationToken);
+            MarkServiceReachable();
             var payload = await DeserializeAsync<CreateTradeResponse>(response, cancellationToken);
             if (!response.IsSuccessStatusCode || payload is null)
             {
@@ -166,7 +187,7 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
 
             await _appLogService.WriteAsync(
                 payload.Success ? "Info" : "Warning",
-                $"Bot delivery request finished. MarketItemId={marketItem.Id}; Success={payload.Success}; Status={payload.NewStatus}; OfferId={payload.TradeOfferId ?? "<null>"}; Message={payload.Message}",
+                $"Bot delivery request finished. MarketPurchaseId={marketItem.Id}; Success={payload.Success}; Status={payload.NewStatus}; OfferId={payload.TradeOfferId ?? "<null>"}; Message={payload.Message}",
                 nameof(BotServiceSteamTradeClient),
                 cancellationToken: cancellationToken);
 
@@ -178,12 +199,29 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
                 Message = payload.Message ?? "Bot delivery request failed."
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
-            _logger.LogError(exception, "Bot delivery request failed for MarketItemId {MarketItemId}.", marketItem.Id);
+            if (await TryHandleConnectivityFailureAsync(
+                    "Bot delivery request",
+                    $"Bot delivery request could not reach bot service. MarketPurchaseId={marketItem.Id}",
+                    exception,
+                    cancellationToken))
+            {
+                return new MarketDeliveryResult
+                {
+                    NewStatus = "DeliveryFailed",
+                    Message = "Bot service is unreachable."
+                };
+            }
+
+            _logger.LogError(exception, "Bot delivery request failed for MarketPurchaseId {MarketPurchaseId}.", marketItem.Id);
             await _appLogService.WriteAsync(
                 "Error",
-                $"Bot delivery request failed unexpectedly. MarketItemId={marketItem.Id}",
+                $"Bot delivery request failed unexpectedly. MarketPurchaseId={marketItem.Id}",
                 nameof(BotServiceSteamTradeClient),
                 exception,
                 cancellationToken);
@@ -213,6 +251,7 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
                 SerializerOptions,
                 cancellationToken);
 
+            MarkServiceReachable();
             var payload = await DeserializeAsync<GetOfferStatusesResponse>(response, cancellationToken);
             if (!response.IsSuccessStatusCode || payload?.Offers is null)
             {
@@ -223,8 +262,21 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
 
             return payload.Offers;
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
+            if (await TryHandleConnectivityFailureAsync(
+                    "Bot status polling",
+                    $"Bot status polling could not reach bot service. Count={requests.Count}",
+                    exception,
+                    cancellationToken))
+            {
+                return Array.Empty<SteamTradeOfferStatusResult>();
+            }
+
             _logger.LogError(exception, "Bot status polling failed for {Count} offers.", requests.Count);
             await _appLogService.WriteAsync(
                 "Error",
@@ -245,6 +297,49 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
         }
 
         return JsonSerializer.Deserialize<T>(content, SerializerOptions);
+    }
+
+    private void MarkServiceReachable()
+    {
+        _availabilityTracker.RegisterSuccess(_options.ServiceUrl);
+    }
+
+    private async Task<bool> TryHandleConnectivityFailureAsync(
+        string operation,
+        string message,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        if (!BotServiceFailureClassifier.IsConnectivityFailure(exception, cancellationToken))
+        {
+            return false;
+        }
+
+        var registration = _availabilityTracker.RegisterFailure(_options.ServiceUrl);
+        if (registration.ShouldLog)
+        {
+            _logger.LogWarning(
+                exception,
+                "{Operation} could not reach bot service at {ServiceUrl}. FailureCount={FailureCount}",
+                operation,
+                _options.ServiceUrl,
+                registration.FailureCount);
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"{message}; ServiceUrl={_options.ServiceUrl}; FailureCount={registration.FailureCount}; Reason={exception.Message}",
+                nameof(BotServiceSteamTradeClient),
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "{Operation} still cannot reach bot service at {ServiceUrl}. FailureCount={FailureCount}",
+                operation,
+                _options.ServiceUrl,
+                registration.FailureCount);
+        }
+
+        return true;
     }
 
     private sealed class CreateIntakeTradeRequest

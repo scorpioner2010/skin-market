@@ -4,9 +4,13 @@
     ViewData["Title"] = L["Page_Market_Title"];
 }
 
-<div class="py-4">
+<div class="market-page py-4">
     <div class="page-header">
-        <div><h1>@L["Page_Market_Title"]</h1></div>
+        <div>
+            <span class="section-kicker">Live Bot Inventory</span>
+            <h1>@L["Page_Market_Title"]</h1>
+            <p class="page-description market-page-description">Items shown here are pulled directly from the bot inventory, so the market reflects what is actually available right now.</p>
+        </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
@@ -21,12 +25,13 @@
 
     @if (User.Identity?.IsAuthenticated ?? false)
     {
-        <div class="summary-card">
-            <h2>@Model.CurrentBalance</h2>
+        <div class="summary-card market-balance-card">
+            <span class="market-balance-label">Available balance</span>
+            <h2>$@Model.CurrentBalance.ToString("0.00")</h2>
         </div>
     }
 
-    @if (Model.Items.Count == 0)
+    @if (Model.GroupedItems.Count == 0)
     {
         <div class="empty-state">
             <h2>@L["Market_Empty_Title"]</h2>
@@ -36,48 +41,82 @@
     {
         <section class="page-section">
             <div class="section-heading">
-                <div><h2>@L["Market_AvailableItems_Title"]</h2></div>
+                <div>
+                    <h2>@L["Market_AvailableItems_Title"]</h2>
+                    <p class="section-description">@Model.GroupedItems.Count grouped listing(s), @Model.TotalAvailableItemCount total item(s) currently visible from the bot inventory.</p>
+                </div>
             </div>
-            <div class="card-grid">
-                @foreach (var item in Model.Items)
+            <div class="card-grid market-card-grid">
+                @foreach (var item in Model.GroupedItems)
                 {
-                    <article class="content-card item-card">
-                        <div class="item-card-top">
-                            @if (!string.IsNullOrWhiteSpace(item.IconUrl))
-                            {
-                                <img src="@item.IconUrl" alt="@item.ItemName" class="item-icon" />
-                            }
-                            <div>
-                                <h2 class="card-title">@item.ItemName</h2>
-                                <p class="price-tag">$@item.Price.ToString("0.00")</p>
+                    <article class="content-card item-card market-item-card">
+                        <div class="market-item-top">
+                            <div class="market-item-visual">
+                                @if (!string.IsNullOrWhiteSpace(item.IconUrl))
+                                {
+                                    <img src="@item.IconUrl" alt="@item.ItemName" class="item-icon market-item-icon" />
+                                }
+                                else
+                                {
+                                    <div class="market-item-icon-fallback" aria-hidden="true">
+                                        @((item.ItemName.FirstOrDefault()).ToString().ToUpperInvariant())
+                                    </div>
+                                }
+                            </div>
+                            <div class="market-item-copy">
+                                <div class="market-item-head">
+                                    <div>
+                                        <h2 class="card-title market-item-title">@item.ItemName</h2>
+                                        @if (!string.IsNullOrWhiteSpace(item.MarketHashName))
+                                        {
+                                            <p class="card-subtitle market-item-subtitle">@item.MarketHashName</p>
+                                        }
+                                    </div>
+                                    <div class="market-price-block">
+                                        <span class="compact-badge market-quantity-badge">Qty: @item.Quantity</span>
+                                        <span class="market-price-label">Price</span>
+                                        <p class="price-tag market-price-tag">$@item.Price.ToString("0.00")</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <dl class="detail-list compact">
-                            <div class="detail-row">
-                                <dt>AssetId</dt>
-                                <dd class="break-value">@item.AssetId</dd>
+
+                        <dl class="detail-list compact market-detail-list">
+                            <div class="detail-row market-detail-row">
+                                <dt>Asset ID</dt>
+                                <dd class="break-value market-detail-value">@item.AssetId</dd>
                             </div>
-                            <div class="detail-row">
-                                <dt>@L["Inventory_Column_Status"]</dt>
-                                <dd><span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span></dd>
-                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.MarketHashName))
+                            {
+                                <div class="detail-row market-detail-row">
+                                    <dt>Market Hash</dt>
+                                    <dd class="break-value market-detail-value">@item.MarketHashName</dd>
+                                </div>
+                            }
                         </dl>
 
-                        @if (item.Status == "Sold")
+                        @if (!(User.Identity?.IsAuthenticated ?? false))
                         {
-                            <p class="meta-note">@UiTextLocalizer.LocalizeStatus(L, "Sold")</p>
-                        }
-                        else if (!(User.Identity?.IsAuthenticated ?? false))
-                        {
-                            <div class="action-row">
-                                <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+                            <div class="action-row market-item-actions">
+                                <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
                             </div>
+                        }
+                        else if (!item.HasBuyableItems)
+                        {
+                            <p class="meta-note market-owner-note">Your item is already in the bot inventory.</p>
                         }
                         else
                         {
-                            <form method="post" asp-page-handler="Buy" class="action-row">
-                                <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
-                                <button type="submit" class="btn app-button-primary">@L["Common_Buy"]</button>
+                            <form method="post" asp-page-handler="Buy" class="action-row market-item-actions">
+                                <input type="hidden" asp-for="PurchaseRequest.GameType" value="@item.GameType" />
+                                <input type="hidden" asp-for="PurchaseRequest.AppId" value="@item.AppId" />
+                                <input type="hidden" asp-for="PurchaseRequest.ContextId" value="@item.ContextId" />
+                                <input type="hidden" asp-for="PurchaseRequest.AssetId" value="@item.AssetId" />
+                                <input type="hidden" asp-for="PurchaseRequest.ClassId" value="@item.ClassId" />
+                                <input type="hidden" asp-for="PurchaseRequest.InstanceId" value="@item.InstanceId" />
+                                <input type="hidden" asp-for="PurchaseRequest.ItemName" value="@item.ItemName" />
+                                <input type="hidden" asp-for="PurchaseRequest.MarketHashName" value="@item.MarketHashName" />
+                                <button type="submit" class="btn app-button-primary market-action-button">@L["Common_Buy"]</button>
                             </form>
                         }
                     </article>
@@ -90,7 +129,10 @@
     {
         <section class="page-section">
             <div class="section-heading">
-                <div><h2>@L["Market_Purchases_Title"]</h2></div>
+                <div>
+                    <h2>@L["Market_Purchases_Title"]</h2>
+                    <p class="section-description">Your latest orders and delivery states.</p>
+                </div>
             </div>
             @if (Model.Purchases.Count == 0)
             {
@@ -133,12 +175,16 @@
                                 <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.DeliveryErrorMessage)</div>
                             }
                             <div class="action-row">
-                                @if (item.DeliveryStatus == "PendingDelivery" || item.DeliveryStatus == "DeliveryFailed")
+                                @if (item.DeliveryStatus == "DeliveryFailed")
                                 {
                                     <form method="post" asp-page-handler="CreateDeliveryTrade">
-                                        <input type="hidden" asp-for="MarketItemId" value="@item.Id" />
+                                        <input type="hidden" asp-for="MarketPurchaseId" value="@item.Id" />
                                         <button type="submit" class="btn app-button-secondary">@L["Market_CreateDeliveryTrade"]</button>
                                     </form>
+                                }
+                                else if (item.DeliveryStatus == "PendingDelivery")
+                                {
+                                    <span class="compact-badge compact-badge-neutral">Waiting for automatic delivery creation</span>
                                 }
                                 else if (item.DeliveryStatus == "DeliveryTradeCreated" ||
                                          item.DeliveryStatus == "AwaitingBuyerAction" ||

@@ -1,10 +1,13 @@
 namespace SkinMarket.Models;
 
-public class MarketItem
+public class MarketPurchaseRecord
 {
     public Guid Id { get; set; }
-    public Guid SourceTradeOperationId { get; set; }
+    public GameType GameType { get; set; } = GameType.CS2;
+    public Guid? SourceTradeOperationId { get; set; }
     public Guid? BuyerAppUserId { get; set; }
+    public int AppId { get; set; } = 730;
+    public string ContextId { get; set; } = "2";
     public string AssetId { get; set; } = string.Empty;
     public string ClassId { get; set; } = string.Empty;
     public string InstanceId { get; set; } = string.Empty;

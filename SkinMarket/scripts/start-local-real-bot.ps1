@@ -34,15 +34,10 @@ if (-not (Test-Path (Join-Path $botDir "node_modules"))) {
     }
 }
 
-$botProcess = Start-Process -FilePath "node" -ArgumentList "src/server.js" -WorkingDirectory $botDir -PassThru
-
+Push-Location $root
 try {
-    Push-Location $root
     dotnet run --launch-profile local-real-bot
 }
 finally {
     Pop-Location
-    if ($botProcess -and -not $botProcess.HasExited) {
-        Stop-Process -Id $botProcess.Id -Force
-    }
 }

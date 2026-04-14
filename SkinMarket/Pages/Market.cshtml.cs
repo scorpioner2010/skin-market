@@ -7,6 +7,7 @@ using SkinMarket.Models;
 using SkinMarket.Data;
 using SkinMarket.Infrastructure;
 using SkinMarket.Localization;
+using SkinMarket.Services;
 
 namespace SkinMarket.Pages;
 
@@ -38,16 +39,20 @@ public class MarketModel : PageModel
         _runtimeState = runtimeState;
     }
 
-    public List<MarketItem> Items { get; private set; } = new();
-    public List<MarketItem> Purchases { get; private set; } = new();
+    public List<MarketListingItem> Items { get; private set; } = new();
+    public List<GroupedMarketListingItem> GroupedItems { get; private set; } = new();
+    public List<MarketPurchaseRecord> Purchases { get; private set; } = new();
     public Guid? CurrentUserId { get; private set; }
     public decimal CurrentBalance { get; private set; }
+    public int TotalAvailableItemCount { get; private set; }
     [TempData]
     public string? SuccessMessage { get; set; }
     [TempData]
     public string? ErrorMessage { get; set; }
     [BindProperty]
-    public Guid MarketItemId { get; set; }
+    public MarketPurchaseRequest PurchaseRequest { get; set; } = new();
+    [BindProperty]
+    public Guid MarketPurchaseId { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -59,6 +64,8 @@ public class MarketModel : PageModel
 
         await LoadCurrentUserAsync(cancellationToken);
         Items = await _marketService.GetAvailableItemsAsync(cancellationToken);
+        TotalAvailableItemCount = Items.Count;
+        GroupedItems = BuildGroupedItems(Items, CurrentUserId);
         if (CurrentUserId.HasValue)
         {
             Purchases = await _marketPurchaseService.GetRecentPurchasesAsync(CurrentUserId.Value, 10, cancellationToken);
@@ -80,7 +87,7 @@ public class MarketModel : PageModel
             return RedirectToPage();
         }
 
-        var result = await _marketPurchaseService.PurchaseAsync(MarketItemId, CurrentUserId.Value, cancellationToken);
+        var result = await _marketPurchaseService.PurchaseAsync(PurchaseRequest, CurrentUserId.Value, cancellationToken);
         if (result.Success)
         {
             SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
@@ -108,7 +115,7 @@ public class MarketModel : PageModel
             return RedirectToPage();
         }
 
-        var result = await _marketDeliveryService.CreateDeliveryTradeAsync(MarketItemId, CurrentUserId.Value, cancellationToken);
+        var result = await _marketDeliveryService.CreateDeliveryTradeAsync(MarketPurchaseId, CurrentUserId.Value, cancellationToken);
         if (result.Success)
         {
             SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
@@ -136,7 +143,7 @@ public class MarketModel : PageModel
             return RedirectToPage();
         }
 
-        var result = await _marketDeliveryService.ConfirmDeliveredAsync(MarketItemId, CurrentUserId.Value, cancellationToken);
+        var result = await _marketDeliveryService.ConfirmDeliveredAsync(MarketPurchaseId, CurrentUserId.Value, cancellationToken);
         if (result.Success)
         {
             SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
@@ -173,5 +180,50 @@ public class MarketModel : PageModel
 
         CurrentUserId = user.Id;
         CurrentBalance = await _balanceService.GetBalanceAsync(user.Id, cancellationToken);
+    }
+
+    private static List<GroupedMarketListingItem> BuildGroupedItems(
+        IReadOnlyCollection<MarketListingItem> items,
+        Guid? currentUserId)
+    {
+        return items
+            .GroupBy(ItemGroupingKeyUtility.ForMarket, StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var entries = group.ToList();
+                var ownedByCurrentUserCount = currentUserId.HasValue
+                    ? entries.Count(item => item.SellerAppUserId == currentUserId.Value)
+                    : 0;
+                var buyableEntry = currentUserId.HasValue
+                    ? entries.FirstOrDefault(item => item.SellerAppUserId != currentUserId.Value)
+                    : entries.FirstOrDefault();
+                var representativeEntry = buyableEntry ?? entries.First();
+
+                return new GroupedMarketListingItem
+                {
+                    GameType = representativeEntry.GameType,
+                    SourceTradeOperationId = representativeEntry.SourceTradeOperationId,
+                    SellerAppUserId = representativeEntry.SellerAppUserId,
+                    AppId = representativeEntry.AppId,
+                    ContextId = representativeEntry.ContextId,
+                    AssetId = representativeEntry.AssetId,
+                    ClassId = representativeEntry.ClassId,
+                    InstanceId = representativeEntry.InstanceId,
+                    ItemName = representativeEntry.ItemName,
+                    MarketHashName = representativeEntry.MarketHashName,
+                    IconUrl = representativeEntry.IconUrl,
+                    Price = representativeEntry.Price,
+                    Tradable = representativeEntry.Tradable,
+                    Marketable = representativeEntry.Marketable,
+                    Quantity = entries.Count,
+                    BuyableQuantity = currentUserId.HasValue
+                        ? entries.Count(item => item.SellerAppUserId != currentUserId.Value)
+                        : entries.Count,
+                    CurrentUserOwnedQuantity = ownedByCurrentUserCount
+                };
+            })
+            .OrderBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(item => item.MarketHashName, StringComparer.Ordinal)
+            .ToList();
     }
 }

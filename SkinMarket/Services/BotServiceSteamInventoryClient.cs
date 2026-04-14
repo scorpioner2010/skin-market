@@ -13,6 +13,7 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
     private readonly HttpClient _httpClient;
     private readonly SteamBotOptions _options;
     private readonly IGameCatalog _gameCatalog;
+    private readonly BotServiceAvailabilityTracker _availabilityTracker;
     private readonly IAppLogService _appLogService;
     private readonly ILogger<BotServiceSteamInventoryClient> _logger;
 
@@ -20,12 +21,14 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
         HttpClient httpClient,
         IOptions<SteamBotOptions> options,
         IGameCatalog gameCatalog,
+        BotServiceAvailabilityTracker availabilityTracker,
         IAppLogService appLogService,
         ILogger<BotServiceSteamInventoryClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
         _gameCatalog = gameCatalog;
+        _availabilityTracker = availabilityTracker;
         _appLogService = appLogService;
         _logger = logger;
     }
@@ -56,6 +59,7 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
                 request,
                 SerializerOptions,
                 cancellationToken);
+            MarkServiceReachable();
             var payload = await DeserializeAsync<GetInventoryResponse>(response, cancellationToken);
             if (!response.IsSuccessStatusCode || payload is null)
             {
@@ -89,8 +93,24 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
                 Items = payload.Items
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception)
         {
+            if (await TryHandleConnectivityFailureAsync(
+                    steamId,
+                    game.Key,
+                    exception,
+                    cancellationToken))
+            {
+                return new SteamInventoryResultDto
+                {
+                    ErrorMessage = "Bot service is unreachable."
+                };
+            }
+
             _logger.LogError(exception, "Bot inventory request failed for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
             await _appLogService.WriteAsync(
                 "Error",
@@ -115,6 +135,47 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
         }
 
         return JsonSerializer.Deserialize<T>(content, SerializerOptions);
+    }
+
+    private void MarkServiceReachable()
+    {
+        _availabilityTracker.RegisterSuccess(_options.ServiceUrl);
+    }
+
+    private async Task<bool> TryHandleConnectivityFailureAsync(
+        string steamId,
+        string gameKey,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        if (!BotServiceFailureClassifier.IsConnectivityFailure(exception, cancellationToken))
+        {
+            return false;
+        }
+
+        var registration = _availabilityTracker.RegisterFailure(_options.ServiceUrl);
+        if (registration.ShouldLog)
+        {
+            _logger.LogWarning(
+                exception,
+                "Bot inventory request could not reach bot service at {ServiceUrl}. FailureCount={FailureCount}",
+                _options.ServiceUrl,
+                registration.FailureCount);
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Bot inventory request could not reach bot service. SteamId={steamId}; Game={gameKey}; ServiceUrl={_options.ServiceUrl}; FailureCount={registration.FailureCount}; Reason={exception.Message}",
+                nameof(BotServiceSteamInventoryClient),
+                cancellationToken: cancellationToken);
+        }
+        else
+        {
+            _logger.LogDebug(
+                "Bot inventory request still cannot reach bot service at {ServiceUrl}. FailureCount={FailureCount}",
+                _options.ServiceUrl,
+                registration.FailureCount);
+        }
+
+        return true;
     }
 
     private sealed class GetInventoryRequest

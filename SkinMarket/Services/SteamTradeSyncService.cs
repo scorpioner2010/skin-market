@@ -80,7 +80,7 @@ public class SteamTradeSyncService : BackgroundService
                                  operation.Status == "InEscrow"))
             .ToListAsync(cancellationToken);
 
-        var deliveryItems = await dbContext.MarketItems
+        var deliveryItems = await dbContext.MarketPurchaseRecords
             .Where(item => item.DeliveryTradeOfferId != null &&
                            (item.DeliveryStatus == "DeliveryBotPending" ||
                             item.DeliveryStatus == "AwaitingBotConfirmation" ||
@@ -258,7 +258,7 @@ public class SteamTradeSyncService : BackgroundService
     }
 
     private static bool ApplyDeliveryStatus(
-        MarketItem item,
+        MarketPurchaseRecord item,
         SteamTradeOfferStatusResult status,
         ICollection<(string Level, string Message, string Source)> logs)
     {
@@ -307,7 +307,7 @@ public class SteamTradeSyncService : BackgroundService
         {
             logs.Add((
                 item.DeliveryStatus == "DeliveryFailed" ? "Warning" : "Info",
-                $"Delivery trade state changed. MarketItemId={item.Id}; OfferId={item.DeliveryTradeOfferId ?? "<null>"}; PreviousStatus={previousStatus ?? "<null>"}; NewStatus={item.DeliveryStatus ?? "<null>"}; SteamState={status.State}; Message={item.DeliveryErrorMessage ?? "<null>"}",
+                $"Delivery trade state changed. MarketPurchaseId={item.Id}; OfferId={item.DeliveryTradeOfferId ?? "<null>"}; PreviousStatus={previousStatus ?? "<null>"}; NewStatus={item.DeliveryStatus ?? "<null>"}; SteamState={status.State}; Message={item.DeliveryErrorMessage ?? "<null>"}",
                 nameof(SteamTradeSyncService)));
         }
 

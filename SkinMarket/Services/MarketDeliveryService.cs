@@ -25,8 +25,7 @@ public class MarketDeliveryService : IMarketDeliveryService
 
     public async Task<MarketDeliveryResult> CreateDeliveryTradeAsync(Guid marketItemId, Guid buyerAppUserId, CancellationToken cancellationToken = default)
     {
-        var marketItem = await _dbContext.MarketItems
-            .Include(item => item.SourceTradeOperation)
+        var marketItem = await _dbContext.MarketPurchaseRecords
             .SingleOrDefaultAsync(item => item.Id == marketItemId && item.BuyerAppUserId == buyerAppUserId, cancellationToken);
 
         if (marketItem is null)
@@ -80,16 +79,9 @@ public class MarketDeliveryService : IMarketDeliveryService
             return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
         }
 
-        if (marketItem.SourceTradeOperation is null)
-        {
-            marketItem.UpdatedAtUtc = DateTime.UtcNow;
-            marketItem.DeliveryErrorMessage = "Source trade operation was not found for this market item.";
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
-        }
-
-        if (string.IsNullOrWhiteSpace(marketItem.SourceTradeOperation.BotAssetId))
+        if (string.IsNullOrWhiteSpace(marketItem.AssetId) ||
+            string.IsNullOrWhiteSpace(marketItem.ClassId) ||
+            string.IsNullOrWhiteSpace(marketItem.InstanceId))
         {
             marketItem.UpdatedAtUtc = DateTime.UtcNow;
             marketItem.DeliveryErrorMessage = "Bot inventory asset mapping is missing for this market item.";
@@ -119,7 +111,7 @@ public class MarketDeliveryService : IMarketDeliveryService
         marketItem.DeliveryTradeOfferId = null;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var deliveryResult = await _steamTradeClient.CreateDeliveryTradeAsync(marketItem, marketItem.SourceTradeOperation, buyer, cancellationToken);
+        var deliveryResult = await _steamTradeClient.CreateDeliveryTradeAsync(marketItem, buyer, cancellationToken);
         marketItem.DeliveryStatus = deliveryResult.Success ? deliveryResult.NewStatus : "DeliveryFailed";
         marketItem.DeliveryTradeOfferId = deliveryResult.DeliveryTradeOfferId;
         marketItem.UpdatedAtUtc = DateTime.UtcNow;
@@ -131,7 +123,7 @@ public class MarketDeliveryService : IMarketDeliveryService
 
     public async Task<MarketDeliveryResult> ConfirmDeliveredAsync(Guid marketItemId, Guid buyerAppUserId, CancellationToken cancellationToken = default)
     {
-        var marketItem = await _dbContext.MarketItems
+        var marketItem = await _dbContext.MarketPurchaseRecords
             .SingleOrDefaultAsync(item => item.Id == marketItemId && item.BuyerAppUserId == buyerAppUserId, cancellationToken);
 
         if (marketItem is null)

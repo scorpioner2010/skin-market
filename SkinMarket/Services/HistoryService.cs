@@ -44,7 +44,7 @@ public class HistoryService : IHistoryService
             })
             .ToListAsync(cancellationToken);
 
-        var purchases = await _dbContext.MarketItems
+        var purchases = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
             .Where(item => item.BuyerAppUserId == appUserId)
             .OrderByDescending(item => item.PurchasedAtUtc)

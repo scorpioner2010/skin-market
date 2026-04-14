@@ -5,6 +5,7 @@ public class SteamBotOptions
     public const string SectionName = "SteamBot";
 
     public bool Enabled { get; set; }
+    public bool AutoStartLocalService { get; set; } = true;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
     public string BotSteamId { get; set; } = string.Empty;

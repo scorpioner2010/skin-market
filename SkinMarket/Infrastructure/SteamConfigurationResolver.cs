@@ -7,6 +7,7 @@ public static class SteamConfigurationResolver
         var options = configuration.GetSection(SteamBotOptions.SectionName).Get<SteamBotOptions>() ?? new SteamBotOptions();
 
         options.Enabled = ResolveBoolean(configuration, options.Enabled, "STEAM_BOT_ENABLED", "SteamBot__Enabled");
+        options.AutoStartLocalService = ResolveBoolean(configuration, options.AutoStartLocalService, "STEAM_BOT_AUTOSTART_LOCAL_SERVICE", "SteamBot__AutoStartLocalService");
         options.Username = ResolveString(configuration, options.Username, "STEAM_BOT_USERNAME", "SteamBot__Username");
         options.Password = ResolveString(configuration, options.Password, "STEAM_BOT_PASSWORD", "SteamBot__Password");
         options.BotSteamId = ResolveString(configuration, options.BotSteamId, "STEAM_BOT_STEAM_ID", "SteamBot__BotSteamId");
