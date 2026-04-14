@@ -9,6 +9,7 @@ using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 using SkinMarket.Services;
 using System.Globalization;
+using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 
@@ -140,13 +141,26 @@ builder.Services.AddHttpClient<ISteamTradeClient, BotServiceSteamTradeClient>((s
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
+builder.Services.AddHttpClient<ISteamBotInventoryClient, BotServiceSteamInventoryClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<SteamBotOptions>>().Value;
+    client.BaseAddress = new Uri(options.ServiceUrl, UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
 builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();
 builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
     client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
-});
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.Brotli |
+                                 DecompressionMethods.GZip |
+                                 DecompressionMethods.Deflate
+    });
 builder.Services.AddHttpClient<ISteamProfileService, SteamProfileService>();
 builder.Services.AddHttpClient<ISkinportPricingService, SkinportPricingService>(client =>
 {

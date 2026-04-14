@@ -53,6 +53,80 @@ class SteamBot {
     this.registerEventHandlers();
   }
 
+  async getUserInventory(payload) {
+    await this.ensureReady();
+    this.validatePayload(payload, [
+      "steamId",
+      "appId",
+      "contextId"
+    ]);
+
+    const steamId = String(payload.steamId).trim();
+    const appId = Number(payload.appId);
+    const contextId = String(payload.contextId).trim();
+    if (!steamId) {
+      throw new HttpError(400, "steamId is required.");
+    }
+
+    if (!Number.isFinite(appId) || appId <= 0) {
+      throw new HttpError(400, "appId is invalid.");
+    }
+
+    if (!contextId) {
+      throw new HttpError(400, "contextId is required.");
+    }
+
+    this.logger.info("Loading user inventory through Steam bot session.", {
+      steamId,
+      appId,
+      contextId
+    });
+
+    try {
+      const { items, totalInventoryCount } = await new Promise((resolve, reject) => {
+        this.community.getUserInventoryContents(
+          steamId,
+          appId,
+          contextId,
+          false,
+          "english",
+          (error, inventory, _currency, totalCount) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve({
+              items: Array.isArray(inventory) ? inventory : [],
+              totalInventoryCount: Number.isFinite(totalCount) ? totalCount : null
+            });
+          }
+        );
+      });
+
+      return {
+        success: true,
+        itemCount: items.length,
+        totalInventoryCount: totalInventoryCount ?? items.length,
+        items: items
+          .map((item) => ({
+            assetId: String(item.assetid || item.id || ""),
+            classId: String(item.classid || ""),
+            instanceId: String(item.instanceid || "0"),
+            name: item.name || "Unknown Item",
+            marketHashName: item.market_hash_name || null,
+            marketName: item.market_name || null,
+            iconUrl: this.getInventoryItemIconUrl(item),
+            tradable: item.tradable === undefined ? null : Boolean(item.tradable),
+            marketable: item.marketable === undefined ? null : Boolean(item.marketable)
+          }))
+          .filter((item) => item.assetId)
+      };
+    } catch (error) {
+      throw this.mapInventoryError(error);
+    }
+  }
+
   async start() {
     fs.mkdirSync(this.config.dataDirectory, { recursive: true });
 
@@ -613,6 +687,15 @@ class SteamBot {
     });
   }
 
+  getInventoryItemIconUrl(item) {
+    const iconPath = item?.icon_url_large || item?.icon_url;
+    if (!iconPath) {
+      return null;
+    }
+
+    return `https://community.akamai.steamstatic.com/economy/image/${iconPath}`;
+  }
+
   getOfferStateName(state) {
     const entries = Object.entries(TradeOfferManager.ETradeOfferState);
     const matched = entries.find(([, value]) => value === state);
@@ -664,6 +747,27 @@ class SteamBot {
 
   resetReadyDeferred() {
     this.readyDeferred = createDeferred();
+  }
+
+  mapInventoryError(error) {
+    if (error instanceof HttpError) {
+      return error;
+    }
+
+    const message = error?.message || "Steam inventory request via bot failed.";
+    if (message.includes("HTTP error 429")) {
+      return new HttpError(429, "Steam inventory request via bot was rate limited.");
+    }
+
+    if (message.includes("private")) {
+      return new HttpError(403, "Steam inventory is private or unavailable.");
+    }
+
+    if (message.includes("Malformed response")) {
+      return new HttpError(502, "Steam inventory returned an invalid payload through the bot session.");
+    }
+
+    return new HttpError(502, `Steam inventory request via bot failed: ${message}`);
   }
 }
 

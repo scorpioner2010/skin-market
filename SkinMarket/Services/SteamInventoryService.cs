@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
@@ -13,25 +14,29 @@ public class SteamInventoryService : ISteamInventoryService
     private static readonly TimeSpan FreshCacheDuration = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleCacheDuration = TimeSpan.FromHours(12);
     private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromMinutes(15);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> RequestLocks = new(StringComparer.Ordinal);
     private const int BodySnippetLength = 280;
     private readonly HttpClient _httpClient;
     private readonly IMemoryCache _memoryCache;
     private readonly ILogger<SteamInventoryService> _logger;
     private readonly IGameCatalog _gameCatalog;
     private readonly IAppLogService _appLogService;
+    private readonly ISteamBotInventoryClient _botInventoryClient;
 
     public SteamInventoryService(
         HttpClient httpClient,
         IMemoryCache memoryCache,
         ILogger<SteamInventoryService> logger,
         IGameCatalog gameCatalog,
-        IAppLogService appLogService)
+        IAppLogService appLogService,
+        ISteamBotInventoryClient botInventoryClient)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
         _logger = logger;
         _gameCatalog = gameCatalog;
         _appLogService = appLogService;
+        _botInventoryClient = botInventoryClient;
     }
 
     public async Task<SteamInventoryResultDto> GetInventoryAsync(string steamId, GameType gameType, CancellationToken cancellationToken = default)
@@ -51,42 +56,69 @@ public class SteamInventoryService : ISteamInventoryService
             return cachedInventory;
         }
 
-        if (_memoryCache.TryGetValue<DateTimeOffset>(cooldownKey, out var cooldownUntil) &&
-            cooldownUntil > DateTimeOffset.UtcNow)
-        {
-            if (_memoryCache.TryGetValue<SteamInventoryResultDto>(staleCacheKey, out var staleDuringCooldown) &&
-                staleDuringCooldown is not null)
-            {
-                await WriteInventoryLogAsync(
-                    "Warning",
-                    $"Cooldown active. Returning stale inventory. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; CooldownUntil={cooldownUntil.UtcDateTime:O}; ItemCount={staleDuringCooldown.Items.Count}",
-                    cancellationToken: cancellationToken);
-                return staleDuringCooldown;
-            }
-
-            await WriteInventoryLogAsync(
-                "Warning",
-                $"Cooldown active without stale cache. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; CooldownUntil={cooldownUntil.UtcDateTime:O}",
-                cancellationToken: cancellationToken);
-            return new SteamInventoryResultDto
-            {
-                ErrorMessage = "Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes."
-            };
-        }
-
-        _logger.LogInformation("Steam inventory cache miss for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
-        var requestUrl = $"https://steamcommunity.com/inventory/{steamId}/{game.SteamAppId}/{game.SteamContextId}?l=english&count=2000";
-        var stopwatch = Stopwatch.StartNew();
-        string? rawContent = null;
-
-        await WriteInventoryLogAsync(
-            "Info",
-            $"Request started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; Url={requestUrl}",
-            cancellationToken: cancellationToken);
-
+        var requestLock = RequestLocks.GetOrAdd(freshCacheKey, _ => new SemaphoreSlim(1, 1));
+        await requestLock.WaitAsync(cancellationToken);
         try
         {
-            using var response = await _httpClient.GetAsync(requestUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if (_memoryCache.TryGetValue<SteamInventoryResultDto>(freshCacheKey, out cachedInventory) && cachedInventory is not null)
+            {
+                _logger.LogInformation("Steam inventory cache hit for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
+                await WriteInventoryLogAsync(
+                    "Info",
+                    $"Cache hit after lock. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={cachedInventory.Items.Count}",
+                    cancellationToken: cancellationToken);
+                return cachedInventory;
+            }
+
+            if (_memoryCache.TryGetValue<DateTimeOffset>(cooldownKey, out var cooldownUntil) &&
+                cooldownUntil > DateTimeOffset.UtcNow)
+            {
+                if (_memoryCache.TryGetValue<SteamInventoryResultDto>(staleCacheKey, out var staleDuringCooldown) &&
+                    staleDuringCooldown is not null)
+                {
+                    await WriteInventoryLogAsync(
+                        "Warning",
+                        $"Cooldown active. Returning stale inventory. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; CooldownUntil={cooldownUntil.UtcDateTime:O}; ItemCount={staleDuringCooldown.Items.Count}",
+                        cancellationToken: cancellationToken);
+                    return staleDuringCooldown;
+                }
+
+                var botDuringCooldown = await TryGetBotFallbackAsync(
+                    steamId,
+                    gameType,
+                    requestId,
+                    game.Key,
+                    $"Cooldown active without stale cache. CooldownUntil={cooldownUntil.UtcDateTime:O}",
+                    cancellationToken);
+                if (botDuringCooldown is { IsSuccess: true })
+                {
+                    CacheInventory(freshCacheKey, staleCacheKey, botDuringCooldown);
+                    return botDuringCooldown;
+                }
+
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Cooldown active without stale cache. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; CooldownUntil={cooldownUntil.UtcDateTime:O}",
+                    cancellationToken: cancellationToken);
+                return BuildRateLimitedResult();
+            }
+
+            _logger.LogInformation("Steam inventory cache miss for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
+            var requestUrl = $"https://steamcommunity.com/inventory/{steamId}/{game.SteamAppId}/{game.SteamContextId}?l=english&count=2000";
+            var stopwatch = Stopwatch.StartNew();
+            string? rawContent = null;
+
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Request started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; Url={requestUrl}",
+                cancellationToken: cancellationToken);
+
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Referrer = new Uri($"https://steamcommunity.com/profiles/{steamId}/inventory");
+                request.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             await WriteInventoryLogAsync(
                 "Info",
                 $"Headers received. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ContentLength={response.Content.Headers.ContentLength?.ToString() ?? "<null>"}; ContentType={response.Content.Headers.ContentType?.ToString() ?? "<null>"}; RetryAfter={GetRetryAfterValue(response)}",
@@ -114,10 +146,20 @@ public class SteamInventoryService : ISteamInventoryService
                     return staleInventory;
                 }
 
-                return new SteamInventoryResultDto
+                var botResult = await TryGetBotFallbackAsync(
+                    steamId,
+                    gameType,
+                    requestId,
+                    game.Key,
+                    "Steam returned HTTP 429",
+                    cancellationToken);
+                if (botResult is { IsSuccess: true })
                 {
-                    ErrorMessage = "Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes."
-                };
+                    CacheInventory(freshCacheKey, staleCacheKey, botResult);
+                    return botResult;
+                }
+
+                return BuildRateLimitedResult();
             }
 
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
@@ -287,8 +329,7 @@ public class SteamInventoryService : ISteamInventoryService
                 Items = items
             };
 
-            _memoryCache.Set(freshCacheKey, result, FreshCacheDuration);
-            _memoryCache.Set(staleCacheKey, result, StaleCacheDuration);
+            CacheInventory(freshCacheKey, staleCacheKey, result);
             await WriteInventoryLogAsync(
                 items.Count == 0 ? "Warning" : "Info",
                 $"Request finished. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={items.Count}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; AssetCount={rawAssetCount}; DescriptionCount={descriptions.Count}; MissingDescriptionCount={missingDescriptionCount}; MissingMarketNameCount={missingMarketNameCount}; SkippedAssetsWithoutAssetId={skippedAssetsWithoutAssetId}; TradableCount={items.Count(item => item.Tradable == true)}; MarketableCount={items.Count(item => item.Marketable == true)}; Sample={FormatSample(sampleItems)}; FreshCacheSeconds={(int)FreshCacheDuration.TotalSeconds}; StaleCacheHours={(int)StaleCacheDuration.TotalHours}; ElapsedMs={stopwatch.ElapsedMilliseconds}{(items.Count == 0 ? $"; Body={BuildBodySnippet(rawContent)}" : string.Empty)}",
@@ -360,6 +401,11 @@ public class SteamInventoryService : ISteamInventoryService
                 ErrorMessage = $"Steam inventory failed unexpectedly: {exception.GetType().Name}."
             };
         }
+        }
+        finally
+        {
+            requestLock.Release();
+        }
     }
 
     private static string? GetString(JsonElement element, string propertyName)
@@ -388,6 +434,50 @@ public class SteamInventoryService : ISteamInventoryService
     private static string? BuildIconUrl(string? iconPath)
     {
         return string.IsNullOrWhiteSpace(iconPath) ? null : $"{IconBaseUrl}{iconPath}";
+    }
+
+    private void CacheInventory(string freshCacheKey, string staleCacheKey, SteamInventoryResultDto result)
+    {
+        _memoryCache.Set(freshCacheKey, result, FreshCacheDuration);
+        _memoryCache.Set(staleCacheKey, result, StaleCacheDuration);
+    }
+
+    private static SteamInventoryResultDto BuildRateLimitedResult()
+    {
+        return new SteamInventoryResultDto
+        {
+            ErrorMessage = "Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes."
+        };
+    }
+
+    private async Task<SteamInventoryResultDto?> TryGetBotFallbackAsync(
+        string steamId,
+        GameType gameType,
+        string requestId,
+        string gameKey,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Trying bot inventory fallback. RequestId={requestId}; SteamId={steamId}; Game={gameKey}; Reason={reason}",
+            cancellationToken: cancellationToken);
+
+        var result = await _botInventoryClient.GetInventoryAsync(steamId, gameType, cancellationToken);
+        if (result.IsSuccess)
+        {
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Bot inventory fallback succeeded. RequestId={requestId}; SteamId={steamId}; Game={gameKey}; ItemCount={result.Items.Count}",
+                cancellationToken: cancellationToken);
+            return result;
+        }
+
+        await WriteInventoryLogAsync(
+            "Warning",
+            $"Bot inventory fallback failed. RequestId={requestId}; SteamId={steamId}; Game={gameKey}; Error={result.ErrorMessage ?? "<null>"}",
+            cancellationToken: cancellationToken);
+        return null;
     }
 
     private Task WriteInventoryLogAsync(

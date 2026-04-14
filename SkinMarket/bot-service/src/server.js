@@ -42,6 +42,15 @@ app.post("/api/trades/statuses", async (req, res, next) => {
   }
 });
 
+app.post("/api/inventory/user", async (req, res, next) => {
+  try {
+    const result = await bot.getUserInventory(req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _req, res, _next) => {
   const statusCode = error instanceof HttpError ? error.statusCode : 500;
   logger.error("Bot service request failed.", {
