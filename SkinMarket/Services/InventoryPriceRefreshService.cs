@@ -386,7 +386,10 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             {
                 result.Status = "Refreshing";
             }
-            else if (result.HasPrice && tracker.State == PriceRefreshState.Completed && tracker.LastUpdatedUtc >= DateTime.UtcNow.AddMinutes(-1))
+            else if (result.HasPrice &&
+                     !result.NeedsRefresh &&
+                     tracker.State == PriceRefreshState.Completed &&
+                     tracker.LastUpdatedUtc >= DateTime.UtcNow.AddMinutes(-1))
             {
                 result.Status = result.IsEstimated ? "Estimated" : "Live";
                 result.IsCached = false;

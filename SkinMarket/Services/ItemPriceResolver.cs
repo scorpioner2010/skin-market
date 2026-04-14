@@ -98,7 +98,7 @@ public class ItemPriceResolver : IItemPriceResolver
             if (snapshots.TryGetValue(marketHashName, out var snapshot))
             {
                 var snapshotResult = FromSnapshot(snapshot);
-                snapshotResult.NeedsRefresh = snapshot.ExpiresAtUtc < DateTime.UtcNow || IsRetryableFailure(snapshot);
+                snapshotResult.NeedsRefresh = !IsSnapshotFresh(snapshot) || IsRetryableFailure(snapshot);
                 if (snapshotResult.NeedsRefresh && IsRetryableFailure(snapshot))
                 {
                     await _appLogService.WriteAsync(
@@ -220,10 +220,10 @@ public class ItemPriceResolver : IItemPriceResolver
         }
 
         var snapshot = preloadSnapshot ?? await LoadSnapshotAsync(normalizedMarketHashName, gameType, cancellationToken);
-        if (snapshot is not null && snapshot.ExpiresAtUtc >= DateTime.UtcNow && !IsRetryableFailure(snapshot))
+        if (snapshot is not null && IsSnapshotFresh(snapshot))
         {
             var snapshotResult = FromSnapshot(snapshot);
-            _memoryCache.Set(memoryCacheKey, snapshotResult, TimeSpan.FromMinutes(_options.NegativeCacheMinutes));
+            _memoryCache.Set(memoryCacheKey, snapshotResult, GetFreshSnapshotMemoryCacheDuration(snapshot));
             _logger.LogDebug(
                 "Price resolver used fresh snapshot for {GameType} / {MarketHashName} with status {Status}.",
                 gameType,
@@ -310,11 +310,12 @@ public class ItemPriceResolver : IItemPriceResolver
             await _appLogService.WriteAsync("Info", $"Skinport disabled. GameType={(int)gameType}; MarketHashName={normalizedMarketHashName}", nameof(ItemPriceResolver), cancellationToken: cancellationToken);
         }
 
-        if (snapshot is not null && _options.AllowStaleSnapshotFallback && snapshot.HasPrice)
+        if (snapshot is not null && CanUseStaleSnapshot(snapshot))
         {
             var staleResult = FromSnapshot(snapshot);
             staleResult.Status = "Cached";
             staleResult.IsCached = true;
+            staleResult.NeedsRefresh = true;
             staleResult.FailureReason = BuildFailureReason(steamResult, csFloatResult, skinportResult) ?? staleResult.FailureReason;
             staleResult.SteamResult = steamResult;
             staleResult.CsFloatResult = csFloatResult;
@@ -399,7 +400,7 @@ public class ItemPriceResolver : IItemPriceResolver
                 cancellationToken);
 
         var ttlMinutes = result.HasPrice
-            ? Math.Max(_options.SnapshotCacheHours * 60, _options.SkinportItemsCacheMinutes)
+            ? GetFreshSnapshotMinutes(result)
             : _options.NegativeCacheMinutes;
         var updatedAtUtc = DateTime.UtcNow;
         if (existing is null)
@@ -497,8 +498,64 @@ public class ItemPriceResolver : IItemPriceResolver
             LastUpdatedUtc = snapshot.UpdatedAtUtc,
             FailureReason = snapshot.FailureReason,
             ResolvedMarketHashName = snapshot.MarketHashName,
-            NeedsRefresh = snapshot.ExpiresAtUtc < DateTime.UtcNow
+            NeedsRefresh = false
         };
+    }
+
+    private bool IsSnapshotFresh(PriceSnapshot snapshot)
+    {
+        return !IsRetryableFailure(snapshot) &&
+               snapshot.UpdatedAtUtc.Add(GetFreshSnapshotWindow(snapshot)) >= DateTime.UtcNow;
+    }
+
+    private bool CanUseStaleSnapshot(PriceSnapshot snapshot)
+    {
+        if (!snapshot.HasPrice || !_options.AllowStaleSnapshotFallback)
+        {
+            return false;
+        }
+
+        return snapshot.UpdatedAtUtc >= DateTime.UtcNow.AddHours(-Math.Max(1, _options.SnapshotCacheHours));
+    }
+
+    private TimeSpan GetFreshSnapshotMemoryCacheDuration(PriceSnapshot snapshot)
+    {
+        var remaining = snapshot.UpdatedAtUtc.Add(GetFreshSnapshotWindow(snapshot)) - DateTime.UtcNow;
+        if (remaining <= TimeSpan.Zero)
+        {
+            return TimeSpan.FromMinutes(Math.Max(1, _options.NegativeCacheMinutes));
+        }
+
+        return remaining;
+    }
+
+    private int GetFreshSnapshotMinutes(ItemPriceResolutionResult result)
+    {
+        return Math.Max(1, (int)GetFreshSnapshotWindow(result).TotalMinutes);
+    }
+
+    private TimeSpan GetFreshSnapshotWindow(ItemPriceResolutionResult result)
+    {
+        return GetFreshSnapshotWindow(result.Source, result.IsEstimated);
+    }
+
+    private TimeSpan GetFreshSnapshotWindow(PriceSnapshot snapshot)
+    {
+        return GetFreshSnapshotWindow(snapshot.Source, snapshot.IsEstimated);
+    }
+
+    private TimeSpan GetFreshSnapshotWindow(string? source, bool isEstimated)
+    {
+        var minutes = source switch
+        {
+            "Steam" => _options.SteamCacheMinutes,
+            "CSFloat" => _options.CsFloatCacheMinutes,
+            "Skinport" when isEstimated => _options.SkinportItemsCacheMinutes,
+            "Skinport" => _options.SkinportHistoryCacheMinutes,
+            _ => _options.NegativeCacheMinutes
+        };
+
+        return TimeSpan.FromMinutes(Math.Max(1, minutes));
     }
 
     private static bool IsRetryableFailure(PriceSnapshot snapshot)
