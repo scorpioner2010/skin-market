@@ -124,6 +124,12 @@ public class InventoryModel : PageModel
             return RedirectToPage();
         }
 
+        if (await HasActiveTradeFlowAsync(appUser.Id, cancellationToken))
+        {
+            SellErrorMessage = "Finish or cancel the active trade offer before selling another item.";
+            return RedirectToPage();
+        }
+
         if (string.IsNullOrWhiteSpace(Input.AssetId))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Selected inventory item is invalid.");
@@ -374,6 +380,148 @@ public class InventoryModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostCancelIntakeAsync(CancellationToken cancellationToken)
+    {
+        if (_runtimeState.IsDegradedMode)
+        {
+            return BuildCancelIntakeResponse(false, _runtimeState.ServiceUnavailableMessage);
+        }
+
+        var appUser = await GetCurrentUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return BuildCancelIntakeResponse(false, UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request."));
+        }
+
+        if (!Guid.TryParse(Input.TradeOperationId, out var tradeOperationId))
+        {
+            return BuildCancelIntakeResponse(false, UiTextLocalizer.LocalizeMessage(_localizer, "Sale request is invalid."));
+        }
+
+        var operation = await _dbContext.TradeOperations
+            .SingleOrDefaultAsync(item => item.Id == tradeOperationId && item.AppUserId == appUser.Id, cancellationToken);
+        if (operation is null)
+        {
+            return BuildCancelIntakeResponse(false, UiTextLocalizer.LocalizeMessage(_localizer, "Sale request was not found."));
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.TradeOfferId) || !CanCancelIntakeStatus(operation.Status))
+        {
+            return BuildCancelIntakeResponse(false, $"Trade offer cannot be canceled from status {operation.Status}.");
+        }
+
+        var previousStatus = operation.Status;
+        var result = await _steamTradeClient.CancelOfferAsync(
+            operation.TradeOfferId,
+            "intake",
+            $"Seller canceled intake offer from inventory. TradeOperationId={operation.Id}",
+            cancellationToken);
+
+        if (!result.Success)
+        {
+            return BuildCancelIntakeResponse(false, result.Message);
+        }
+
+        operation.Status = "Failed";
+        operation.ErrorMessage = $"Trade offer was canceled by seller. {result.Message}";
+        operation.UpdatedAtUtc = DateTime.UtcNow;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _appLogService.WriteAsync(
+            "Warning",
+            $"Intake trade canceled by seller. TradeOperationId={operation.Id}; AppUserId={appUser.Id}; OfferId={operation.TradeOfferId}; PreviousStatus={previousStatus}; CancelState={result.State ?? "<null>"}; Message={result.Message}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
+
+        return BuildCancelIntakeResponse(true, "Trade offer was canceled.");
+    }
+
+    public async Task<IActionResult> OnGetSaleStatusAsync(CancellationToken cancellationToken)
+    {
+        if (_runtimeState.IsDegradedMode)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = _runtimeState.ServiceUnavailableMessage
+            });
+        }
+
+        var appUser = await GetCurrentUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.")
+            });
+        }
+
+        var statusesToPoll = new[]
+        {
+            "Pending",
+            "BotPending",
+            "AwaitingBotConfirmation",
+            "TradeCreated",
+            "AwaitingUserAction",
+            "TradeAcceptedPendingReceipt",
+            "ReceivedByBot",
+            "InEscrow"
+        };
+
+        var operations = await _dbContext.TradeOperations
+            .AsNoTracking()
+            .Where(operation =>
+                operation.AppUserId == appUser.Id &&
+                statusesToPoll.Contains(operation.Status))
+            .OrderByDescending(operation => operation.UpdatedAtUtc)
+            .Select(operation => new
+            {
+                id = operation.Id,
+                assetId = operation.AssetId,
+                itemName = operation.ItemName,
+                status = operation.Status,
+                statusText = UiTextLocalizer.LocalizeStatus(_localizer, operation.Status),
+                tradeOfferId = operation.TradeOfferId,
+                steamOfferUrl = BuildSteamOfferUrl(operation.TradeOfferId),
+                accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+                canCancel = CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
+                creditAmount = operation.CreditAmount,
+                updatedAtUtc = operation.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return new JsonResult(new
+        {
+            success = true,
+            operations
+        });
+    }
+
+    private IActionResult BuildCancelIntakeResponse(bool success, string message)
+    {
+        if (string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.Ordinal))
+        {
+            Response.StatusCode = success ? StatusCodes.Status200OK : StatusCodes.Status400BadRequest;
+            return new JsonResult(new
+            {
+                success,
+                message
+            });
+        }
+
+        if (success)
+        {
+            SuccessMessage = message;
+        }
+        else
+        {
+            SellErrorMessage = message;
+        }
+
+        return RedirectToPage();
+    }
+
     private async Task LoadPageAsync(CancellationToken cancellationToken)
     {
         var appUser = await GetCurrentUserAsync(cancellationToken);
@@ -400,6 +548,7 @@ public class InventoryModel : PageModel
 
         RecentOperations = await _tradeOperationService.GetRecentOperationsAsync(appUser.Id, 10, cancellationToken);
         LatestOperationsByAssetId = await _tradeOperationService.GetLatestOperationsByAssetIdAsync(appUser.Id, cancellationToken);
+        await RefreshBuyerDeliveryStatusesAsync(appUser.Id, cancellationToken);
         await _appLogService.WriteAsync(
             "Info",
             $"Inventory prerequisites loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; RecentOperations={RecentOperations.Count}; LatestOperationAssets={LatestOperationsByAssetId.Count}",
@@ -419,6 +568,7 @@ public class InventoryModel : PageModel
         }
 
         Items = result.Items;
+        await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, Items, cancellationToken);
         var marketHashNames = Items
             .Select(MarketHashNameUtility.ResolvePrimary)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -557,6 +707,103 @@ public class InventoryModel : PageModel
         return appUser;
     }
 
+    private async Task RefreshBuyerDeliveryStatusesAsync(Guid appUserId, CancellationToken cancellationToken)
+    {
+        var deliveryItems = await _dbContext.MarketPurchaseRecords
+            .Where(item => item.BuyerAppUserId == appUserId &&
+                           item.DeliveryTradeOfferId != null &&
+                           (item.DeliveryStatus == "DeliveryBotPending" ||
+                            item.DeliveryStatus == "AwaitingBotConfirmation" ||
+                            item.DeliveryStatus == "DeliveryTradeCreated" ||
+                            item.DeliveryStatus == "AwaitingBuyerAction" ||
+                            item.DeliveryStatus == "DeliveryInEscrow"))
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+        if (deliveryItems.Count == 0)
+        {
+            return;
+        }
+
+        var requests = deliveryItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId))
+            .Select(item => new SteamTradeOfferStatusRequest
+            {
+                OfferId = item.DeliveryTradeOfferId!,
+                Flow = "delivery"
+            })
+            .ToList();
+        var statusResults = await _steamTradeClient.GetOfferStatusesAsync(requests, cancellationToken);
+        var statusMap = statusResults.ToDictionary(
+            item => item.OfferId,
+            item => item,
+            StringComparer.Ordinal);
+        var transitionLogs = new List<(string Level, string Message, string Source)>();
+        var changed = false;
+        foreach (var item in deliveryItems)
+        {
+            if (string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId) ||
+                !statusMap.TryGetValue(item.DeliveryTradeOfferId, out var status))
+            {
+                continue;
+            }
+
+            changed |= SteamTradeSyncService.ApplyDeliveryStatus(item, status, transitionLogs);
+        }
+
+        if (changed)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var entry in transitionLogs)
+        {
+            await _appLogService.WriteAsync(entry.Level, entry.Message, entry.Source, cancellationToken: cancellationToken);
+        }
+    }
+
+    private async Task AppendDeliveredPurchaseFallbackItemsAsync(
+        Guid appUserId,
+        List<SteamInventoryItemDto> items,
+        CancellationToken cancellationToken)
+    {
+        var visibleKeys = new HashSet<string>(
+            items.Select(BuildInventoryFallbackKey),
+            StringComparer.Ordinal);
+        var deliveredPurchases = await _dbContext.MarketPurchaseRecords
+            .AsNoTracking()
+            .Where(item => item.BuyerAppUserId == appUserId &&
+                           item.DeliveryStatus == "Delivered" &&
+                           item.DeliveredAtUtc != null &&
+                           item.DeliveredAtUtc >= DateTime.UtcNow.AddDays(-14))
+            .OrderByDescending(item => item.DeliveredAtUtc)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        foreach (var purchase in deliveredPurchases)
+        {
+            var key = BuildInventoryFallbackKey(purchase.ClassId, purchase.InstanceId, purchase.MarketHashName, purchase.ItemName);
+            if (!visibleKeys.Add(key))
+            {
+                continue;
+            }
+
+            items.Add(new SteamInventoryItemDto
+            {
+                GameType = purchase.GameType,
+                AssetId = $"delivered:{purchase.Id}",
+                ClassId = purchase.ClassId,
+                InstanceId = purchase.InstanceId,
+                Name = purchase.ItemName,
+                MarketHashName = purchase.MarketHashName,
+                MarketName = purchase.MarketHashName,
+                IconUrl = purchase.IconUrl,
+                Tradable = false,
+                Marketable = false
+            });
+        }
+    }
+
     private async Task<AppUser?> GetCurrentTrackedUserAsync(CancellationToken cancellationToken)
     {
         if (!(User.Identity?.IsAuthenticated ?? false))
@@ -590,6 +837,39 @@ public class InventoryModel : PageModel
         return appUser;
     }
 
+    private async Task<bool> HasActiveTradeFlowAsync(Guid appUserId, CancellationToken cancellationToken)
+    {
+        var activeIntakeStatuses = new[]
+        {
+            "Pending",
+            "BotPending",
+            "AwaitingBotConfirmation",
+            "TradeCreated",
+            "AwaitingUserAction",
+            "TradeAcceptedPendingReceipt",
+            "ReceivedByBot",
+            "InEscrow"
+        };
+        var activeDeliveryStatuses = new[]
+        {
+            "PendingDelivery",
+            "DeliveryBotPending",
+            "AwaitingBotConfirmation",
+            "DeliveryTradeCreated",
+            "AwaitingBuyerAction",
+            "DeliveryInEscrow"
+        };
+
+        return await _dbContext.TradeOperations
+                   .AsNoTracking()
+                   .AnyAsync(operation => operation.AppUserId == appUserId && activeIntakeStatuses.Contains(operation.Status), cancellationToken) ||
+               await _dbContext.MarketPurchaseRecords
+                   .AsNoTracking()
+                   .AnyAsync(item => item.BuyerAppUserId == appUserId &&
+                                     item.DeliveryStatus != null &&
+                                     activeDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
+    }
+
     private static string BuildInventorySample(IEnumerable<SteamInventoryItemDto> items)
     {
         var sample = items
@@ -600,6 +880,21 @@ public class InventoryModel : PageModel
         return sample.Count == 0 ? "<none>" : string.Join(" | ", sample);
     }
 
+    private static string BuildInventoryFallbackKey(SteamInventoryItemDto item)
+    {
+        return BuildInventoryFallbackKey(item.ClassId, item.InstanceId, MarketHashNameUtility.ResolvePrimary(item), item.Name);
+    }
+
+    private static string BuildInventoryFallbackKey(string classId, string instanceId, string? marketHashName, string itemName)
+    {
+        return string.Join(
+            "|",
+            classId,
+            instanceId,
+            MarketHashNameUtility.Normalize(marketHashName) ?? string.Empty,
+            itemName.Trim());
+    }
+
     private static string BuildManualStatusMessage(TradeOperation operation, SteamTradeOfferStatusResult status)
     {
         if (status.State == "Active")
@@ -608,6 +903,18 @@ public class InventoryModel : PageModel
         }
 
         return $"Steam status checked. SteamState={status.State}; AppStatus={operation.Status}; Message={status.Message ?? "<none>"}";
+    }
+
+    private static string BuildSteamOfferUrl(string? offerId)
+    {
+        return string.IsNullOrWhiteSpace(offerId)
+            ? "https://steamcommunity.com/my/tradeoffers/"
+            : $"https://steamcommunity.com/tradeoffer/{offerId}/";
+    }
+
+    private static bool CanCancelIntakeStatus(string? status)
+    {
+        return status is "AwaitingBotConfirmation" or "TradeCreated" or "AwaitingUserAction";
     }
 
     private static List<GroupedInventoryItem> BuildGroupedItems(
@@ -621,8 +928,9 @@ public class InventoryModel : PageModel
                 var entries = group.ToList();
                 var representativeItem = entries.First();
                 var availableItem = entries.FirstOrDefault(item =>
-                    !latestOperationsByAssetId.TryGetValue(item.AssetId, out var latestOperation) ||
-                    !BlocksInventoryItem(latestOperation.Status));
+                    item.Tradable == true &&
+                    (!latestOperationsByAssetId.TryGetValue(item.AssetId, out var latestOperation) ||
+                     !BlocksInventoryItem(latestOperation.Status)));
                 var createTradeOperation = entries
                     .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
                     .Where(operation => operation is not null && operation.Status == "Pending")
@@ -636,9 +944,16 @@ public class InventoryModel : PageModel
                     .OrderByDescending(operation => operation!.UpdatedAtUtc)
                     .FirstOrDefault();
 
-                var statusItems = entries
+                var blockedOperations = entries
                     .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
                     .Where(operation => operation is not null && BlocksInventoryItem(operation.Status))
+                    .Cast<TradeOperation>()
+                    .ToList();
+                var blockedAssetIds = new HashSet<string>(
+                    blockedOperations.Select(operation => operation.AssetId),
+                    StringComparer.Ordinal);
+
+                var statusItems = blockedOperations
                     .GroupBy(operation => operation!.Status, StringComparer.Ordinal)
                     .Select(statusGroup => new GroupedInventoryStatusItem
                     {
@@ -650,7 +965,26 @@ public class InventoryModel : PageModel
                     .ThenBy(item => item.Status, StringComparer.Ordinal)
                     .ToList();
 
-                var readyCount = entries.Count - statusItems.Sum(item => item.Quantity);
+                var tradeProtectedCount = entries.Count(item =>
+                    item.Tradable == false &&
+                    !blockedAssetIds.Contains(item.AssetId));
+                if (tradeProtectedCount > 0)
+                {
+                    statusItems.Add(new GroupedInventoryStatusItem
+                    {
+                        Status = "TradeProtected",
+                        Quantity = tradeProtectedCount
+                    });
+                }
+
+                statusItems = statusItems
+                    .OrderBy(item => GetInventoryStatusOrder(item.Status))
+                    .ThenBy(item => item.Status, StringComparer.Ordinal)
+                    .ToList();
+
+                var readyCount = entries.Count(item =>
+                    item.Tradable != false &&
+                    !blockedAssetIds.Contains(item.AssetId));
                 if (readyCount > 0)
                 {
                     statusItems.Insert(0, new GroupedInventoryStatusItem
@@ -664,6 +998,7 @@ public class InventoryModel : PageModel
                 return new GroupedInventoryItem
                 {
                     GroupKey = group.Key,
+                    AssetIds = entries.Select(item => item.AssetId).ToList(),
                     RepresentativeAssetId = representativeItem.AssetId,
                     ItemName = representativeItem.Name,
                     MarketHashName = MarketHashNameUtility.ResolvePrimary(representativeItem),
@@ -682,6 +1017,7 @@ public class InventoryModel : PageModel
                     CreateTradeOperationId = createTradeOperation?.Id,
                     CreateTradeStatus = createTradeOperation?.Status,
                     AwaitingUserTradeOfferId = awaitingUserOperation?.TradeOfferId,
+                    HasTradeProtected = tradeProtectedCount > 0,
                     HasWaitingForCredit = entries
                         .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
                         .Any(operation => operation is not null &&
@@ -711,6 +1047,7 @@ public class InventoryModel : PageModel
             "AwaitingBotConfirmation" => 4,
             "TradeCreated" => 5,
             "AwaitingUserAction" => 6,
+            "TradeProtected" => 6,
             "ReceivedByBot" => 7,
             "Credited" => 8,
             _ => 20

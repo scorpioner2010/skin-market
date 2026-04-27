@@ -940,7 +940,8 @@ a:hover {
 
 .status-badge[data-status="AwaitingUserAction"],
 .status-badge[data-status="AwaitingBuyerAction"],
-.status-badge[data-status="ReceivedByBot"] {
+.status-badge[data-status="ReceivedByBot"],
+.status-badge[data-status="TradeProtected"] {
   color: #5d5e94;
   background: #f0eefc;
   border-color: #d8d2f2;
@@ -964,6 +965,94 @@ a:hover {
   color: #944646;
   background: #fbeded;
   border-color: #ebcbcb;
+}
+
+.sale-action-panel {
+  position: fixed;
+  right: 24px;
+  top: 86px;
+  z-index: 1100;
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+  border: 2px solid #d9942b;
+  border-radius: var(--vk-radius);
+  background: #fff8e6;
+  color: #2d3748;
+  box-shadow: 0 18px 44px rgba(87, 65, 29, 0.26);
+  animation: sale-action-pulse 1.1s ease-in-out infinite;
+}
+
+.sale-action-panel[hidden] {
+  display: none;
+}
+
+.sale-action-panel-header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.sale-action-panel-header strong {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.sale-action-panel-header span {
+  color: #6b4f22;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.sale-action-panel-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.sale-action-panel-actions .btn,
+.sale-action-panel-actions form,
+.sale-action-panel-actions button {
+  width: 100%;
+}
+
+.sale-action-panel-actions a[data-disabled="true"] {
+  pointer-events: auto;
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.sale-action-panel-message {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--vk-radius);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sale-action-panel-message[data-state="success"] {
+  color: #3f6d34;
+  background: #eef6ea;
+  border: 1px solid #d6e6ce;
+}
+
+.sale-action-panel-message[data-state="failed"] {
+  color: #944646;
+  background: #fbeded;
+  border: 1px solid #ebcbcb;
+}
+
+@keyframes sale-action-pulse {
+  0%,
+  100% {
+    border-color: #d9942b;
+    box-shadow: 0 18px 44px rgba(87, 65, 29, 0.22);
+    transform: translateY(0);
+  }
+
+  50% {
+    border-color: #b45309;
+    box-shadow: 0 20px 54px rgba(180, 83, 9, 0.42);
+    transform: translateY(-2px);
+  }
 }
 
 .detail-list {

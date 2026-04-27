@@ -111,7 +111,7 @@
                         }
                         else
                         {
-                            <form method="post" asp-page-handler="Buy" class="action-row market-item-actions">
+                            <form method="post" asp-page-handler="Buy" class="action-row market-item-actions" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before buying another item.">
                                 <input type="hidden" asp-for="PurchaseRequest.GameType" value="@item.GameType" />
                                 <input type="hidden" asp-for="PurchaseRequest.AppId" value="@item.AppId" />
                                 <input type="hidden" asp-for="PurchaseRequest.ContextId" value="@item.ContextId" />

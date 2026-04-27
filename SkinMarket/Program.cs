@@ -398,6 +398,334 @@ app.MapPost("/api/inventory/prices/status", async (
     return Results.Ok(new { Items = responseItems });
 });
 
+app.MapGet("/api/sales/status", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    ISteamTradeClient steamTradeClient,
+    ICreditService creditService,
+    IAppLogService appLogService,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var steamId = httpContext.User.FindFirst("SteamId")?.Value;
+    if (string.IsNullOrWhiteSpace(steamId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var appUser = await dbContext.AppUsers
+        .AsNoTracking()
+        .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.NotFound(new
+        {
+            success = false,
+            message = "Local user profile was not found."
+        });
+    }
+
+    var statusesToPoll = new[]
+    {
+        "Pending",
+        "BotPending",
+        "AwaitingBotConfirmation",
+        "TradeCreated",
+        "AwaitingUserAction",
+        "TradeAcceptedPendingReceipt",
+        "ReceivedByBot",
+        "InEscrow"
+    };
+
+    var syncOperations = await dbContext.TradeOperations
+        .Where(operation =>
+            operation.AppUserId == appUser.Id &&
+            operation.TradeOfferId != null &&
+            statusesToPoll.Contains(operation.Status))
+        .ToListAsync(cancellationToken);
+
+    var deliveryStatusesToPoll = new[]
+    {
+        "PendingDelivery",
+        "DeliveryBotPending",
+        "AwaitingBotConfirmation",
+        "DeliveryTradeCreated",
+        "AwaitingBuyerAction",
+        "DeliveryInEscrow"
+    };
+
+    var syncDeliveries = await dbContext.MarketPurchaseRecords
+        .Where(item =>
+            item.BuyerAppUserId == appUser.Id &&
+            item.DeliveryTradeOfferId != null &&
+            item.DeliveryStatus != null &&
+            deliveryStatusesToPoll.Contains(item.DeliveryStatus))
+        .ToListAsync(cancellationToken);
+
+    var statusRequests = syncOperations
+        .Select(operation => new SteamTradeOfferStatusRequest
+        {
+            OfferId = operation.TradeOfferId!,
+            Flow = "intake"
+        })
+        .Concat(syncDeliveries.Select(item => new SteamTradeOfferStatusRequest
+        {
+            OfferId = item.DeliveryTradeOfferId!,
+            Flow = "delivery"
+        }))
+        .ToList();
+    if (statusRequests.Count > 0)
+    {
+        var statusResults = await steamTradeClient.GetOfferStatusesAsync(statusRequests, cancellationToken);
+        var statusMap = statusResults.ToDictionary(
+            item => $"{item.Flow}:{item.OfferId}",
+            item => item,
+            StringComparer.Ordinal);
+        var transitionLogs = new List<(string Level, string Message, string Source)>();
+        var changed = false;
+        foreach (var operation in syncOperations)
+        {
+            if (!statusMap.TryGetValue($"intake:{operation.TradeOfferId}", out var status))
+            {
+                continue;
+            }
+
+            changed |= SteamTradeSyncService.ApplyTradeOperationStatus(operation, status, transitionLogs);
+        }
+
+        foreach (var item in syncDeliveries)
+        {
+            if (!statusMap.TryGetValue($"delivery:{item.DeliveryTradeOfferId}", out var status))
+            {
+                continue;
+            }
+
+            changed |= SteamTradeSyncService.ApplyDeliveryStatus(item, status, transitionLogs);
+        }
+
+        if (changed)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var entry in transitionLogs)
+        {
+            await appLogService.WriteAsync(entry.Level, entry.Message, entry.Source, cancellationToken: cancellationToken);
+        }
+
+        var creditTargets = syncOperations
+            .Where(operation => operation.Status == "ReceivedByBot" && !operation.CreditedAtUtc.HasValue)
+            .Select(operation => new { operation.Id, operation.AppUserId })
+            .ToList();
+        foreach (var target in creditTargets)
+        {
+            var result = await creditService.ConfirmReceivedAndCreditAsync(target.Id, target.AppUserId, cancellationToken);
+            await appLogService.WriteAsync(
+                result.Success ? "Info" : "Warning",
+                $"Live status poll credit result. TradeOperationId={target.Id}; Success={result.Success}; Status={result.NewStatus}; OfferId={result.TradeOfferId ?? "<null>"}; Message={result.Message}",
+                "SalesStatusApi",
+                cancellationToken: cancellationToken);
+        }
+    }
+
+    var operations = await dbContext.TradeOperations
+        .AsNoTracking()
+        .Where(operation =>
+            operation.AppUserId == appUser.Id &&
+            statusesToPoll.Contains(operation.Status))
+        .OrderByDescending(operation => operation.UpdatedAtUtc)
+        .Select(operation => new
+        {
+            id = operation.Id,
+            flow = "intake",
+            assetId = operation.AssetId,
+            itemName = operation.ItemName,
+            status = operation.Status,
+            statusText = SaleStatusApiText.FormatStatus(operation.Status),
+            tradeOfferId = operation.TradeOfferId,
+            steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
+            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            canCancel = SaleStatusApiText.CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
+            creditAmount = operation.CreditAmount,
+            updatedAtUtc = operation.UpdatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    var deliveries = await dbContext.MarketPurchaseRecords
+        .AsNoTracking()
+        .Where(item =>
+            item.BuyerAppUserId == appUser.Id &&
+            item.DeliveryStatus != null &&
+            deliveryStatusesToPoll.Contains(item.DeliveryStatus))
+        .OrderByDescending(item => item.UpdatedAtUtc)
+        .Select(item => new
+        {
+            id = item.Id,
+            flow = "delivery",
+            assetId = item.AssetId,
+            itemName = item.ItemName,
+            status = item.DeliveryStatus!,
+            statusText = SaleStatusApiText.FormatStatus(item.DeliveryStatus),
+            tradeOfferId = item.DeliveryTradeOfferId,
+            steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
+            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            canCancel = false,
+            creditAmount = 0m,
+            updatedAtUtc = item.UpdatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        success = true,
+        operations = operations.Concat(deliveries)
+            .OrderByDescending(item => item.updatedAtUtc)
+            .ToList()
+    });
+});
+
+app.MapPost("/api/sales/cancel", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    ISteamTradeClient steamTradeClient,
+    IAppLogService appLogService,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var steamId = httpContext.User.FindFirst("SteamId")?.Value;
+    if (string.IsNullOrWhiteSpace(steamId))
+    {
+        return Results.Unauthorized();
+    }
+
+    if (!httpContext.Request.HasFormContentType)
+    {
+        return Results.BadRequest(new
+        {
+            success = false,
+            message = "Cancel request is invalid."
+        });
+    }
+
+    var form = await httpContext.Request.ReadFormAsync(cancellationToken);
+    if (!Guid.TryParse(form["tradeOperationId"], out var tradeOperationId))
+    {
+        return Results.BadRequest(new
+        {
+            success = false,
+            message = "Sale request is invalid."
+        });
+    }
+
+    var appUser = await dbContext.AppUsers
+        .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.NotFound(new
+        {
+            success = false,
+            message = "Local user profile was not found."
+        });
+    }
+
+    var operation = await dbContext.TradeOperations
+        .SingleOrDefaultAsync(item => item.Id == tradeOperationId && item.AppUserId == appUser.Id, cancellationToken);
+    if (operation is null)
+    {
+        return Results.NotFound(new
+        {
+            success = false,
+            message = "Sale request was not found."
+        });
+    }
+
+    if (string.IsNullOrWhiteSpace(operation.TradeOfferId) || !SaleStatusApiText.CanCancelIntakeStatus(operation.Status))
+    {
+        return Results.BadRequest(new
+        {
+            success = false,
+            message = $"Trade offer cannot be canceled from status {operation.Status}."
+        });
+    }
+
+    var previousStatus = operation.Status;
+    var result = await steamTradeClient.CancelOfferAsync(
+        operation.TradeOfferId,
+        "intake",
+        $"Seller canceled intake offer from global action panel. TradeOperationId={operation.Id}",
+        cancellationToken);
+
+    if (!result.Success)
+    {
+        return Results.BadRequest(new
+        {
+            success = false,
+            message = result.Message
+        });
+    }
+
+    operation.Status = "Failed";
+    operation.ErrorMessage = $"Trade offer was canceled by seller. {result.Message}";
+    operation.UpdatedAtUtc = DateTime.UtcNow;
+    await dbContext.SaveChangesAsync(cancellationToken);
+
+    await appLogService.WriteAsync(
+        "Warning",
+        $"Intake trade canceled by seller from global action panel. TradeOperationId={operation.Id}; AppUserId={appUser.Id}; OfferId={operation.TradeOfferId}; PreviousStatus={previousStatus}; CancelState={result.State ?? "<null>"}; Message={result.Message}",
+        "SalesStatusApi",
+        cancellationToken: cancellationToken);
+
+    return Results.Ok(new
+    {
+        success = true,
+        message = "Trade offer was canceled."
+    });
+});
+
 app.MapRazorPages();
 
 app.Run();
+
+internal static class SaleStatusApiText
+{
+    public static string FormatStatus(string? status)
+    {
+        return status switch
+        {
+            "Pending" => "Pending",
+            "BotPending" => "Bot pending",
+            "AwaitingBotConfirmation" => "Awaiting bot confirmation",
+            "TradeCreated" => "Trade created",
+            "AwaitingUserAction" => "Awaiting user action",
+            "AwaitingBuyerAction" => "Awaiting buyer action",
+            "TradeAcceptedPendingReceipt" => "Trade accepted",
+            "ReceivedByBot" => "Received by bot",
+            "PendingDelivery" => "Pending delivery",
+            "DeliveryBotPending" => "Delivery bot pending",
+            "DeliveryTradeCreated" => "Delivery trade created",
+            "DeliveryInEscrow" => "Delivery in escrow",
+            "InEscrow" => "In escrow",
+            _ => status ?? string.Empty
+        };
+    }
+
+    public static string BuildSteamOfferUrl(string? offerId)
+    {
+        return string.IsNullOrWhiteSpace(offerId)
+            ? "https://steamcommunity.com/my/tradeoffers/"
+            : $"https://steamcommunity.com/tradeoffer/{offerId}/";
+    }
+
+    public static bool CanCancelIntakeStatus(string? status)
+    {
+        return status is "AwaitingBotConfirmation" or "TradeCreated" or "AwaitingUserAction";
+    }
+}

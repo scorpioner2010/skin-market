@@ -107,6 +107,25 @@
         </div>
     </footer>
 
+    @if (User.Identity?.IsAuthenticated ?? false)
+    {
+        <div class="sale-action-panel" role="alert" aria-live="assertive" data-global-sale-action-panel hidden>
+            <div class="sale-action-panel-header">
+                <strong data-global-sale-action-panel-title>Active trade in progress</strong>
+                <span data-global-sale-action-panel-status>Waiting for status</span>
+            </div>
+            <div class="sale-action-panel-actions">
+                <a class="btn app-button-secondary" href="https://steamcommunity.com/id/angielanz75/tradeoffers" target="_blank" rel="noopener" data-global-sale-account-offers-link>Open trade offers</a>
+                <a class="btn app-button-primary" href="#" target="_blank" rel="noopener" data-global-sale-action-offer-link>Confirm item transfer</a>
+                <form method="post" action="/api/sales/cancel" data-global-sale-cancel-form>
+                    <input type="hidden" name="tradeOperationId" value="" data-global-sale-cancel-operation-id />
+                    <button type="submit" class="btn app-button-secondary" data-global-sale-cancel-button>Cancel offer</button>
+                </form>
+            </div>
+            <div class="sale-action-panel-message" data-global-sale-action-panel-message hidden></div>
+        </div>
+    }
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
             integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
             crossorigin="anonymous"></script>

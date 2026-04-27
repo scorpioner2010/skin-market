@@ -87,6 +87,12 @@ public class MarketModel : PageModel
             return RedirectToPage();
         }
 
+        if (await HasActiveTradeFlowAsync(CurrentUserId.Value, cancellationToken))
+        {
+            ErrorMessage = "Finish or cancel the active trade offer before buying another item.";
+            return RedirectToPage();
+        }
+
         var result = await _marketPurchaseService.PurchaseAsync(PurchaseRequest, CurrentUserId.Value, cancellationToken);
         if (result.Success)
         {
@@ -180,6 +186,39 @@ public class MarketModel : PageModel
 
         CurrentUserId = user.Id;
         CurrentBalance = await _balanceService.GetBalanceAsync(user.Id, cancellationToken);
+    }
+
+    private async Task<bool> HasActiveTradeFlowAsync(Guid appUserId, CancellationToken cancellationToken)
+    {
+        var activeIntakeStatuses = new[]
+        {
+            "Pending",
+            "BotPending",
+            "AwaitingBotConfirmation",
+            "TradeCreated",
+            "AwaitingUserAction",
+            "TradeAcceptedPendingReceipt",
+            "ReceivedByBot",
+            "InEscrow"
+        };
+        var activeDeliveryStatuses = new[]
+        {
+            "PendingDelivery",
+            "DeliveryBotPending",
+            "AwaitingBotConfirmation",
+            "DeliveryTradeCreated",
+            "AwaitingBuyerAction",
+            "DeliveryInEscrow"
+        };
+
+        return await _dbContext.TradeOperations
+                   .AsNoTracking()
+                   .AnyAsync(operation => operation.AppUserId == appUserId && activeIntakeStatuses.Contains(operation.Status), cancellationToken) ||
+               await _dbContext.MarketPurchaseRecords
+                   .AsNoTracking()
+                   .AnyAsync(item => item.BuyerAppUserId == appUserId &&
+                                     item.DeliveryStatus != null &&
+                                     activeDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
     }
 
     private static List<GroupedMarketListingItem> BuildGroupedItems(

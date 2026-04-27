@@ -150,6 +150,7 @@
   <data name="Status_TradeCreated" xml:space="preserve"><value>Trade created</value></data>
   <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade created</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Available</value></data>
+  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protected</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Awaiting user action</value></data>
   <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Awaiting buyer action</value></data>
   <data name="Status_ReceivedByBot" xml:space="preserve"><value>Received by bot</value></data>

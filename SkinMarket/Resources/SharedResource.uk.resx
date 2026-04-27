@@ -142,6 +142,7 @@
   <data name="Status_TradeCreated" xml:space="preserve"><value>Трейд створено</value></data>
   <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade створено</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Доступно</value></data>
+  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protected</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Очікується дія користувача</value></data>
   <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Очікується дія покупця</value></data>
   <data name="Status_ReceivedByBot" xml:space="preserve"><value>Отримано ботом</value></data>

@@ -3,6 +3,7 @@ namespace SkinMarket.Models;
 public class GroupedInventoryItem
 {
     public string GroupKey { get; set; } = string.Empty;
+    public List<string> AssetIds { get; set; } = new();
     public string RepresentativeAssetId { get; set; } = string.Empty;
     public string ItemName { get; set; } = string.Empty;
     public string? MarketHashName { get; set; }
@@ -22,6 +23,7 @@ public class GroupedInventoryItem
     public string? CreateTradeStatus { get; set; }
     public string? AwaitingUserTradeOfferId { get; set; }
     public bool HasWaitingForCredit { get; set; }
+    public bool HasTradeProtected { get; set; }
     public bool HasSellableItem => !string.IsNullOrWhiteSpace(SellAssetId);
     public List<GroupedInventoryStatusItem> StatusItems { get; set; } = new();
 }

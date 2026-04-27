@@ -4,9 +4,6 @@
 @using System.Text.Json
 @{
     ViewData["Title"] = L["Page_Inventory_Title"];
-    string BuildSteamOfferUrl(string? offerId) => string.IsNullOrWhiteSpace(offerId)
-        ? "https://steamcommunity.com/my/tradeoffers/"
-        : $"https://steamcommunity.com/tradeoffer/{offerId}/";
     var pendingStatuses = new HashSet<string>(StringComparer.Ordinal)
     {
         "Pending",
@@ -75,16 +72,6 @@
             <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.WarningMessage)</div>
         }
 
-        @if (Model.RecentOperations.Any(operation => operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId)))
-        {
-            var waitingOperation = Model.RecentOperations.First(operation => operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId));
-            <div class="app-alert alert-warning inventory-action-alert" role="alert">
-                <strong>Steam offer is waiting for your acceptance.</strong>
-                <span>Open the trade offer in Steam and accept it to move the item to the bot and continue the sale.</span>
-                <a class="btn app-button-primary" href="@BuildSteamOfferUrl(waitingOperation.TradeOfferId)" target="_blank" rel="noopener">Accept Steam offer</a>
-            </div>
-        }
-
         @if (Model.CanUpdateTradeUrl && !Model.IsTradeUrlConfigured)
         {
             <div class="trade-url-setup" data-trade-url-setup>
@@ -136,7 +123,7 @@
                         </div>
                         @foreach (var item in Model.GroupedItems)
                         {
-                            <article class="inventory-row">
+                            <article class="inventory-row" data-inventory-sale-row data-asset-ids="@string.Join("|", item.AssetIds)" data-quantity="@item.Quantity">
                                 <div class="inventory-cell inventory-item-cell" data-label="@L["Inventory_Column_Item"]">
                                     <div class="inventory-main">
                                         @if (!string.IsNullOrWhiteSpace(item.IconUrl))
@@ -202,7 +189,7 @@
                                         </div>
                                     }
                                 </div>
-                                <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]">
+                                <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]" data-sale-status-cell>
                                     @if (item.StatusItems.Count > 0)
                                     {
                                         <div class="inventory-status inventory-status-summary">
@@ -224,10 +211,10 @@
                                     }
                                 </div>
                                 <div class="inventory-cell inventory-actions-cell" data-label="@L["Inventory_Column_Action"]">
-                                    <div class="inventory-actions">
+                                    <div class="inventory-actions" data-sale-action-cell>
                                         @if (item.HasSellableItem && Model.IsTradeUrlConfigured)
                                         {
-                                            <form method="post" asp-page-handler="Sell">
+                                            <form method="post" asp-page-handler="Sell" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before selling another item.">
                                                 <input type="hidden" name="Input.AssetId" value="@item.SellAssetId" />
                                                 <input type="hidden" name="Input.ClassId" value="@item.SellClassId" />
                                                 <input type="hidden" name="Input.InstanceId" value="@item.SellInstanceId" />
@@ -243,7 +230,7 @@
                                         }
                                         else if (!string.IsNullOrWhiteSpace(item.AwaitingUserTradeOfferId))
                                         {
-                                            <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.AwaitingUserTradeOfferId)" target="_blank" rel="noopener">Accept offer</a>
+                                            <span class="compact-badge compact-badge-neutral">Action required</span>
                                         }
                                         else if (item.CreateTradeOperationId.HasValue &&
                                                  string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal))
@@ -260,6 +247,10 @@
                                         else if (item.HasWaitingForCredit)
                                         {
                                             <span class="compact-badge compact-badge-neutral">Waiting for credit</span>
+                                        }
+                                        else if (item.HasTradeProtected)
+                                        {
+                                            <span class="compact-badge compact-badge-neutral">Trade protected</span>
                                         }
                                         else
                                         {
@@ -292,19 +283,19 @@
                 <div class="compact-history-list">
                     @foreach (var operation in Model.RecentOperations)
                     {
-                        <article class="compact-history-row">
+                        <article class="compact-history-row" data-sale-history-row data-operation-id="@operation.Id" data-asset-id="@operation.AssetId">
                             <div class="compact-history-main">
                                 <h3>@operation.ItemName</h3>
                                 <p class="compact-history-meta break-value">AssetId: @operation.AssetId</p>
                             </div>
                             <div class="compact-history-side">
-                                <span class="status-badge" data-status="@operation.Status">@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
+                                <span class="status-badge" data-status="@operation.Status" data-sale-history-status>@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
                                 @if (operation.CreditAmount > 0)
                                 {
                                     <span class="mini-pill">@L["Inventory_Credit"]: @operation.CreditAmount</span>
                                 }
                             </div>
-                            <div class="compact-history-details">
+                            <div class="compact-history-details" data-sale-history-details>
                                 <span><strong>@L["Common_Created"]:</strong> @operation.CreatedAtUtc</span>
                                 @if (operation.CreditedAtUtc.HasValue)
                                 {
@@ -316,7 +307,7 @@
                                 }
                                 @if (operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId))
                                 {
-                                    <a class="btn app-button-primary compact-history-action" href="@BuildSteamOfferUrl(operation.TradeOfferId)" target="_blank" rel="noopener">Accept Steam offer</a>
+                                    <span class="compact-badge compact-badge-neutral">Use the action panel</span>
                                     <form method="post" asp-page-handler="RefreshTradeStatus" class="compact-history-action-form">
                                         <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
                                         <button type="submit" class="btn app-button-secondary compact-history-action">Check Steam status</button>
@@ -433,6 +424,179 @@
                 .finally(() => {
                     window.setTimeout(poll, 1200);
                 });
+        })();
+
+        (() => {
+            const rows = Array.from(document.querySelectorAll('[data-inventory-sale-row]'));
+            const historyRows = Array.from(document.querySelectorAll('[data-sale-history-row]'));
+
+            if (rows.length === 0 && historyRows.length === 0) {
+                return;
+            }
+
+            const statusUrl = '/api/sales/status';
+            const readyText = @Html.Raw(JsonSerializer.Serialize(L["Inventory_Ready"].Value));
+            const pendingSaleText = @Html.Raw(JsonSerializer.Serialize(L["Inventory_PendingSale"].Value));
+            const pollingStatuses = new Set([
+                'Pending',
+                'BotPending',
+                'AwaitingBotConfirmation',
+                'TradeCreated',
+                'AwaitingUserAction',
+                'TradeAcceptedPendingReceipt',
+                'ReceivedByBot',
+                'InEscrow'
+            ]);
+
+            const escapeHtml = (value) => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            rows.forEach((row) => {
+                const statusCell = row.querySelector('[data-sale-status-cell]');
+                const actionCell = row.querySelector('[data-sale-action-cell]');
+                row.dataset.originalStatusHtml = statusCell?.innerHTML ?? '';
+                row.dataset.originalActionHtml = actionCell?.innerHTML ?? '';
+            });
+
+            const groupByStatus = (operations) => {
+                const groups = new Map();
+                for (const operation of operations) {
+                    const key = operation.status || '';
+                    if (!key) {
+                        continue;
+                    }
+
+                    const current = groups.get(key) || {
+                        status: key,
+                        statusText: operation.statusText || key,
+                        count: 0,
+                        creditAmount: 0
+                    };
+                    current.count += 1;
+                    current.creditAmount += Number(operation.creditAmount || 0);
+                    groups.set(key, current);
+                }
+
+                return Array.from(groups.values());
+            };
+
+            const renderStatusBadges = (row, operations) => {
+                const statusCell = row.querySelector('[data-sale-status-cell]');
+                if (!statusCell) {
+                    return;
+                }
+
+                if (operations.length === 0) {
+                    statusCell.innerHTML = row.dataset.originalStatusHtml || '';
+                    return;
+                }
+
+                const totalQuantity = Number(row.dataset.quantity || operations.length);
+                const readyCount = Math.max(0, totalQuantity - operations.length);
+                const badges = [];
+                if (readyCount > 0) {
+                    badges.push(`<span class="status-badge" data-status="Available">${escapeHtml(readyText)} x${readyCount}</span>`);
+                }
+
+                for (const group of groupByStatus(operations)) {
+                    badges.push(`<span class="status-badge" data-status="${escapeHtml(group.status)}">${escapeHtml(group.statusText)} x${group.count}</span>`);
+                    if (group.creditAmount > 0) {
+                        badges.push(`<span class="mini-pill">@L["Inventory_Credited"]: ${escapeHtml(group.creditAmount.toFixed(2))}</span>`);
+                    }
+                }
+
+                statusCell.innerHTML = `<div class="inventory-status inventory-status-summary">${badges.join('')}</div>`;
+            };
+
+            const renderAction = (row, operations) => {
+                const actionCell = row.querySelector('[data-sale-action-cell]');
+                if (!actionCell) {
+                    return;
+                }
+
+                if (operations.length === 0) {
+                    actionCell.innerHTML = row.dataset.originalActionHtml || '';
+                    return;
+                }
+
+                const awaitingUser = operations.find((operation) => operation.status === 'AwaitingUserAction' && operation.tradeOfferId);
+                if (awaitingUser) {
+                    actionCell.innerHTML = '<span class="compact-badge compact-badge-neutral">Action required</span>';
+                    return;
+                }
+
+                if (operations.some((operation) => operation.status === 'ReceivedByBot')) {
+                    actionCell.innerHTML = '<span class="compact-badge compact-badge-neutral">Waiting for credit</span>';
+                    return;
+                }
+
+                actionCell.innerHTML = `<span class="compact-badge compact-badge-neutral">${escapeHtml(pendingSaleText)}</span>`;
+            };
+
+            const updateHistory = (operations) => {
+                const byId = new Map(operations.map((operation) => [String(operation.id).toLowerCase(), operation]));
+                for (const row of historyRows) {
+                    const operation = byId.get(String(row.dataset.operationId || '').toLowerCase());
+                    if (!operation) {
+                        continue;
+                    }
+
+                    const status = row.querySelector('[data-sale-history-status]');
+                    if (status) {
+                        status.dataset.status = operation.status;
+                        status.textContent = operation.statusText || operation.status;
+                    }
+
+                    const details = row.querySelector('[data-sale-history-details]');
+                    if (details && operation.status === 'AwaitingUserAction' && operation.tradeOfferId && !details.querySelector('[data-live-action-required]')) {
+                        details.insertAdjacentHTML('beforeend', '<span class="compact-badge compact-badge-neutral" data-live-action-required>Use the action panel</span>');
+                    }
+                }
+            };
+
+            const updateRows = (operations) => {
+                for (const row of rows) {
+                    const assetIds = String(row.dataset.assetIds || '').split('|').filter(Boolean);
+                    const rowOperations = operations.filter((operation) => assetIds.includes(operation.assetId));
+                    renderStatusBadges(row, rowOperations);
+                    renderAction(row, rowOperations);
+                }
+            };
+
+            const poll = async () => {
+                try {
+                    const response = await fetch(statusUrl, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    if (payload?.success !== true) {
+                        return;
+                    }
+
+                    const operations = Array.isArray(payload.operations)
+                        ? payload.operations.filter((operation) => pollingStatuses.has(operation.status))
+                        : [];
+                    updateRows(operations);
+                    updateHistory(operations);
+                } catch {
+                } finally {
+                    window.setTimeout(poll, 2000);
+                }
+            };
+
+            window.setTimeout(poll, 2000);
         })();
 
         (() => {
