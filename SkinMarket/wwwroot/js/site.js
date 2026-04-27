@@ -18,6 +18,14 @@
     const panelTitle = panel.querySelector('[data-global-sale-action-panel-title]');
     const blockableForms = Array.from(document.querySelectorAll('[data-trade-blockable-form]'));
     let hasActiveTrade = false;
+    let hadActiveTrade = false;
+
+    const escapeHtml = (value) => String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
     const setPanelMessage = (message, state) => {
         if (!panelMessage) {
@@ -116,6 +124,90 @@
         }
     };
 
+    const getLatestOperationsByAsset = (operations) => {
+        const latest = new Map();
+        for (const operation of operations) {
+            if (!operation.assetId) {
+                continue;
+            }
+
+            const current = latest.get(operation.assetId);
+            const currentTime = current?.updatedAtUtc ? Date.parse(current.updatedAtUtc) : 0;
+            const nextTime = operation.updatedAtUtc ? Date.parse(operation.updatedAtUtc) : 0;
+            if (!current || nextTime >= currentTime) {
+                latest.set(operation.assetId, operation);
+            }
+        }
+
+        return latest;
+    };
+
+    const isCurrentInventoryStatus = (status) => {
+        return status !== 'Credited' && status !== 'Failed';
+    };
+
+    const hasVisibleInventoryCompletion = (operations) => {
+        const completedAssetIds = new Set(
+            operations
+                .filter((operation) =>
+                    operation.flow === 'intake' &&
+                    (operation.status === 'Credited' || operation.status === 'Failed') &&
+                    operation.assetId)
+                .map((operation) => operation.assetId));
+        if (completedAssetIds.size === 0) {
+            return false;
+        }
+
+        return Array.from(document.querySelectorAll('[data-inventory-sale-row]')).some((row) => {
+            const assetIds = String(row.dataset.assetIds || '').split('|').filter(Boolean);
+            return assetIds.some((assetId) => completedAssetIds.has(assetId));
+        });
+    };
+
+    const updateVisibleTradeRows = (operations) => {
+        const operationList = Array.isArray(operations) ? operations : [];
+        const latestByAsset = getLatestOperationsByAsset(operationList);
+        const byFlowAndId = new Map(operationList.map((operation) => [
+            `${operation.flow}:${String(operation.id).toLowerCase()}`,
+            operation
+        ]));
+
+        document.querySelectorAll('[data-trade-flow-row]').forEach((row) => {
+            const key = `${row.dataset.tradeFlow}:${String(row.dataset.operationId || '').toLowerCase()}`;
+            const operation = byFlowAndId.get(key);
+            if (!operation) {
+                return;
+            }
+
+            const status = row.querySelector('[data-trade-flow-status]');
+            if (status) {
+                status.dataset.status = operation.status || '';
+                status.textContent = operation.statusText || operation.status || '';
+            }
+        });
+
+        document.querySelectorAll('[data-inventory-sale-row]').forEach((row) => {
+            const assetIds = String(row.dataset.assetIds || '').split('|').filter(Boolean);
+            const rowOperations = assetIds
+                .map((assetId) => latestByAsset.get(assetId))
+                .filter((operation) =>
+                    operation?.flow === 'intake' &&
+                    isCurrentInventoryStatus(operation.status));
+            if (rowOperations.length === 0) {
+                return;
+            }
+
+            const statusCell = row.querySelector('[data-trade-flow-status-cell]');
+            if (!statusCell) {
+                return;
+            }
+
+            const badges = rowOperations.map((operation) =>
+                `<span class="status-badge" data-status="${escapeHtml(operation.status)}">${escapeHtml(operation.statusText || operation.status)} x1</span>`);
+            statusCell.innerHTML = `<div class="inventory-status inventory-status-summary">${badges.join('')}</div>`;
+        });
+    };
+
     const poll = async () => {
         try {
             const response = await fetch('/api/sales/status', {
@@ -140,7 +232,17 @@
                 return;
             }
 
-            updatePanel(Array.isArray(payload.operations) ? payload.operations : []);
+            const activeOperations = Array.isArray(payload.operations) ? payload.operations : [];
+            const recentOperations = Array.isArray(payload.recentOperations) ? payload.recentOperations : activeOperations;
+            const shouldRefreshInventory = hadActiveTrade &&
+                activeOperations.length === 0 &&
+                hasVisibleInventoryCompletion(recentOperations);
+            updateVisibleTradeRows(recentOperations);
+            updatePanel(activeOperations);
+            hadActiveTrade = activeOperations.length > 0;
+            if (shouldRefreshInventory) {
+                window.setTimeout(() => window.location.reload(), 350);
+            }
         } catch {
         } finally {
             window.setTimeout(poll, 2000);

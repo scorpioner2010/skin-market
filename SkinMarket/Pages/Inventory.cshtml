@@ -189,7 +189,7 @@
                                         </div>
                                     }
                                 </div>
-                                <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]" data-sale-status-cell>
+                                <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]" data-sale-status-cell data-trade-flow-status-cell>
                                     @if (item.StatusItems.Count > 0)
                                     {
                                         <div class="inventory-status inventory-status-summary">
@@ -283,13 +283,13 @@
                 <div class="compact-history-list">
                     @foreach (var operation in Model.RecentOperations)
                     {
-                        <article class="compact-history-row" data-sale-history-row data-operation-id="@operation.Id" data-asset-id="@operation.AssetId">
+                        <article class="compact-history-row" data-sale-history-row data-trade-flow-row="intake" data-operation-id="@operation.Id" data-asset-id="@operation.AssetId">
                             <div class="compact-history-main">
                                 <h3>@operation.ItemName</h3>
                                 <p class="compact-history-meta break-value">AssetId: @operation.AssetId</p>
                             </div>
                             <div class="compact-history-side">
-                                <span class="status-badge" data-status="@operation.Status" data-sale-history-status>@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
+                                <span class="status-badge" data-status="@operation.Status" data-sale-history-status data-trade-flow-status>@UiTextLocalizer.LocalizeStatus(L, operation.Status)</span>
                                 @if (operation.CreditAmount > 0)
                                 {
                                     <span class="mini-pill">@L["Inventory_Credit"]: @operation.CreditAmount</span>
@@ -424,179 +424,6 @@
                 .finally(() => {
                     window.setTimeout(poll, 1200);
                 });
-        })();
-
-        (() => {
-            const rows = Array.from(document.querySelectorAll('[data-inventory-sale-row]'));
-            const historyRows = Array.from(document.querySelectorAll('[data-sale-history-row]'));
-
-            if (rows.length === 0 && historyRows.length === 0) {
-                return;
-            }
-
-            const statusUrl = '/api/sales/status';
-            const readyText = @Html.Raw(JsonSerializer.Serialize(L["Inventory_Ready"].Value));
-            const pendingSaleText = @Html.Raw(JsonSerializer.Serialize(L["Inventory_PendingSale"].Value));
-            const pollingStatuses = new Set([
-                'Pending',
-                'BotPending',
-                'AwaitingBotConfirmation',
-                'TradeCreated',
-                'AwaitingUserAction',
-                'TradeAcceptedPendingReceipt',
-                'ReceivedByBot',
-                'InEscrow'
-            ]);
-
-            const escapeHtml = (value) => String(value ?? '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-
-            rows.forEach((row) => {
-                const statusCell = row.querySelector('[data-sale-status-cell]');
-                const actionCell = row.querySelector('[data-sale-action-cell]');
-                row.dataset.originalStatusHtml = statusCell?.innerHTML ?? '';
-                row.dataset.originalActionHtml = actionCell?.innerHTML ?? '';
-            });
-
-            const groupByStatus = (operations) => {
-                const groups = new Map();
-                for (const operation of operations) {
-                    const key = operation.status || '';
-                    if (!key) {
-                        continue;
-                    }
-
-                    const current = groups.get(key) || {
-                        status: key,
-                        statusText: operation.statusText || key,
-                        count: 0,
-                        creditAmount: 0
-                    };
-                    current.count += 1;
-                    current.creditAmount += Number(operation.creditAmount || 0);
-                    groups.set(key, current);
-                }
-
-                return Array.from(groups.values());
-            };
-
-            const renderStatusBadges = (row, operations) => {
-                const statusCell = row.querySelector('[data-sale-status-cell]');
-                if (!statusCell) {
-                    return;
-                }
-
-                if (operations.length === 0) {
-                    statusCell.innerHTML = row.dataset.originalStatusHtml || '';
-                    return;
-                }
-
-                const totalQuantity = Number(row.dataset.quantity || operations.length);
-                const readyCount = Math.max(0, totalQuantity - operations.length);
-                const badges = [];
-                if (readyCount > 0) {
-                    badges.push(`<span class="status-badge" data-status="Available">${escapeHtml(readyText)} x${readyCount}</span>`);
-                }
-
-                for (const group of groupByStatus(operations)) {
-                    badges.push(`<span class="status-badge" data-status="${escapeHtml(group.status)}">${escapeHtml(group.statusText)} x${group.count}</span>`);
-                    if (group.creditAmount > 0) {
-                        badges.push(`<span class="mini-pill">@L["Inventory_Credited"]: ${escapeHtml(group.creditAmount.toFixed(2))}</span>`);
-                    }
-                }
-
-                statusCell.innerHTML = `<div class="inventory-status inventory-status-summary">${badges.join('')}</div>`;
-            };
-
-            const renderAction = (row, operations) => {
-                const actionCell = row.querySelector('[data-sale-action-cell]');
-                if (!actionCell) {
-                    return;
-                }
-
-                if (operations.length === 0) {
-                    actionCell.innerHTML = row.dataset.originalActionHtml || '';
-                    return;
-                }
-
-                const awaitingUser = operations.find((operation) => operation.status === 'AwaitingUserAction' && operation.tradeOfferId);
-                if (awaitingUser) {
-                    actionCell.innerHTML = '<span class="compact-badge compact-badge-neutral">Action required</span>';
-                    return;
-                }
-
-                if (operations.some((operation) => operation.status === 'ReceivedByBot')) {
-                    actionCell.innerHTML = '<span class="compact-badge compact-badge-neutral">Waiting for credit</span>';
-                    return;
-                }
-
-                actionCell.innerHTML = `<span class="compact-badge compact-badge-neutral">${escapeHtml(pendingSaleText)}</span>`;
-            };
-
-            const updateHistory = (operations) => {
-                const byId = new Map(operations.map((operation) => [String(operation.id).toLowerCase(), operation]));
-                for (const row of historyRows) {
-                    const operation = byId.get(String(row.dataset.operationId || '').toLowerCase());
-                    if (!operation) {
-                        continue;
-                    }
-
-                    const status = row.querySelector('[data-sale-history-status]');
-                    if (status) {
-                        status.dataset.status = operation.status;
-                        status.textContent = operation.statusText || operation.status;
-                    }
-
-                    const details = row.querySelector('[data-sale-history-details]');
-                    if (details && operation.status === 'AwaitingUserAction' && operation.tradeOfferId && !details.querySelector('[data-live-action-required]')) {
-                        details.insertAdjacentHTML('beforeend', '<span class="compact-badge compact-badge-neutral" data-live-action-required>Use the action panel</span>');
-                    }
-                }
-            };
-
-            const updateRows = (operations) => {
-                for (const row of rows) {
-                    const assetIds = String(row.dataset.assetIds || '').split('|').filter(Boolean);
-                    const rowOperations = operations.filter((operation) => assetIds.includes(operation.assetId));
-                    renderStatusBadges(row, rowOperations);
-                    renderAction(row, rowOperations);
-                }
-            };
-
-            const poll = async () => {
-                try {
-                    const response = await fetch(statusUrl, {
-                        method: 'GET',
-                        credentials: 'same-origin',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-
-                    const payload = await response.json();
-                    if (payload?.success !== true) {
-                        return;
-                    }
-
-                    const operations = Array.isArray(payload.operations)
-                        ? payload.operations.filter((operation) => pollingStatuses.has(operation.status))
-                        : [];
-                    updateRows(operations);
-                    updateHistory(operations);
-                } catch {
-                } finally {
-                    window.setTimeout(poll, 2000);
-                }
-            };
-
-            window.setTimeout(poll, 2000);
         })();
 
         (() => {

@@ -149,7 +149,7 @@
                 <div class="stack-grid">
                     @foreach (var item in Model.Purchases)
                     {
-                        <article class="content-card history-card">
+                        <article class="content-card history-card" data-trade-flow-row="delivery" data-operation-id="@item.Id" data-asset-id="@item.AssetId">
                             <div class="card-heading">
                                 <div>
                                     <h3>@item.ItemName</h3>
@@ -159,7 +159,7 @@
                                     <span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span>
                                     @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
                                     {
-                                        <span class="status-badge" data-status="@item.DeliveryStatus">@UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus)</span>
+                                        <span class="status-badge" data-status="@item.DeliveryStatus" data-trade-flow-status>@UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus)</span>
                                     }
                                 </div>
                             </div>

@@ -579,12 +579,62 @@ app.MapGet("/api/sales/status", async (
         })
         .ToListAsync(cancellationToken);
 
+    var recentIntakes = await dbContext.TradeOperations
+        .AsNoTracking()
+        .Where(operation => operation.AppUserId == appUser.Id)
+        .OrderByDescending(operation => operation.UpdatedAtUtc)
+        .Take(20)
+        .Select(operation => new
+        {
+            id = operation.Id,
+            flow = "intake",
+            assetId = operation.AssetId,
+            itemName = operation.ItemName,
+            status = operation.Status,
+            statusText = SaleStatusApiText.FormatStatus(operation.Status),
+            tradeOfferId = operation.TradeOfferId,
+            steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
+            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            canCancel = SaleStatusApiText.CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
+            creditAmount = operation.CreditAmount,
+            updatedAtUtc = operation.UpdatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    var recentDeliveries = await dbContext.MarketPurchaseRecords
+        .AsNoTracking()
+        .Where(item => item.BuyerAppUserId == appUser.Id)
+        .OrderByDescending(item => item.UpdatedAtUtc)
+        .Take(20)
+        .Select(item => new
+        {
+            id = item.Id,
+            flow = "delivery",
+            assetId = item.AssetId,
+            itemName = item.ItemName,
+            status = item.DeliveryStatus ?? item.Status,
+            statusText = SaleStatusApiText.FormatStatus(item.DeliveryStatus ?? item.Status),
+            tradeOfferId = item.DeliveryTradeOfferId,
+            steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
+            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            canCancel = false,
+            creditAmount = 0m,
+            updatedAtUtc = item.UpdatedAtUtc
+        })
+        .ToListAsync(cancellationToken);
+
+    var activeOperations = operations.Concat(deliveries)
+        .OrderByDescending(item => item.updatedAtUtc)
+        .ToList();
+    var recentOperations = recentIntakes.Concat(recentDeliveries)
+        .OrderByDescending(item => item.updatedAtUtc)
+        .ToList();
+
     return Results.Ok(new
     {
         success = true,
-        operations = operations.Concat(deliveries)
-            .OrderByDescending(item => item.updatedAtUtc)
-            .ToList()
+        operations = activeOperations,
+        recentOperations
     });
 });
 

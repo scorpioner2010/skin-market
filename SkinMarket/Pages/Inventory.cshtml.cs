@@ -922,6 +922,9 @@ public class InventoryModel : PageModel
         IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId)
     {
         return items
+            .Where(item =>
+                !latestOperationsByAssetId.TryGetValue(item.AssetId, out var latestOperation) ||
+                !RemovesInventoryItem(latestOperation.Status))
             .GroupBy(ItemGroupingKeyUtility.ForInventory, StringComparer.Ordinal)
             .Select(group =>
             {
@@ -1034,7 +1037,12 @@ public class InventoryModel : PageModel
 
     private static bool BlocksInventoryItem(string? status)
     {
-        return !string.Equals(status, "Failed", StringComparison.Ordinal);
+        return status is not "Failed" and not "Credited";
+    }
+
+    private static bool RemovesInventoryItem(string? status)
+    {
+        return string.Equals(status, "Credited", StringComparison.Ordinal);
     }
 
     private static int GetInventoryStatusOrder(string status)
