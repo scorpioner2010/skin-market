@@ -7,9 +7,7 @@
 <div class="market-page py-4">
     <div class="page-header">
         <div>
-            <span class="section-kicker">Live Bot Inventory</span>
             <h1>@L["Page_Market_Title"]</h1>
-            <p class="page-description market-page-description">Items shown here are pulled directly from the bot inventory, so the market reflects what is actually available right now.</p>
         </div>
     </div>
 
@@ -45,8 +43,12 @@
                     <h2>@L["Market_AvailableItems_Title"]</h2>
                     <p class="section-description">@Model.GroupedItems.Count grouped listing(s), @Model.TotalAvailableItemCount total item(s) currently visible from the bot inventory.</p>
                 </div>
+                <div class="market-view-toggle" role="group" aria-label="Market view">
+                    <button type="button" class="market-view-button active" data-market-view-button="cards">Cards</button>
+                    <button type="button" class="market-view-button" data-market-view-button="table">Table</button>
+                </div>
             </div>
-            <div class="card-grid market-card-grid">
+            <div class="card-grid market-card-grid" data-market-view-panel="cards">
                 @foreach (var item in Model.GroupedItems)
                 {
                     <article class="content-card item-card market-item-card">
@@ -126,82 +128,119 @@
                     </article>
                 }
             </div>
-        </section>
-    }
-
-    @if (User.Identity?.IsAuthenticated ?? false)
-    {
-        <section class="page-section">
-            <div class="section-heading">
-                <div>
-                    <h2>@L["Market_Purchases_Title"]</h2>
-                    <p class="section-description">Your latest orders and delivery states.</p>
-                </div>
-            </div>
-            @if (Model.Purchases.Count == 0)
-            {
-                <div class="empty-state compact">
-                    <h3>@L["Market_Purchases_Empty_Title"]</h3>
-                </div>
-            }
-            else
-            {
-                <div class="stack-grid">
-                    @foreach (var item in Model.Purchases)
+            <div class="market-table-shell" data-market-view-panel="table" hidden>
+                <div class="market-table-list">
+                    <div class="market-table-row market-table-header">
+                        <div class="market-table-cell market-table-item-cell">Item</div>
+                        <div class="market-table-cell">Qty</div>
+                        <div class="market-table-cell">Price</div>
+                        <div class="market-table-cell">Tradable</div>
+                        <div class="market-table-cell market-table-asset-cell">Asset ID</div>
+                        <div class="market-table-cell market-table-actions-cell">Action</div>
+                    </div>
+                    @foreach (var item in Model.GroupedItems)
                     {
-                        <article class="content-card history-card" data-trade-flow-row="delivery" data-operation-id="@item.Id" data-asset-id="@item.AssetId">
-                            <div class="card-heading">
-                                <div>
-                                    <h3>@item.ItemName</h3>
-                                    <p class="card-subtitle">@string.Format(L["Market_PurchasedFor"].Value, item.Price.ToString("0.00"))</p>
-                                </div>
-                                <div class="status-group">
-                                    <span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span>
-                                    @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
+                        <article class="market-table-row">
+                            <div class="market-table-cell market-table-item-cell" data-label="Item">
+                                <div class="market-table-main">
+                                    @if (!string.IsNullOrWhiteSpace(item.IconUrl))
                                     {
-                                        <span class="status-badge" data-status="@item.DeliveryStatus" data-trade-flow-status>@UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus)</span>
+                                        <img src="@item.IconUrl" alt="@item.ItemName" class="inventory-icon" />
                                     }
+                                    else
+                                    {
+                                        <div class="inventory-icon inventory-icon-fallback" aria-hidden="true">
+                                            @((item.ItemName.FirstOrDefault()).ToString().ToUpperInvariant())
+                                        </div>
+                                    }
+                                    <div class="market-table-copy">
+                                        <h2 class="inventory-item-name">@item.ItemName</h2>
+                                        @if (!string.IsNullOrWhiteSpace(item.MarketHashName))
+                                        {
+                                            <div class="inventory-meta market-table-subtitle">@item.MarketHashName</div>
+                                        }
+                                    </div>
                                 </div>
                             </div>
-                            <div class="history-metrics">
-                                <span><strong>@L["Market_Purchased"]:</strong> @item.PurchasedAtUtc</span>
-                                @if (!string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId))
-                                {
-                                    <span><strong>@L["Market_DeliveryTradeOfferId"]:</strong> <span class="break-value">@item.DeliveryTradeOfferId</span></span>
-                                }
-                                @if (item.DeliveredAtUtc.HasValue)
-                                {
-                                    <span><strong>@L["Market_Delivered"]:</strong> @item.DeliveredAtUtc</span>
-                                }
+                            <div class="market-table-cell" data-label="Qty">
+                                <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                             </div>
-                            @if (!string.IsNullOrWhiteSpace(item.DeliveryErrorMessage))
-                            {
-                                <div class="meta-note">@UiTextLocalizer.LocalizeMessage(L, item.DeliveryErrorMessage)</div>
-                            }
-                            <div class="action-row">
-                                @if (item.DeliveryStatus == "DeliveryFailed")
+                            <div class="market-table-cell" data-label="Price">
+                                <span class="price-value">$@item.Price.ToString("0.00")</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Tradable">
+                                <span class="compact-badge">@((item.Tradable.HasValue ? L[item.Tradable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
+                            </div>
+                            <div class="market-table-cell market-table-asset-cell" data-label="Asset ID">
+                                <span class="inventory-meta break-value">@item.AssetId</span>
+                            </div>
+                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
+                                @if (item.Tradable != true)
                                 {
-                                    <form method="post" asp-page-handler="CreateDeliveryTrade">
-                                        <input type="hidden" asp-for="MarketPurchaseId" value="@item.Id" />
-                                        <button type="submit" class="btn app-button-secondary">@L["Market_CreateDeliveryTrade"]</button>
+                                    <span class="compact-badge compact-badge-neutral">Trade protected</span>
+                                }
+                                else if (!(User.Identity?.IsAuthenticated ?? false))
+                                {
+                                    <a class="btn app-button-primary market-table-action-button" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+                                }
+                                else if (!item.HasBuyableItems)
+                                {
+                                    <span class="compact-badge compact-badge-neutral">Owned by you</span>
+                                }
+                                else
+                                {
+                                    <form method="post" asp-page-handler="Buy" class="market-table-action-form" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before buying another item.">
+                                        <input type="hidden" name="PurchaseRequest.GameType" value="@item.GameType" />
+                                        <input type="hidden" name="PurchaseRequest.AppId" value="@item.AppId" />
+                                        <input type="hidden" name="PurchaseRequest.ContextId" value="@item.ContextId" />
+                                        <input type="hidden" name="PurchaseRequest.AssetId" value="@item.AssetId" />
+                                        <input type="hidden" name="PurchaseRequest.ClassId" value="@item.ClassId" />
+                                        <input type="hidden" name="PurchaseRequest.InstanceId" value="@item.InstanceId" />
+                                        <input type="hidden" name="PurchaseRequest.ItemName" value="@item.ItemName" />
+                                        <input type="hidden" name="PurchaseRequest.MarketHashName" value="@item.MarketHashName" />
+                                        <button type="submit" class="btn app-button-primary market-table-action-button">@L["Common_Buy"]</button>
                                     </form>
-                                }
-                                else if (item.DeliveryStatus == "PendingDelivery")
-                                {
-                                    <span class="compact-badge compact-badge-neutral">Waiting for automatic delivery creation</span>
-                                }
-                                else if (item.DeliveryStatus == "DeliveryTradeCreated" ||
-                                         item.DeliveryStatus == "AwaitingBuyerAction" ||
-                                         item.DeliveryStatus == "AwaitingBotConfirmation" ||
-                                         item.DeliveryStatus == "DeliveryInEscrow")
-                                {
-                                    <span class="compact-badge compact-badge-neutral">Waiting for Steam delivery sync</span>
                                 }
                             </div>
                         </article>
                     }
                 </div>
-            }
+            </div>
         </section>
     }
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const buttons = Array.from(document.querySelectorAll('[data-market-view-button]'));
+            const panels = Array.from(document.querySelectorAll('[data-market-view-panel]'));
+            if (buttons.length === 0 || panels.length === 0) {
+                return;
+            }
+
+            const storageKey = 'skinmarket-market-view';
+            const activate = (view) => {
+                const target = view === 'table' ? 'table' : 'cards';
+
+                buttons.forEach((button) => {
+                    button.classList.toggle('active', button.dataset.marketViewButton === target);
+                });
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.marketViewPanel !== target;
+                });
+            };
+
+            activate(localStorage.getItem(storageKey) || 'cards');
+
+            buttons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    const view = button.dataset.marketViewButton || 'cards';
+                    localStorage.setItem(storageKey, view);
+                    activate(view);
+                });
+            });
+        })();
+    </script>
+}
