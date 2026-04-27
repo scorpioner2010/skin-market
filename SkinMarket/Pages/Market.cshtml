@@ -95,7 +95,11 @@
                             }
                         </dl>
 
-                        @if (!(User.Identity?.IsAuthenticated ?? false))
+                        @if (item.Tradable != true)
+                        {
+                            <p class="meta-note market-owner-note">Trade protection is active. This item will become buyable after Steam unlocks it.</p>
+                        }
+                        else if (!(User.Identity?.IsAuthenticated ?? false))
                         {
                             <div class="action-row market-item-actions">
                                 <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>

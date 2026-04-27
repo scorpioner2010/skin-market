@@ -19,6 +19,7 @@ public class InventoryModel : PageModel
     private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
     private readonly ITradeOperationService _tradeOperationService;
     private readonly ISteamBotIntakeService _steamBotIntakeService;
+    private readonly ISteamTradeClient _steamTradeClient;
     private readonly ICreditService _creditService;
     private readonly IAppLogService _appLogService;
     private readonly IStringLocalizer<SharedResource> _localizer;
@@ -31,6 +32,7 @@ public class InventoryModel : PageModel
         IInventoryPriceRefreshService inventoryPriceRefreshService,
         ITradeOperationService tradeOperationService,
         ISteamBotIntakeService steamBotIntakeService,
+        ISteamTradeClient steamTradeClient,
         ICreditService creditService,
         IAppLogService appLogService,
         IStringLocalizer<SharedResource> localizer,
@@ -42,6 +44,7 @@ public class InventoryModel : PageModel
         _inventoryPriceRefreshService = inventoryPriceRefreshService;
         _tradeOperationService = tradeOperationService;
         _steamBotIntakeService = steamBotIntakeService;
+        _steamTradeClient = steamTradeClient;
         _creditService = creditService;
         _appLogService = appLogService;
         _localizer = localizer;
@@ -57,14 +60,21 @@ public class InventoryModel : PageModel
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
     public string? WarningMessage { get; private set; }
+    public bool IsTradeUrlConfigured { get; private set; }
+    public bool CanUpdateTradeUrl { get; private set; }
+    public string SteamTradeSettingsUrl { get; } = "https://steamcommunity.com/my/tradeoffers/privacy#trade_offer_access_url";
     [TempData]
     public string? SuccessMessage { get; set; }
     [TempData]
     public string? SellErrorMessage { get; set; }
+    [TempData]
+    public string? TradeStatusMessage { get; set; }
     public GameType CurrentGameType { get; private set; } = GameType.CS2;
     public string CurrentGameDisplayName { get; private set; } = string.Empty;
     [BindProperty]
     public SellInputModel Input { get; set; } = new();
+    [BindProperty]
+    public TradeUrlUpdateInputModel TradeUrlUpdate { get; set; } = new();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -141,6 +151,77 @@ public class InventoryModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostUpdateTradeUrlAsync(CancellationToken cancellationToken)
+    {
+        if (_runtimeState.IsDegradedMode)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = _runtimeState.ServiceUnavailableMessage
+            });
+        }
+
+        var appUser = await GetCurrentTrackedUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return new JsonResult(new
+            {
+                success = false,
+                message = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.")
+            });
+        }
+
+        var tradeUrl = TradeUrlUpdate.TradeUrl?.Trim();
+        if (string.IsNullOrWhiteSpace(tradeUrl) ||
+            tradeUrl.Length > 500 ||
+            !SteamTradeUrlUtility.IsValidTradeOfferUrl(tradeUrl))
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Trade URL update rejected because the submitted URL is invalid. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
+
+            return new JsonResult(new
+            {
+                success = false,
+                message = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be a valid Steam trade offer link.")
+            });
+        }
+
+        if (!SteamTradeUrlUtility.BelongsToSteamId(tradeUrl, appUser.SteamId))
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Trade URL update rejected because the partner does not match the current Steam account. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
+
+            return new JsonResult(new
+            {
+                success = false,
+                message = "Trade URL belongs to another Steam account."
+            });
+        }
+
+        appUser.TradeUrl = tradeUrl;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL saved.");
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Trade URL updated from inventory page. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
+
+        return new JsonResult(new
+        {
+            success = true,
+            message = SuccessMessage
+        });
+    }
+
     public async Task<IActionResult> OnPostCreateTradeAsync(CancellationToken cancellationToken)
     {
         if (_runtimeState.IsDegradedMode)
@@ -209,6 +290,90 @@ public class InventoryModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostRefreshTradeStatusAsync(CancellationToken cancellationToken)
+    {
+        if (_runtimeState.IsDegradedMode)
+        {
+            SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return RedirectToPage();
+        }
+
+        var appUser = await GetCurrentUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.");
+            return RedirectToPage();
+        }
+
+        if (!Guid.TryParse(Input.TradeOperationId, out var tradeOperationId))
+        {
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request is invalid.");
+            return RedirectToPage();
+        }
+
+        var operation = await _dbContext.TradeOperations
+            .SingleOrDefaultAsync(item => item.Id == tradeOperationId && item.AppUserId == appUser.Id, cancellationToken);
+        if (operation is null)
+        {
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request was not found.");
+            return RedirectToPage();
+        }
+
+        if (string.IsNullOrWhiteSpace(operation.TradeOfferId))
+        {
+            SellErrorMessage = "This sale request does not have a Steam trade offer yet.";
+            return RedirectToPage();
+        }
+
+        var results = await _steamTradeClient.GetOfferStatusesAsync(
+            new[]
+            {
+                new SteamTradeOfferStatusRequest
+                {
+                    OfferId = operation.TradeOfferId,
+                    Flow = "intake"
+                }
+            },
+            cancellationToken);
+        var status = results.FirstOrDefault();
+        if (status is null)
+        {
+            SellErrorMessage = "Could not check Steam offer status. Bot service did not return a status.";
+            return RedirectToPage();
+        }
+
+        var transitionLogs = new List<(string Level, string Message, string Source)>();
+        var changed = SteamTradeSyncService.ApplyTradeOperationStatus(operation, status, transitionLogs);
+        if (changed)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var entry in transitionLogs)
+        {
+            await _appLogService.WriteAsync(entry.Level, entry.Message, entry.Source, cancellationToken: cancellationToken);
+        }
+
+        if (operation.Status == "ReceivedByBot" && !operation.CreditedAtUtc.HasValue)
+        {
+            var creditResult = await _creditService.ConfirmReceivedAndCreditAsync(operation.Id, appUser.Id, cancellationToken);
+            await _appLogService.WriteAsync(
+                creditResult.Success ? "Info" : "Warning",
+                $"Manual status refresh credit result. TradeOperationId={operation.Id}; Success={creditResult.Success}; Status={creditResult.NewStatus}; OfferId={creditResult.TradeOfferId ?? "<null>"}; Message={creditResult.Message}",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
+
+            if (creditResult.Success)
+            {
+                SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, creditResult.Message);
+                return RedirectToPage();
+            }
+        }
+
+        TradeStatusMessage = BuildManualStatusMessage(operation, status);
+        return RedirectToPage();
+    }
+
     private async Task LoadPageAsync(CancellationToken cancellationToken)
     {
         var appUser = await GetCurrentUserAsync(cancellationToken);
@@ -220,12 +385,14 @@ public class InventoryModel : PageModel
         var currentGame = _gameCatalog.Get(_gameCatalog.DefaultGameType);
         CurrentGameType = currentGame.Type;
         CurrentGameDisplayName = currentGame.DisplayName;
+        CanUpdateTradeUrl = true;
         await _appLogService.WriteAsync(
             "Info",
             $"Inventory page request started. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; GameKey={currentGame.Key}; TradeUrlConfigured={!string.IsNullOrWhiteSpace(appUser.TradeUrl)}",
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
 
+        IsTradeUrlConfigured = !string.IsNullOrWhiteSpace(appUser.TradeUrl);
         if (string.IsNullOrWhiteSpace(appUser.TradeUrl))
         {
             WarningMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL is not set yet. Inventory still loads by SteamID.");
@@ -390,6 +557,39 @@ public class InventoryModel : PageModel
         return appUser;
     }
 
+    private async Task<AppUser?> GetCurrentTrackedUserAsync(CancellationToken cancellationToken)
+    {
+        if (!(User.Identity?.IsAuthenticated ?? false))
+        {
+            return null;
+        }
+
+        var steamId = User.FindFirst("SteamId")?.Value;
+        if (string.IsNullOrWhiteSpace(steamId))
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                "Inventory page could not resolve SteamId from the authenticated session while updating Trade URL.",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
+            return null;
+        }
+
+        var appUser = await _dbContext.AppUsers
+            .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+
+        if (appUser is null)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory page could not find a local user profile while updating Trade URL. SteamId={steamId}",
+                nameof(InventoryModel),
+                cancellationToken: cancellationToken);
+        }
+
+        return appUser;
+    }
+
     private static string BuildInventorySample(IEnumerable<SteamInventoryItemDto> items)
     {
         var sample = items
@@ -398,6 +598,16 @@ public class InventoryModel : PageModel
             .ToList();
 
         return sample.Count == 0 ? "<none>" : string.Join(" | ", sample);
+    }
+
+    private static string BuildManualStatusMessage(TradeOperation operation, SteamTradeOfferStatusResult status)
+    {
+        if (status.State == "Active")
+        {
+            return "Steam still reports this offer as active. If you clicked Confirm, wait a few seconds and check again; otherwise complete the Steam confirmation popup or Steam mobile confirmation.";
+        }
+
+        return $"Steam status checked. SteamState={status.State}; AppStatus={operation.Status}; Message={status.Message ?? "<none>"}";
     }
 
     private static List<GroupedInventoryItem> BuildGroupedItems(
@@ -410,16 +620,25 @@ public class InventoryModel : PageModel
             {
                 var entries = group.ToList();
                 var representativeItem = entries.First();
-                var availableItem = entries.FirstOrDefault(item => !latestOperationsByAssetId.ContainsKey(item.AssetId));
+                var availableItem = entries.FirstOrDefault(item =>
+                    !latestOperationsByAssetId.TryGetValue(item.AssetId, out var latestOperation) ||
+                    !BlocksInventoryItem(latestOperation.Status));
                 var createTradeOperation = entries
                     .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
-                    .Where(operation => operation is not null && (operation.Status == "Pending" || operation.Status == "Failed"))
+                    .Where(operation => operation is not null && operation.Status == "Pending")
                     .OrderByDescending(operation => operation!.CreatedAtUtc)
+                    .FirstOrDefault();
+                var awaitingUserOperation = entries
+                    .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
+                    .Where(operation => operation is not null &&
+                                        operation.Status == "AwaitingUserAction" &&
+                                        !string.IsNullOrWhiteSpace(operation.TradeOfferId))
+                    .OrderByDescending(operation => operation!.UpdatedAtUtc)
                     .FirstOrDefault();
 
                 var statusItems = entries
                     .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
-                    .Where(operation => operation is not null)
+                    .Where(operation => operation is not null && BlocksInventoryItem(operation.Status))
                     .GroupBy(operation => operation!.Status, StringComparer.Ordinal)
                     .Select(statusGroup => new GroupedInventoryStatusItem
                     {
@@ -462,15 +681,24 @@ public class InventoryModel : PageModel
                     SellIconUrl = availableItem?.IconUrl,
                     CreateTradeOperationId = createTradeOperation?.Id,
                     CreateTradeStatus = createTradeOperation?.Status,
+                    AwaitingUserTradeOfferId = awaitingUserOperation?.TradeOfferId,
                     HasWaitingForCredit = entries
                         .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
-                        .Any(operation => operation is not null && operation.Status == "ReceivedByBot" && !operation.CreditedAtUtc.HasValue),
+                        .Any(operation => operation is not null &&
+                                          BlocksInventoryItem(operation.Status) &&
+                                          operation.Status == "ReceivedByBot" &&
+                                          !operation.CreditedAtUtc.HasValue),
                     StatusItems = statusItems
                 };
             })
             .OrderBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.MarketHashName, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private static bool BlocksInventoryItem(string? status)
+    {
+        return !string.Equals(status, "Failed", StringComparison.Ordinal);
     }
 
     private static int GetInventoryStatusOrder(string status)
@@ -526,5 +754,11 @@ public class InventoryModel : PageModel
         public string? MarketHashName { get; set; }
         public string? IconUrl { get; set; }
         public string? TradeOperationId { get; set; }
+    }
+
+    public class TradeUrlUpdateInputModel
+    {
+        [StringLength(500)]
+        public string? TradeUrl { get; set; }
     }
 }

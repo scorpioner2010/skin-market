@@ -405,6 +405,165 @@ class SteamBot {
     );
   }
 
+  async confirmOffer(payload) {
+    await this.ensureReady();
+    this.validatePayload(payload, [
+      "offerId",
+      "flow"
+    ]);
+
+    const offerId = String(payload.offerId).trim();
+    const flow = String(payload.flow).trim();
+    if (!this.config.bot.identitySecret) {
+      return {
+        success: false,
+        offerId,
+        flow,
+        state: "IdentitySecretMissing",
+        message: "Bot identity secret is not configured, so mobile confirmation cannot be retried."
+      };
+    }
+
+    return await this.runTrackedActivity(
+      "confirm",
+      `Retrying bot confirmation for ${flow} offer ${offerId}.`,
+      {
+        offerId,
+        flow
+      },
+      async () => {
+        const offer = await this.getOfferById(offerId);
+        const currentState = this.getOfferStateName(offer.state);
+
+        if (offer.state === TradeOfferManager.ETradeOfferState.Active ||
+            offer.state === TradeOfferManager.ETradeOfferState.Accepted) {
+          return {
+            success: true,
+            offerId,
+            flow,
+            state: currentState,
+            message: `Trade offer is already ${currentState}.`
+          };
+        }
+
+        if (offer.state !== TradeOfferManager.ETradeOfferState.CreatedNeedsConfirmation) {
+          return {
+            success: false,
+            offerId,
+            flow,
+            state: currentState,
+            message: `Trade offer is ${currentState} and is not waiting for bot mobile confirmation.`
+          };
+        }
+
+        try {
+          await this.acceptConfirmation(offerId);
+        } catch (error) {
+          this.recordIssue("Error", "Manual bot confirmation retry failed.", {
+            offerId,
+            flow,
+            error: error.message
+          });
+
+          return {
+            success: false,
+            offerId,
+            flow,
+            state: currentState,
+            message: `Bot mobile confirmation retry failed: ${error.message}`
+          };
+        }
+
+        let refreshedState = "CreatedNeedsConfirmation";
+        try {
+          const refreshedOffer = await this.getOfferById(offerId);
+          refreshedState = this.getOfferStateName(refreshedOffer.state);
+        } catch {
+        }
+
+        return {
+          success: true,
+          offerId,
+          flow,
+          state: refreshedState,
+          message: `Bot mobile confirmation retry finished. Steam now reports ${refreshedState}.`
+        };
+      }
+    );
+  }
+
+  async cancelOffer(payload) {
+    await this.ensureReady();
+    this.validatePayload(payload, [
+      "offerId",
+      "flow"
+    ]);
+
+    const offerId = String(payload.offerId).trim();
+    const flow = String(payload.flow).trim();
+    const reason = payload.reason ? String(payload.reason).trim() : "Manual recovery cancel.";
+
+    return await this.runTrackedActivity(
+      "cancel",
+      `Canceling ${flow} offer ${offerId}.`,
+      {
+        offerId,
+        flow,
+        reason
+      },
+      async () => {
+        const offer = await this.getOfferById(offerId);
+        const currentState = this.getOfferStateName(offer.state);
+
+        if (this.isCancelSuccessState(offer.state)) {
+          return {
+            success: true,
+            offerId,
+            flow,
+            state: currentState,
+            message: `Trade offer is already ${currentState}.`
+          };
+        }
+
+        if (!this.isCancelableOfferState(offer.state)) {
+          return {
+            success: false,
+            offerId,
+            flow,
+            state: currentState,
+            message: `Trade offer cannot be canceled because it is ${currentState}.`
+          };
+        }
+
+        this.logger.warn("Canceling trade offer by recovery action.", {
+          offerId,
+          flow,
+          state: currentState,
+          reason
+        });
+
+        await new Promise((resolve, reject) => {
+          offer.cancel((error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            resolve();
+          });
+        });
+
+        return {
+          success: true,
+          offerId,
+          flow,
+          state: "Canceled",
+          message: "Trade offer was canceled by recovery action."
+        };
+      }
+    );
+  }
+
   logOn() {
     const refreshToken = this.tryReadRefreshToken();
     const loginDetails = refreshToken
@@ -854,6 +1013,21 @@ class SteamBot {
     const entries = Object.entries(TradeOfferManager.ETradeOfferState);
     const matched = entries.find(([, value]) => value === state);
     return matched ? matched[0] : "Unknown";
+  }
+
+  isCancelableOfferState(state) {
+    return state === TradeOfferManager.ETradeOfferState.Active ||
+      state === TradeOfferManager.ETradeOfferState.CreatedNeedsConfirmation;
+  }
+
+  isCancelSuccessState(state) {
+    return state === TradeOfferManager.ETradeOfferState.Canceled ||
+      state === TradeOfferManager.ETradeOfferState.Declined ||
+      state === TradeOfferManager.ETradeOfferState.Expired ||
+      state === TradeOfferManager.ETradeOfferState.Invalid ||
+      state === TradeOfferManager.ETradeOfferState.InvalidItems ||
+      state === TradeOfferManager.ETradeOfferState.CanceledBySecondFactor ||
+      state === TradeOfferManager.ETradeOfferState.Countered;
   }
 
   validatePayload(payload, requiredFields) {

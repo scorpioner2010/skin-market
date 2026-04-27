@@ -2,19 +2,37 @@
 @model SkinMarket.Pages.Admin.BotStatusModel
 @{
     ViewData["Title"] = "Bot Status";
+    string BuildSteamOfferUrl(string? offerId) => string.IsNullOrWhiteSpace(offerId)
+        ? "https://steamcommunity.com/my/tradeoffers/"
+        : $"https://steamcommunity.com/tradeoffer/{offerId}/";
+    string BuildSteamProfileUrl(string? steamId) => string.IsNullOrWhiteSpace(steamId)
+        ? "https://steamcommunity.com/"
+        : $"https://steamcommunity.com/profiles/{steamId}/";
+    string FormatLocalDateTime(DateTime? timestamp, string fallback = "Never") => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? fallback;
+    string FormatLocalDateTimeOffset(DateTimeOffset? timestamp, string fallback = "Never") => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? fallback;
+    string ResolveServiceBadgeStatus(string? state) => !Model.ServiceStatus.Reachable
+        ? "Failed"
+        : state switch
+        {
+            "Ready" => "Credited",
+            "Busy" or "Starting" or "Connecting" or "AwaitingWebSession" or "RefreshingSession" => "Pending",
+            "Disabled" or "Misconfigured" or "Disconnected" or "Error" => "Failed",
+            _ => Model.ServiceStatus.IsActive ? "Credited" : "Pending"
+        };
     var botName = Model.BotProfile?.PersonaName ?? Model.BotSteamId ?? "Steam Bot";
     var serviceState = !Model.ServiceStatus.Reachable
         ? "Unavailable"
         : Model.ServiceStatus.Bot.ServiceState ?? "Unknown";
-    var serviceBadgeStatus = !Model.ServiceStatus.Reachable
-        ? "Failed"
-        : Model.ServiceStatus.IsActive
-            ? "Credited"
-            : Model.ServiceStatus.Bot.Enabled
-                ? "Pending"
-                : "Failed";
+    var serviceBadgeStatus = ResolveServiceBadgeStatus(serviceState);
+    var serviceStateDescription = !string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.ServiceStateDescription)
+        ? Model.ServiceStatus.Bot.ServiceStateDescription
+        : Model.ServiceStatus.ReachabilityError ?? "Bot state is unavailable.";
     var activeActivities = Model.ServiceStatus.Bot.ActiveActivities ?? new List<SkinMarket.Models.BotServiceActivitySnapshot>();
+    var currentActivity = activeActivities
+        .OrderBy(activity => activity.StartedAt)
+        .FirstOrDefault();
     var recentBotIssues = Model.ServiceStatus.Bot.RecentIssues ?? new List<SkinMarket.Models.BotServiceIssueSnapshot>();
+    var historyMode = string.IsNullOrWhiteSpace(Model.HistoryMode) ? "all" : Model.HistoryMode;
 }
 
 <div class="py-4">
@@ -24,7 +42,11 @@
             <p class="text-muted mb-0">Live Steam bot state, current work, and only the important failures.</p>
         </div>
         <div class="action-row">
-            <a class="btn app-button-primary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-primary"
+               asp-page="/Admin/BotStatus"
+               asp-route-limit="@Model.Limit"
+               asp-route-searchTerm="@Model.SearchTerm"
+               asp-route-historyMode="@(historyMode == "all" ? null : historyMode)">Bot Status</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
         </div>
     </div>
@@ -32,6 +54,16 @@
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
         <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ActionErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ActionErrorMessage</div>
     }
 
     @if (!Model.ServiceStatus.Reachable)
@@ -45,6 +77,147 @@
     {
         <div class="app-alert alert-warning" role="alert">@Model.InventoryErrorMessage</div>
     }
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Live Bot State</h2>
+                <p class="section-description">Shows whether the bot is logging into Steam, waiting for the web session, or processing a trade right now.</p>
+            </div>
+            <div class="action-row" data-bot-live-refresh data-refresh-interval-seconds="15">
+                <span class="compact-badge compact-badge-neutral" data-bot-live-refresh-status>Auto refresh on</span>
+                <span class="meta-note" data-bot-live-refresh-countdown>Refresh in 15s.</span>
+                <button type="button" class="btn app-button-secondary" data-bot-live-refresh-toggle>Pause auto refresh</button>
+                <a class="btn app-button-primary"
+                   asp-page="/Admin/BotStatus"
+                   asp-route-limit="@Model.Limit"
+                   asp-route-searchTerm="@Model.SearchTerm"
+                   asp-route-historyMode="@(historyMode == "all" ? null : historyMode)">Refresh now</a>
+            </div>
+        </div>
+
+        <div class="card-grid live-status-grid">
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Current State</span>
+                <div class="card-heading">
+                    <h3>@serviceState</h3>
+                    <span class="status-badge" data-status="@serviceBadgeStatus">@serviceState</span>
+                </div>
+                <p class="card-subtitle">@serviceStateDescription</p>
+                <div class="history-metrics">
+                    <span><strong>State updated:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</span>
+                    <span><strong>Service reachable:</strong> @(Model.ServiceStatus.Reachable ? "Yes" : "No")</span>
+                </div>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Steam Login</span>
+                <div class="card-heading">
+                    <h3>@(Model.ServiceStatus.Bot.LoggedOn ? "Logged into Steam" : "Steam login pending")</h3>
+                    <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.LoggedOn ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.LoggedOn ? "Logged On" : "Waiting")</span>
+                </div>
+                <p class="card-subtitle">@(
+                    Model.ServiceStatus.Bot.LoggedOn
+                        ? "Steam account session is authenticated."
+                        : serviceStateDescription)</p>
+                <div class="history-metrics">
+                    <span><strong>Username configured:</strong> @(Model.ServiceStatus.Bot.UsernameConfigured ? "Yes" : "No")</span>
+                    <span><strong>Shared secret:</strong> @(Model.ServiceStatus.Bot.SharedSecretConfigured ? "Yes" : "No")</span>
+                    <span><strong>Identity secret:</strong> @(Model.ServiceStatus.Bot.IdentitySecretConfigured ? "Yes" : "No")</span>
+                </div>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Web Session</span>
+                <div class="card-heading">
+                    <h3>@(Model.ServiceStatus.Bot.Ready ? "Trade manager ready" : "Waiting for web session")</h3>
+                    <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.Ready ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.Ready ? "Ready" : "Waiting")</span>
+                </div>
+                <p class="card-subtitle">@(
+                    Model.ServiceStatus.Bot.Ready
+                        ? "Steam cookies and trade manager session are ready for work."
+                        : "The bot may already be logged into Steam but still waiting for cookies or a refreshed web session.")</p>
+                <div class="history-metrics">
+                    <span><strong>Last ready:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastReadyAt)</span>
+                    <span><strong>Active activities:</strong> @Model.ServiceStatus.Bot.ActiveActivityCount</span>
+                </div>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Current Focus</span>
+                <div class="card-heading">
+                    <h3>@(currentActivity?.Description ?? "No active trade action")</h3>
+                    <span class="status-badge" data-status="@(currentActivity is null ? "Credited" : "Pending")">@(currentActivity is null ? "Idle" : "Running")</span>
+                </div>
+                <p class="card-subtitle">@(
+                    currentActivity is null
+                        ? "If the bot is not busy, this panel follows the service state above."
+                        : $"Current activity type: {currentActivity.Type}")</p>
+                <div class="history-metrics">
+                    @if (currentActivity is null)
+                    {
+                        <span><strong>Focus:</strong> @serviceStateDescription</span>
+                    }
+                    else
+                    {
+                        <span><strong>Started:</strong> @FormatLocalDateTimeOffset(currentActivity.StartedAt, "Unknown")</span>
+                        @foreach (var detail in currentActivity.Meta)
+                        {
+                            <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                        }
+                    }
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Manual Runbooks</h2>
+                <p class="section-description">Exact button sequence for the bot side and for the client side when you manually test sell and buy flows.</p>
+            </div>
+        </div>
+        <div class="stack-grid">
+            <article class="content-card history-card">
+                <div class="card-heading">
+                    <div>
+                        <h3>Sell Item To Bot</h3>
+                        <p class="card-subtitle">Use this when a client wants to sell an item from their Steam inventory.</p>
+                    </div>
+                </div>
+                <div class="history-metrics">
+                    <span><strong>Client actions:</strong> `Profile -> Update Trade URL`, `Inventory -> Sell`, `Steam -> Accept Steam offer`.</span>
+                    <span><strong>Bot actions:</strong> `Create intake trade`, `Retry bot confirm` if needed, `Refresh Steam status`, `Credit seller` after `ReceivedByBot`.</span>
+                    <span><strong>Expected finish:</strong> trade status becomes `Credited`, seller balance increases, item appears in bot inventory and market.</span>
+                </div>
+                <div class="action-row mt-2">
+                    <a class="btn app-button-secondary" asp-page="/Profile">Open Profile</a>
+                    <a class="btn app-button-secondary" asp-page="/Inventory">Open Inventory</a>
+                    <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/" target="_blank" rel="noopener">Open Steam Trade Offers</a>
+                </div>
+            </article>
+
+            <article class="content-card history-card">
+                <div class="card-heading">
+                    <div>
+                        <h3>Buy Item From Market</h3>
+                        <p class="card-subtitle">Use this when a client buys an item that already sits in the bot inventory.</p>
+                    </div>
+                </div>
+                <div class="history-metrics">
+                    <span><strong>Client actions:</strong> `Profile -> Update Trade URL`, `Market -> Buy`, `Steam -> Accept delivery offer`.</span>
+                    <span><strong>Bot actions:</strong> `Create delivery trade`, `Retry bot confirm` if needed, `Refresh Steam status` until `Delivered`.</span>
+                    <span><strong>Expected finish:</strong> delivery status becomes `Delivered`, item leaves bot inventory and reaches the buyer.</span>
+                </div>
+                <div class="action-row mt-2">
+                    <a class="btn app-button-secondary" asp-page="/Profile">Open Profile</a>
+                    <a class="btn app-button-secondary" asp-page="/Market">Open Market</a>
+                    <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/" target="_blank" rel="noopener">Open Steam Trade Offers</a>
+                </div>
+            </article>
+        </div>
+    </section>
 
     <div class="profile-grid">
         <section class="content-card profile-card">
@@ -87,11 +260,15 @@
                 </div>
                 <div class="detail-row">
                     <dt>State</dt>
-                    <dd>@(Model.ServiceStatus.Bot.ServiceStateDescription ?? "Unavailable")</dd>
+                    <dd>@serviceStateDescription</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>State Updated</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</dd>
                 </div>
                 <div class="detail-row">
                     <dt>Last Ready</dt>
-                    <dd>@(Model.ServiceStatus.Bot.LastReadyAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Never")</dd>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastReadyAt)</dd>
                 </div>
                 <div class="detail-row">
                     <dt>Last Error</dt>
@@ -122,6 +299,11 @@
                 <span class="compact-badge compact-badge-neutral">Active @Model.ServiceStatus.Bot.ActiveActivityCount</span>
             </div>
 
+            <div class="live-state-summary">
+                <span><strong>Service focus:</strong> @serviceStateDescription</span>
+                <span><strong>State updated:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</span>
+            </div>
+
             @if (activeActivities.Count == 0)
             {
                 <div class="meta-note mb-3">Bot is currently idle.</div>
@@ -140,7 +322,7 @@
                                 <span class="status-badge" data-status="Pending">Running</span>
                             </div>
                             <div class="history-metrics">
-                                <span><strong>Started:</strong> @(activity.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                                <span><strong>Started:</strong> @FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
                                 @foreach (var detail in activity.Meta)
                                 {
                                     <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
@@ -169,8 +351,8 @@
                             <span class="status-badge" data-status="@(string.Equals(activity.Result, "Succeeded", StringComparison.OrdinalIgnoreCase) ? "Credited" : "Failed")">@activity.Result</span>
                         </div>
                         <div class="history-metrics">
-                            <span><strong>Started:</strong> @(activity.StartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
-                            <span><strong>Finished:</strong> @(activity.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                            <span><strong>Started:</strong> @FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
+                            <span><strong>Finished:</strong> @FormatLocalDateTimeOffset(activity.CompletedAt, "Unknown")</span>
                             @foreach (var detail in activity.Meta)
                             {
                                 <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
@@ -185,72 +367,169 @@
     <section class="page-section">
         <div class="section-heading">
             <div>
-                <h2>Important Issues</h2>
-                <p class="section-description">Only warning and error level problems are shown here.</p>
+                <h2>Find Older Offers</h2>
+                <p class="section-description">Search both intake and delivery history by item name, asset id, SteamID, status, or exact Steam offer id.</p>
             </div>
             <div class="action-row">
-                <a class="btn app-button-secondary" asp-page="/Admin/Logs">Open Full Logs</a>
+                <a class="btn app-button-secondary" href="#bot-purchases">Jump to purchases</a>
+                <a class="btn app-button-secondary" href="#bot-sales">Jump to sales</a>
             </div>
         </div>
 
-        @if (recentBotIssues.Count == 0 && Model.RecentAppIssues.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No important bot issues right now.</h3>
-            </div>
-        }
-        else
-        {
-            <div class="stack-grid">
-                @foreach (var issue in recentBotIssues)
-                {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@issue.Message</h3>
-                                <p class="card-subtitle">bot-service</p>
-                            </div>
-                            <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
-                        </div>
-                        <div class="history-metrics">
-                            <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
-                            @foreach (var detail in issue.Details)
-                            {
-                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
-                            }
-                        </div>
-                    </article>
-                }
+        <form method="get" class="content-card history-filter-form" data-pause-refresh>
+            <div class="history-filter-grid">
+                <label class="filter-field">
+                    <span>Search</span>
+                    <input class="form-control app-input"
+                           type="search"
+                           name="SearchTerm"
+                           value="@Model.SearchTerm"
+                           placeholder="Offer id, item name, asset id, SteamID" />
+                </label>
 
-                @foreach (var entry in Model.RecentAppIssues)
-                {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@entry.Message</h3>
-                                <p class="card-subtitle">@entry.Source</p>
-                            </div>
-                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
-                        </div>
-                        <div class="history-metrics">
-                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                <label class="filter-field">
+                    <span>Show</span>
+                    <select class="form-select app-input" name="HistoryMode">
+                        @if (historyMode == "all")
                         {
-                            <details class="mt-2">
-                                <summary>Stack trace</summary>
-                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                            </details>
+                            <option value="all" selected="selected">All statuses</option>
                         }
-                    </article>
+                        else
+                        {
+                            <option value="all">All statuses</option>
+                        }
+                        @if (historyMode == "actionable")
+                        {
+                            <option value="actionable" selected="selected">Actionable only</option>
+                        }
+                        else
+                        {
+                            <option value="actionable">Actionable only</option>
+                        }
+                        @if (historyMode == "failed")
+                        {
+                            <option value="failed" selected="selected">Failed only</option>
+                        }
+                        else
+                        {
+                            <option value="failed">Failed only</option>
+                        }
+                        @if (historyMode == "completed")
+                        {
+                            <option value="completed" selected="selected">Completed only</option>
+                        }
+                        else
+                        {
+                            <option value="completed">Completed only</option>
+                        }
+                    </select>
+                </label>
+
+                <label class="filter-field">
+                    <span>Limit</span>
+                    <select class="form-select app-input" name="Limit">
+                        @if (Model.Limit == 50)
+                        {
+                            <option value="50" selected="selected">50</option>
+                        }
+                        else
+                        {
+                            <option value="50">50</option>
+                        }
+                        @if (Model.Limit == 100)
+                        {
+                            <option value="100" selected="selected">100</option>
+                        }
+                        else
+                        {
+                            <option value="100">100</option>
+                        }
+                        @if (Model.Limit == 250)
+                        {
+                            <option value="250" selected="selected">250</option>
+                        }
+                        else
+                        {
+                            <option value="250">250</option>
+                        }
+                        @if (Model.Limit == 500)
+                        {
+                            <option value="500" selected="selected">500</option>
+                        }
+                        else
+                        {
+                            <option value="500">500</option>
+                        }
+                    </select>
+                </label>
+
+                <div class="filter-actions">
+                    <button type="submit" class="btn app-button-primary">Apply filters</button>
+                    @if (Model.HasActiveHistoryFilters)
+                    {
+                        <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Reset</a>
+                    }
+                </div>
+            </div>
+
+            <div class="history-filter-summary">
+                <span class="compact-badge compact-badge-neutral">Intake results: @Model.PurchaseHistory.Count</span>
+                <span class="compact-badge compact-badge-neutral">Delivery results: @Model.SaleHistory.Count</span>
+                @if (!string.IsNullOrWhiteSpace(Model.SearchTerm))
+                {
+                    <span class="compact-badge compact-badge-neutral">Search: @Model.SearchTerm</span>
                 }
             </div>
-        }
+        </form>
     </section>
 
     <section class="page-section">
         <div class="section-heading">
-            <div><h2>Bot Purchases</h2></div>
+            <div>
+                <h2>Logs</h2>
+                <p class="section-description">Bot logs were moved out of this page so the status and trade actions stay compact.</p>
+            </div>
+            <div class="action-row">
+                <a class="btn app-button-primary" asp-page="/Admin/Logs" asp-route-limit="50">Open Log Tab</a>
+            </div>
+        </div>
+
+        <div class="card-grid">
+            <article class="content-card live-status-card">
+                <span class="section-kicker">bot-service</span>
+                <div class="card-heading">
+                    <h3>Current Issues</h3>
+                    <span class="compact-badge compact-badge-neutral">@recentBotIssues.Count</span>
+                </div>
+                <p class="card-subtitle">Warnings and errors coming directly from the bot HTTP service.</p>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Application</span>
+                <div class="card-heading">
+                    <h3>App-Side Issues</h3>
+                    <span class="compact-badge compact-badge-neutral">@Model.RecentAppIssues.Count</span>
+                </div>
+                <p class="card-subtitle">Warnings and errors written by the ASP.NET app around intake, credit, delivery, and sync.</p>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Workflow</span>
+                <div class="card-heading">
+                    <h3>Recent Actions</h3>
+                    <span class="compact-badge compact-badge-neutral">@Model.RecentWorkflowEntries.Count</span>
+                </div>
+                <p class="card-subtitle">Manual and automatic workflow entries now live on the separate Logs page.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="page-section" id="bot-purchases">
+        <div class="section-heading">
+            <div>
+                <h2>Bot Purchases</h2>
+                <p class="section-description">Compact intake cards with quick bot actions. Open more details only when you need the extra context.</p>
+            </div>
         </div>
         @if (Model.PurchaseHistory.Count == 0)
         {
@@ -260,36 +539,120 @@
         }
         else
         {
-            <div class="stack-grid">
+            <div class="compact-trade-grid">
                 @foreach (var item in Model.PurchaseHistory)
                 {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
+                    var hasIntakeBotActions =
+                        Model.CanCreateIntake(item) ||
+                        Model.CanConfirmIntake(item) ||
+                        Model.CanRefreshIntake(item) ||
+                        Model.CanCreditIntake(item) ||
+                        Model.CanCancelIntake(item);
+                    <article class="content-card compact-trade-card">
+                        <div class="compact-trade-top">
                             <div>
                                 <h3>@item.ItemName</h3>
                                 <p class="card-subtitle break-value">@item.AssetId</p>
                             </div>
                             <span class="status-badge" data-status="@item.Status">@item.Status</span>
                         </div>
-                        <div class="history-metrics">
+                        <div class="compact-trade-facts">
                             <span><strong>Seller:</strong> @item.SellerDisplayName</span>
-                            <span><strong>SteamID:</strong> <span class="break-value">@item.SellerSteamId</span></span>
+                            <span><strong>Created:</strong> @FormatLocalDateTime(item.CreatedAtUtc, "Unknown")</span>
+                            <span><strong>Received:</strong> @FormatLocalDateTime(item.ReceivedByBotAtUtc)</span>
+                            <span><strong>Trade Offer:</strong> <span class="break-value">@(item.TradeOfferId ?? "None")</span></span>
                             <span><strong>Credit:</strong> @item.CreditAmount</span>
-                            <span><strong>Created:</strong> @item.CreatedAtUtc</span>
-                            <span><strong>Credited:</strong> @item.CreditedAtUtc</span>
-                            <span><strong>Trade Offer:</strong> <span class="break-value">@item.TradeOfferId</span></span>
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(item.ErrorMessage))
-                        {
-                            <div class="meta-note">@item.ErrorMessage</div>
-                        }
+                        <div class="compact-trade-actions">
+                            @if (Model.CanCreateIntake(item))
+                            {
+                                <form method="post" asp-page-handler="CreateIntake">
+                                    <input type="hidden" name="entityId" value="@item.Id" />
+                                    <input type="hidden" name="Limit" value="@Model.Limit" />
+                                    <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                    <button type="submit" class="btn app-button-primary">Create intake</button>
+                                </form>
+                            }
+                            @if (Model.CanConfirmIntake(item))
+                            {
+                                <form method="post" asp-page-handler="ConfirmIntake">
+                                    <input type="hidden" name="entityId" value="@item.Id" />
+                                    <input type="hidden" name="Limit" value="@Model.Limit" />
+                                    <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                    <button type="submit" class="btn app-button-secondary">Retry confirm</button>
+                                </form>
+                            }
+                            @if (Model.CanRefreshIntake(item))
+                            {
+                                <form method="post" asp-page-handler="RefreshIntake">
+                                    <input type="hidden" name="entityId" value="@item.Id" />
+                                    <input type="hidden" name="Limit" value="@Model.Limit" />
+                                    <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                    <button type="submit" class="btn app-button-secondary">Refresh</button>
+                                </form>
+                            }
+                            @if (Model.CanCreditIntake(item))
+                            {
+                                <form method="post" asp-page-handler="CreditIntake">
+                                    <input type="hidden" name="entityId" value="@item.Id" />
+                                    <input type="hidden" name="Limit" value="@Model.Limit" />
+                                    <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                    <button type="submit" class="btn app-button-secondary">Credit seller</button>
+                                </form>
+                            }
+                            @if (Model.CanCancelIntake(item))
+                            {
+                                <form method="post" asp-page-handler="CancelIntake">
+                                    <input type="hidden" name="CancelInput.EntityId" value="@item.Id" />
+                                    <input type="hidden" name="CancelInput.Status" value="@item.Status" />
+                                    <input type="hidden" name="Limit" value="@Model.Limit" />
+                                    <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                    <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                    <button type="submit" class="btn app-button-secondary" onclick="return confirm('Cancel this Steam offer and release the sale operation?');">Cancel</button>
+                                </form>
+                            }
+                            @if (Model.CanOpenSellerOffer(item))
+                            {
+                                <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.TradeOfferId)" target="_blank" rel="noopener">
+                                    @(item.Status == "AwaitingUserAction" ? "Open offer" : "Offer")
+                                </a>
+                            }
+                            @if (!hasIntakeBotActions && !Model.CanOpenSellerOffer(item))
+                            {
+                                <span class="compact-badge compact-badge-neutral">No manual action right now</span>
+                            }
+                        </div>
+                        <details class="compact-trade-details">
+                            <summary>More details</summary>
+                            <div class="compact-trade-facts compact-trade-facts-secondary">
+                                <span><strong>SteamID:</strong> <span class="break-value">@item.SellerSteamId</span></span>
+                                <span><strong>Updated:</strong> @FormatLocalDateTime(item.UpdatedAtUtc, "Unknown")</span>
+                                <span><strong>Credited:</strong> @FormatLocalDateTime(item.CreditedAtUtc)</span>
+                            </div>
+                            <div class="action-row">
+                                @if (!string.IsNullOrWhiteSpace(item.SellerSteamId))
+                                {
+                                    <a class="btn app-button-secondary" href="@BuildSteamProfileUrl(item.SellerSteamId)" target="_blank" rel="noopener">Seller Steam</a>
+                                }
+                                <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/" target="_blank" rel="noopener">Steam offers</a>
+                                <a class="btn app-button-secondary" asp-page="/Inventory">Inventory</a>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.ErrorMessage))
+                            {
+                                <div class="meta-note">@item.ErrorMessage</div>
+                            }
+                        </details>
                     </article>
                 }
             </div>
         }
     </section>
 
-    <section class="page-section">
+    <section class="page-section" id="bot-sales">
         <div class="section-heading">
             <div><h2>Bot Sales</h2></div>
         </div>
@@ -304,6 +667,11 @@
             <div class="stack-grid">
                 @foreach (var item in Model.SaleHistory)
                 {
+                    var hasDeliveryBotActions =
+                        Model.CanCreateDelivery(item) ||
+                        Model.CanConfirmDelivery(item) ||
+                        Model.CanRefreshDelivery(item) ||
+                        Model.CanCancelDelivery(item);
                     <article class="content-card history-card">
                         <div class="card-heading">
                             <div>
@@ -326,9 +694,83 @@
                                 <span><strong>Source Seller:</strong> @item.SourceSellerDisplayName</span>
                             }
                             <span><strong>Price:</strong> @item.Price</span>
-                            <span><strong>Purchased:</strong> @item.PurchasedAtUtc</span>
-                            <span><strong>Delivered:</strong> @item.DeliveredAtUtc</span>
-                            <span><strong>Trade Offer:</strong> <span class="break-value">@item.DeliveryTradeOfferId</span></span>
+                            <span><strong>Created:</strong> @FormatLocalDateTime(item.CreatedAtUtc, "Unknown")</span>
+                            <span><strong>Purchased:</strong> @FormatLocalDateTime(item.PurchasedAtUtc)</span>
+                            <span><strong>Updated:</strong> @FormatLocalDateTime(item.UpdatedAtUtc, "Unknown")</span>
+                            <span><strong>Delivered:</strong> @FormatLocalDateTime(item.DeliveredAtUtc)</span>
+                            <span><strong>Trade Offer:</strong> <span class="break-value">@(item.DeliveryTradeOfferId ?? "None")</span></span>
+                        </div>
+                        <div class="dual-action-grid mt-3">
+                            <section class="action-panel">
+                                <span class="section-kicker">Bot Actions</span>
+                                <p class="meta-note">Create, confirm, sync, or cancel this delivery trade from the bot side.</p>
+                                <div class="action-row">
+                                    @if (Model.CanCreateDelivery(item))
+                                    {
+                                        <form method="post" asp-page-handler="CreateDelivery">
+                                            <input type="hidden" name="entityId" value="@item.Id" />
+                                            <input type="hidden" name="Limit" value="@Model.Limit" />
+                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                            <button type="submit" class="btn app-button-primary">Create delivery trade</button>
+                                        </form>
+                                    }
+                                    @if (Model.CanConfirmDelivery(item))
+                                    {
+                                        <form method="post" asp-page-handler="ConfirmDelivery">
+                                            <input type="hidden" name="entityId" value="@item.Id" />
+                                            <input type="hidden" name="Limit" value="@Model.Limit" />
+                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                            <button type="submit" class="btn app-button-secondary">Retry bot confirm</button>
+                                        </form>
+                                    }
+                                    @if (Model.CanRefreshDelivery(item))
+                                    {
+                                        <form method="post" asp-page-handler="RefreshDelivery">
+                                            <input type="hidden" name="entityId" value="@item.Id" />
+                                            <input type="hidden" name="Limit" value="@Model.Limit" />
+                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                            <button type="submit" class="btn app-button-secondary">Refresh Steam status</button>
+                                        </form>
+                                    }
+                                    @if (Model.CanCancelDelivery(item))
+                                    {
+                                        <form method="post" asp-page-handler="CancelDelivery">
+                                            <input type="hidden" name="CancelInput.EntityId" value="@item.Id" />
+                                            <input type="hidden" name="CancelInput.Status" value="@item.DeliveryStatus" />
+                                            <input type="hidden" name="Limit" value="@Model.Limit" />
+                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
+                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
+                                            <button type="submit" class="btn app-button-secondary" onclick="return confirm('Cancel this Steam delivery offer and mark delivery as failed?');">Cancel stale delivery</button>
+                                        </form>
+                                    }
+                                    @if (!hasDeliveryBotActions)
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">No manual bot action right now</span>
+                                    }
+                                </div>
+                            </section>
+
+                            <section class="action-panel">
+                                <span class="section-kicker">Client-Side Links</span>
+                                <p class="meta-note">Open the buyer's Steam pages when the client has to accept, reject, or inspect this delivery.</p>
+                                <div class="action-row">
+                                    @if (!string.IsNullOrWhiteSpace(item.BuyerSteamId))
+                                    {
+                                        <a class="btn app-button-secondary" href="@BuildSteamProfileUrl(item.BuyerSteamId)" target="_blank" rel="noopener">Open buyer Steam</a>
+                                    }
+                                    <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/" target="_blank" rel="noopener">Open Steam offers</a>
+                                    <a class="btn app-button-secondary" asp-page="/Market">Open local Market</a>
+                                    @if (Model.CanOpenBuyerOffer(item))
+                                    {
+                                        <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.DeliveryTradeOfferId)" target="_blank" rel="noopener">
+                                            @(item.DeliveryStatus == "AwaitingBuyerAction" ? "Accept or decline buyer offer" : "Open exact buyer offer")
+                                        </a>
+                                    }
+                                </div>
+                            </section>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(item.DeliveryErrorMessage))
                         {
@@ -340,3 +782,76 @@
         }
     </section>
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const root = document.querySelector('[data-bot-live-refresh]');
+            if (!root) {
+                return;
+            }
+
+            const status = root.querySelector('[data-bot-live-refresh-status]');
+            const countdown = root.querySelector('[data-bot-live-refresh-countdown]');
+            const toggle = root.querySelector('[data-bot-live-refresh-toggle]');
+            const intervalSeconds = Number(root.dataset.refreshIntervalSeconds || '15');
+            const storageKey = 'skinmarket-admin-botstatus-autorefresh';
+            let enabled = localStorage.getItem(storageKey) !== 'off';
+            let remainingSeconds = intervalSeconds;
+
+            const isEditingFilters = () => {
+                const activeElement = document.activeElement;
+                return activeElement instanceof HTMLElement &&
+                    activeElement.closest('[data-pause-refresh]') !== null;
+            };
+
+            const render = () => {
+                if (!status || !countdown || !toggle) {
+                    return;
+                }
+
+                if (!enabled) {
+                    status.textContent = 'Auto refresh paused';
+                    countdown.textContent = 'Page refresh is paused.';
+                    toggle.textContent = 'Resume auto refresh';
+                    return;
+                }
+
+                status.textContent = 'Auto refresh on';
+                toggle.textContent = 'Pause auto refresh';
+                countdown.textContent = isEditingFilters()
+                    ? 'Paused while filters are focused.'
+                    : `Refresh in ${remainingSeconds}s.`;
+            };
+
+            toggle?.addEventListener('click', () => {
+                enabled = !enabled;
+                localStorage.setItem(storageKey, enabled ? 'on' : 'off');
+                remainingSeconds = intervalSeconds;
+                render();
+            });
+
+            render();
+
+            window.setInterval(() => {
+                if (!enabled) {
+                    return;
+                }
+
+                if (isEditingFilters()) {
+                    remainingSeconds = intervalSeconds;
+                    render();
+                    return;
+                }
+
+                remainingSeconds -= 1;
+                if (remainingSeconds <= 0) {
+                    window.location.reload();
+                    return;
+                }
+
+                render();
+            }, 1000);
+        })();
+    </script>
+}

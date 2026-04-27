@@ -12,19 +12,43 @@ public class SteamBotIntakeService : ISteamBotIntakeService
     private readonly AppDbContext _dbContext;
     private readonly ISteamTradeClient _steamTradeClient;
     private readonly SteamBotOptions _options;
+    private readonly IAppLogService _appLogService;
 
     public SteamBotIntakeService(
         AppDbContext dbContext,
         ISteamTradeClient steamTradeClient,
-        IOptions<SteamBotOptions> options)
+        IOptions<SteamBotOptions> options,
+        IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _steamTradeClient = steamTradeClient;
         _options = options.Value;
+        _appLogService = appLogService;
     }
 
     public async Task<BotIntakeResult> CreateIntakeRequestAsync(Guid tradeOperationId, Guid appUserId, CancellationToken cancellationToken = default)
     {
+        async Task<BotIntakeResult> FailAsync(string status, string message)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Intake request processing failed. TradeOperationId={tradeOperationId}; AppUserId={appUserId}; Status={status}; Message={message}",
+                nameof(SteamBotIntakeService),
+                cancellationToken: cancellationToken);
+            return new BotIntakeResult
+            {
+                Success = false,
+                NewStatus = status,
+                Message = message
+            };
+        }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Intake request processing started. TradeOperationId={tradeOperationId}; AppUserId={appUserId}",
+            nameof(SteamBotIntakeService),
+            cancellationToken: cancellationToken);
+
         var operation = await _dbContext.TradeOperations
             .SingleOrDefaultAsync(
                 item => item.Id == tradeOperationId && item.AppUserId == appUserId,
@@ -32,16 +56,17 @@ public class SteamBotIntakeService : ISteamBotIntakeService
 
         if (operation is null)
         {
-            return new BotIntakeResult
-            {
-                NewStatus = "Failed",
-                Message = "Sale request was not found."
-            };
+            return await FailAsync("Failed", "Sale request was not found.");
         }
 
         if (!string.Equals(operation.Status, "Pending", StringComparison.Ordinal) &&
             !string.Equals(operation.Status, "Failed", StringComparison.Ordinal))
         {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Intake request processing skipped because status is not eligible. TradeOperationId={tradeOperationId}; AppUserId={appUserId}; Status={operation.Status}; OfferId={operation.TradeOfferId ?? "<null>"}",
+                nameof(SteamBotIntakeService),
+                cancellationToken: cancellationToken);
             return new BotIntakeResult
             {
                 NewStatus = operation.Status,
@@ -70,20 +95,12 @@ public class SteamBotIntakeService : ISteamBotIntakeService
 
         if (seller is null)
         {
-            return new BotIntakeResult
-            {
-                NewStatus = "Failed",
-                Message = "Local user profile was not found."
-            };
+            return await FailAsync("Failed", "Local user profile was not found.");
         }
 
         if (string.IsNullOrWhiteSpace(seller.TradeUrl))
         {
-            return new BotIntakeResult
-            {
-                NewStatus = "Failed",
-                Message = "Seller Trade URL is required before intake can start."
-            };
+            return await FailAsync("Failed", "Seller Trade URL is required before intake can start.");
         }
 
         operation.Status = "BotPending";
@@ -104,6 +121,11 @@ public class SteamBotIntakeService : ISteamBotIntakeService
         operation.ErrorMessage = intakeResult.Success ? null : intakeResult.Message;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _appLogService.WriteAsync(
+            intakeResult.Success ? "Info" : "Warning",
+            $"Intake request processing finished. TradeOperationId={operation.Id}; AppUserId={appUserId}; Success={intakeResult.Success}; Status={operation.Status}; OfferId={operation.TradeOfferId ?? "<null>"}; Message={intakeResult.Message}",
+            nameof(SteamBotIntakeService),
+            cancellationToken: cancellationToken);
 
         return intakeResult;
     }

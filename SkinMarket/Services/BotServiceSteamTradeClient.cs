@@ -234,6 +234,188 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
         }
     }
 
+    public async Task<SteamTradeOfferConfirmationResult> ConfirmOfferAsync(
+        string offerId,
+        string flow,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new ConfirmTradeOfferRequest
+        {
+            OfferId = offerId,
+            Flow = flow
+        };
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Bot confirm request started. Flow={flow}; OfferId={offerId}",
+            nameof(BotServiceSteamTradeClient),
+            cancellationToken: cancellationToken);
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync("/api/trades/confirm", request, SerializerOptions, cancellationToken);
+            MarkServiceReachable();
+            var payload = await DeserializeAsync<ConfirmTradeOfferResponse>(response, cancellationToken);
+            if (!response.IsSuccessStatusCode || payload is null)
+            {
+                var message = payload?.Message ?? $"Bot confirm request failed with HTTP {(int)response.StatusCode}.";
+                await _appLogService.WriteAsync("Error", message, nameof(BotServiceSteamTradeClient), cancellationToken: cancellationToken);
+                return new SteamTradeOfferConfirmationResult
+                {
+                    Success = false,
+                    OfferId = offerId,
+                    Flow = flow,
+                    State = payload?.State,
+                    Message = message
+                };
+            }
+
+            await _appLogService.WriteAsync(
+                payload.Success ? "Info" : "Warning",
+                $"Bot confirm request finished. Flow={flow}; OfferId={offerId}; Success={payload.Success}; State={payload.State ?? "<null>"}; Message={payload.Message}",
+                nameof(BotServiceSteamTradeClient),
+                cancellationToken: cancellationToken);
+
+            return new SteamTradeOfferConfirmationResult
+            {
+                Success = payload.Success,
+                OfferId = payload.OfferId ?? offerId,
+                Flow = payload.Flow ?? flow,
+                State = payload.State,
+                Message = payload.Message ?? "Bot confirmation request finished."
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (await TryHandleConnectivityFailureAsync(
+                    "Bot confirm request",
+                    $"Bot confirm request could not reach bot service. Flow={flow}; OfferId={offerId}",
+                    exception,
+                    cancellationToken))
+            {
+                return new SteamTradeOfferConfirmationResult
+                {
+                    Success = false,
+                    OfferId = offerId,
+                    Flow = flow,
+                    Message = "Bot service is unreachable."
+                };
+            }
+
+            _logger.LogError(exception, "Bot confirm request failed for {Flow} offer {OfferId}.", flow, offerId);
+            await _appLogService.WriteAsync(
+                "Error",
+                $"Bot confirm request failed unexpectedly. Flow={flow}; OfferId={offerId}",
+                nameof(BotServiceSteamTradeClient),
+                exception,
+                cancellationToken);
+
+            return new SteamTradeOfferConfirmationResult
+            {
+                Success = false,
+                OfferId = offerId,
+                Flow = flow,
+                Message = "Bot confirm request failed unexpectedly."
+            };
+        }
+    }
+
+    public async Task<SteamTradeOfferCancelResult> CancelOfferAsync(
+        string offerId,
+        string flow,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var request = new CancelTradeOfferRequest
+        {
+            OfferId = offerId,
+            Flow = flow,
+            Reason = reason
+        };
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Bot cancel request started. Flow={flow}; OfferId={offerId}; Reason={reason}",
+            nameof(BotServiceSteamTradeClient),
+            cancellationToken: cancellationToken);
+
+        try
+        {
+            using var response = await _httpClient.PostAsJsonAsync("/api/trades/cancel", request, SerializerOptions, cancellationToken);
+            MarkServiceReachable();
+            var payload = await DeserializeAsync<CancelTradeOfferResponse>(response, cancellationToken);
+            if (!response.IsSuccessStatusCode || payload is null)
+            {
+                var message = payload?.Message ?? $"Bot cancel request failed with HTTP {(int)response.StatusCode}.";
+                await _appLogService.WriteAsync("Error", message, nameof(BotServiceSteamTradeClient), cancellationToken: cancellationToken);
+                return new SteamTradeOfferCancelResult
+                {
+                    Success = false,
+                    OfferId = offerId,
+                    Flow = flow,
+                    State = payload?.State,
+                    Message = message
+                };
+            }
+
+            await _appLogService.WriteAsync(
+                payload.Success ? "Warning" : "Error",
+                $"Bot cancel request finished. Flow={flow}; OfferId={offerId}; Success={payload.Success}; State={payload.State ?? "<null>"}; Message={payload.Message}",
+                nameof(BotServiceSteamTradeClient),
+                cancellationToken: cancellationToken);
+
+            return new SteamTradeOfferCancelResult
+            {
+                Success = payload.Success,
+                OfferId = payload.OfferId ?? offerId,
+                Flow = payload.Flow ?? flow,
+                State = payload.State,
+                Message = payload.Message ?? "Bot cancel request finished."
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            if (await TryHandleConnectivityFailureAsync(
+                    "Bot cancel request",
+                    $"Bot cancel request could not reach bot service. Flow={flow}; OfferId={offerId}",
+                    exception,
+                    cancellationToken))
+            {
+                return new SteamTradeOfferCancelResult
+                {
+                    Success = false,
+                    OfferId = offerId,
+                    Flow = flow,
+                    Message = "Bot service is unreachable."
+                };
+            }
+
+            _logger.LogError(exception, "Bot cancel request failed for {Flow} offer {OfferId}.", flow, offerId);
+            await _appLogService.WriteAsync(
+                "Error",
+                $"Bot cancel request failed unexpectedly. Flow={flow}; OfferId={offerId}",
+                nameof(BotServiceSteamTradeClient),
+                exception,
+                cancellationToken);
+
+            return new SteamTradeOfferCancelResult
+            {
+                Success = false,
+                OfferId = offerId,
+                Flow = flow,
+                Message = "Bot cancel request failed unexpectedly."
+            };
+        }
+    }
+
     public async Task<IReadOnlyList<SteamTradeOfferStatusResult>> GetOfferStatusesAsync(
         IReadOnlyCollection<SteamTradeOfferStatusRequest> requests,
         CancellationToken cancellationToken = default)
@@ -368,12 +550,43 @@ public class BotServiceSteamTradeClient : ISteamTradeClient
         public string ItemName { get; set; } = string.Empty;
     }
 
+    private sealed class CancelTradeOfferRequest
+    {
+        public string OfferId { get; set; } = string.Empty;
+        public string Flow { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    private sealed class ConfirmTradeOfferRequest
+    {
+        public string OfferId { get; set; } = string.Empty;
+        public string Flow { get; set; } = string.Empty;
+    }
+
     private sealed class CreateTradeResponse
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
         public string? TradeOfferId { get; set; }
         public string? NewStatus { get; set; }
+    }
+
+    private sealed class CancelTradeOfferResponse
+    {
+        public bool Success { get; set; }
+        public string? OfferId { get; set; }
+        public string? Flow { get; set; }
+        public string? State { get; set; }
+        public string? Message { get; set; }
+    }
+
+    private sealed class ConfirmTradeOfferResponse
+    {
+        public bool Success { get; set; }
+        public string? OfferId { get; set; }
+        public string? Flow { get; set; }
+        public string? State { get; set; }
+        public string? Message { get; set; }
     }
 
     private sealed class GetOfferStatusesRequest

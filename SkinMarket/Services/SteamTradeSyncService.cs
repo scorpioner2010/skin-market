@@ -10,8 +10,15 @@ namespace SkinMarket.Services;
 public class SteamTradeSyncService : BackgroundService
 {
     private static readonly TimeSpan SyncInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan AwaitingUserActionWarningThreshold = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan AwaitingBuyerActionWarningThreshold = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan AwaitingBotConfirmationWarningThreshold = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan AcceptedPendingReceiptWarningThreshold = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan StaleWarningRepeatInterval = TimeSpan.FromHours(1);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SteamTradeSyncService> _logger;
+    private readonly Dictionary<Guid, DateTime> _intakeWarningLogTimes = new();
+    private readonly Dictionary<Guid, DateTime> _deliveryWarningLogTimes = new();
 
     public SteamTradeSyncService(IServiceScopeFactory scopeFactory, ILogger<SteamTradeSyncService> logger)
     {
@@ -160,6 +167,8 @@ public class SteamTradeSyncService : BackgroundService
             }
         }
 
+        AppendStaleWaitingWarnings(operations, deliveryItems, transitionLogs);
+
         if (stateChanged)
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -188,7 +197,7 @@ public class SteamTradeSyncService : BackgroundService
         }
     }
 
-    private static bool ApplyTradeOperationStatus(
+    public static bool ApplyTradeOperationStatus(
         TradeOperation operation,
         SteamTradeOfferStatusResult status,
         ICollection<(string Level, string Message, string Source)> logs)
@@ -204,11 +213,11 @@ public class SteamTradeSyncService : BackgroundService
                 break;
             case "CreatedNeedsConfirmation":
                 operation.Status = "AwaitingBotConfirmation";
-                operation.ErrorMessage = status.Message;
+                operation.ErrorMessage = status.Message ?? "Trade offer is waiting for bot mobile confirmation.";
                 break;
             case "Active":
-                operation.Status = "TradeCreated";
-                operation.ErrorMessage = null;
+                operation.Status = "AwaitingUserAction";
+                operation.ErrorMessage = status.Message ?? "Trade offer is active and awaiting seller acceptance.";
                 break;
             case "AcceptedPendingReceipt":
                 operation.Status = "TradeAcceptedPendingReceipt";
@@ -244,10 +253,10 @@ public class SteamTradeSyncService : BackgroundService
                 break;
         }
 
-        operation.UpdatedAtUtc = DateTime.UtcNow;
         var changed = previousStatus != operation.Status || previousMessage != operation.ErrorMessage;
         if (changed)
         {
+            operation.UpdatedAtUtc = DateTime.UtcNow;
             logs.Add((
                 operation.Status == "Failed" ? "Warning" : "Info",
                 $"Intake trade state changed. TradeOperationId={operation.Id}; OfferId={operation.TradeOfferId ?? "<null>"}; PreviousStatus={previousStatus}; NewStatus={operation.Status}; SteamState={status.State}; Message={operation.ErrorMessage ?? "<null>"}",
@@ -257,7 +266,7 @@ public class SteamTradeSyncService : BackgroundService
         return changed;
     }
 
-    private static bool ApplyDeliveryStatus(
+    public static bool ApplyDeliveryStatus(
         MarketPurchaseRecord item,
         SteamTradeOfferStatusResult status,
         ICollection<(string Level, string Message, string Source)> logs)
@@ -273,11 +282,11 @@ public class SteamTradeSyncService : BackgroundService
                 break;
             case "CreatedNeedsConfirmation":
                 item.DeliveryStatus = "AwaitingBotConfirmation";
-                item.DeliveryErrorMessage = status.Message;
+                item.DeliveryErrorMessage = status.Message ?? "Trade offer is waiting for bot mobile confirmation.";
                 break;
             case "Active":
-                item.DeliveryStatus = "DeliveryTradeCreated";
-                item.DeliveryErrorMessage = null;
+                item.DeliveryStatus = "AwaitingBuyerAction";
+                item.DeliveryErrorMessage = status.Message ?? "Trade offer is active and awaiting buyer acceptance.";
                 break;
             case "Accepted":
                 item.DeliveryStatus = "Delivered";
@@ -301,10 +310,10 @@ public class SteamTradeSyncService : BackgroundService
                 break;
         }
 
-        item.UpdatedAtUtc = DateTime.UtcNow;
         var changed = previousStatus != item.DeliveryStatus || previousMessage != item.DeliveryErrorMessage;
         if (changed)
         {
+            item.UpdatedAtUtc = DateTime.UtcNow;
             logs.Add((
                 item.DeliveryStatus == "DeliveryFailed" ? "Warning" : "Info",
                 $"Delivery trade state changed. MarketPurchaseId={item.Id}; OfferId={item.DeliveryTradeOfferId ?? "<null>"}; PreviousStatus={previousStatus ?? "<null>"}; NewStatus={item.DeliveryStatus ?? "<null>"}; SteamState={status.State}; Message={item.DeliveryErrorMessage ?? "<null>"}",
@@ -312,6 +321,173 @@ public class SteamTradeSyncService : BackgroundService
         }
 
         return changed;
+    }
+
+    private void AppendStaleWaitingWarnings(
+        IReadOnlyCollection<TradeOperation> operations,
+        IReadOnlyCollection<MarketPurchaseRecord> deliveryItems,
+        ICollection<(string Level, string Message, string Source)> logs)
+    {
+        var nowUtc = DateTime.UtcNow;
+        AppendStaleIntakeWarnings(operations, logs, nowUtc);
+        AppendStaleDeliveryWarnings(deliveryItems, logs, nowUtc);
+    }
+
+    private void AppendStaleIntakeWarnings(
+        IEnumerable<TradeOperation> operations,
+        ICollection<(string Level, string Message, string Source)> logs,
+        DateTime nowUtc)
+    {
+        var activeWarnings = new HashSet<Guid>();
+        foreach (var operation in operations)
+        {
+            if (!TryBuildStaleIntakeWarning(operation, nowUtc, out var message))
+            {
+                continue;
+            }
+
+            activeWarnings.Add(operation.Id);
+            if (!ShouldLogStaleWarning(_intakeWarningLogTimes, operation.Id, nowUtc))
+            {
+                continue;
+            }
+
+            logs.Add(("Warning", message, nameof(SteamTradeSyncService)));
+        }
+
+        PruneInactiveWarnings(_intakeWarningLogTimes, activeWarnings);
+    }
+
+    private void AppendStaleDeliveryWarnings(
+        IEnumerable<MarketPurchaseRecord> deliveryItems,
+        ICollection<(string Level, string Message, string Source)> logs,
+        DateTime nowUtc)
+    {
+        var activeWarnings = new HashSet<Guid>();
+        foreach (var item in deliveryItems)
+        {
+            if (!TryBuildStaleDeliveryWarning(item, nowUtc, out var message))
+            {
+                continue;
+            }
+
+            activeWarnings.Add(item.Id);
+            if (!ShouldLogStaleWarning(_deliveryWarningLogTimes, item.Id, nowUtc))
+            {
+                continue;
+            }
+
+            logs.Add(("Warning", message, nameof(SteamTradeSyncService)));
+        }
+
+        PruneInactiveWarnings(_deliveryWarningLogTimes, activeWarnings);
+    }
+
+    private static bool TryBuildStaleIntakeWarning(TradeOperation operation, DateTime nowUtc, out string message)
+    {
+        message = string.Empty;
+        if (!TryDescribeIntakeWaitingStatus(operation.Status, out var threshold, out var waitingFor))
+        {
+            return false;
+        }
+
+        var age = nowUtc - operation.CreatedAtUtc;
+        if (age < threshold)
+        {
+            return false;
+        }
+
+        message =
+            $"Intake trade is waiting too long. TradeOperationId={operation.Id}; OfferId={operation.TradeOfferId ?? "<null>"}; Status={operation.Status}; WaitingFor={waitingFor}; AgeMinutes={(int)age.TotalMinutes}; CreatedAtUtc={operation.CreatedAtUtc:O}; Message={operation.ErrorMessage ?? "<null>"}";
+        return true;
+    }
+
+    private static bool TryBuildStaleDeliveryWarning(MarketPurchaseRecord item, DateTime nowUtc, out string message)
+    {
+        message = string.Empty;
+        if (!TryDescribeDeliveryWaitingStatus(item.DeliveryStatus, out var threshold, out var waitingFor))
+        {
+            return false;
+        }
+
+        var startedAtUtc = item.PurchasedAtUtc ?? item.CreatedAtUtc;
+        var age = nowUtc - startedAtUtc;
+        if (age < threshold)
+        {
+            return false;
+        }
+
+        message =
+            $"Delivery trade is waiting too long. MarketPurchaseId={item.Id}; OfferId={item.DeliveryTradeOfferId ?? "<null>"}; Status={item.DeliveryStatus ?? "<null>"}; WaitingFor={waitingFor}; AgeMinutes={(int)age.TotalMinutes}; StartedAtUtc={startedAtUtc:O}; Message={item.DeliveryErrorMessage ?? "<null>"}";
+        return true;
+    }
+
+    private static bool TryDescribeIntakeWaitingStatus(string? status, out TimeSpan threshold, out string waitingFor)
+    {
+        switch (status)
+        {
+            case "AwaitingBotConfirmation":
+                threshold = AwaitingBotConfirmationWarningThreshold;
+                waitingFor = "bot mobile confirmation";
+                return true;
+            case "TradeCreated":
+            case "AwaitingUserAction":
+                threshold = AwaitingUserActionWarningThreshold;
+                waitingFor = "seller acceptance";
+                return true;
+            case "TradeAcceptedPendingReceipt":
+                threshold = AcceptedPendingReceiptWarningThreshold;
+                waitingFor = "Steam exchange details";
+                return true;
+            default:
+                threshold = TimeSpan.Zero;
+                waitingFor = string.Empty;
+                return false;
+        }
+    }
+
+    private static bool TryDescribeDeliveryWaitingStatus(string? status, out TimeSpan threshold, out string waitingFor)
+    {
+        switch (status)
+        {
+            case "AwaitingBotConfirmation":
+                threshold = AwaitingBotConfirmationWarningThreshold;
+                waitingFor = "bot mobile confirmation";
+                return true;
+            case "DeliveryTradeCreated":
+            case "AwaitingBuyerAction":
+                threshold = AwaitingBuyerActionWarningThreshold;
+                waitingFor = "buyer acceptance";
+                return true;
+            default:
+                threshold = TimeSpan.Zero;
+                waitingFor = string.Empty;
+                return false;
+        }
+    }
+
+    private static bool ShouldLogStaleWarning(IDictionary<Guid, DateTime> cache, Guid entityId, DateTime nowUtc)
+    {
+        if (cache.TryGetValue(entityId, out var previousLoggedAtUtc) &&
+            nowUtc - previousLoggedAtUtc < StaleWarningRepeatInterval)
+        {
+            return false;
+        }
+
+        cache[entityId] = nowUtc;
+        return true;
+    }
+
+    private static void PruneInactiveWarnings(IDictionary<Guid, DateTime> cache, ISet<Guid> activeWarnings)
+    {
+        var staleKeys = cache.Keys
+            .Where(key => !activeWarnings.Contains(key))
+            .ToList();
+
+        foreach (var staleKey in staleKeys)
+        {
+            cache.Remove(staleKey);
+        }
     }
 
     private async Task PersistWorkerFailureAsync(Exception exception, CancellationToken cancellationToken)

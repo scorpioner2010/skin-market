@@ -20,6 +20,7 @@ public class GroupedInventoryItem
     public string? SellIconUrl { get; set; }
     public Guid? CreateTradeOperationId { get; set; }
     public string? CreateTradeStatus { get; set; }
+    public string? AwaitingUserTradeOfferId { get; set; }
     public bool HasWaitingForCredit { get; set; }
     public bool HasSellableItem => !string.IsNullOrWhiteSpace(SellAssetId);
     public List<GroupedInventoryStatusItem> StatusItems { get; set; } = new();

@@ -24,6 +24,7 @@ public class LogsModel : PageModel
 
     public BotServiceStatusSnapshot BotStatus { get; private set; } = new();
     public IReadOnlyList<AppLog> AppEntries { get; private set; } = Array.Empty<AppLog>();
+    public IReadOnlyList<AppLog> WorkflowEntries { get; private set; } = Array.Empty<AppLog>();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -31,5 +32,6 @@ public class LogsModel : PageModel
         BotStatus = await _botServiceStatusClient.GetStatusAsync(cancellationToken);
         var recent = _appLogReader.GetRecent(take * 4, sources: BotDiagnosticsCatalog.AppLogSources);
         AppEntries = BotDiagnosticsCatalog.FilterImportantAppEntries(recent, take);
+        WorkflowEntries = _appLogReader.GetRecent(Math.Max(take, 40), sources: BotDiagnosticsCatalog.WorkflowLogSources);
     }
 }

@@ -12,34 +12,58 @@ public class MarketDeliveryService : IMarketDeliveryService
     private readonly AppDbContext _dbContext;
     private readonly ISteamTradeClient _steamTradeClient;
     private readonly SteamBotOptions _options;
+    private readonly IAppLogService _appLogService;
 
     public MarketDeliveryService(
         AppDbContext dbContext,
         ISteamTradeClient steamTradeClient,
-        IOptions<SteamBotOptions> options)
+        IOptions<SteamBotOptions> options,
+        IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _steamTradeClient = steamTradeClient;
         _options = options.Value;
+        _appLogService = appLogService;
     }
 
     public async Task<MarketDeliveryResult> CreateDeliveryTradeAsync(Guid marketItemId, Guid buyerAppUserId, CancellationToken cancellationToken = default)
     {
+        async Task<MarketDeliveryResult> FailAsync(string status, string message)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Delivery creation failed. MarketPurchaseId={marketItemId}; BuyerAppUserId={buyerAppUserId}; Status={status}; Message={message}",
+                nameof(MarketDeliveryService),
+                cancellationToken: cancellationToken);
+            return new MarketDeliveryResult { NewStatus = status, Message = message };
+        }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Delivery creation started. MarketPurchaseId={marketItemId}; BuyerAppUserId={buyerAppUserId}",
+            nameof(MarketDeliveryService),
+            cancellationToken: cancellationToken);
+
         var marketItem = await _dbContext.MarketPurchaseRecords
             .SingleOrDefaultAsync(item => item.Id == marketItemId && item.BuyerAppUserId == buyerAppUserId, cancellationToken);
 
         if (marketItem is null)
         {
-            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = "Purchased item was not found." };
+            return await FailAsync("DeliveryFailed", "Purchased item was not found.");
         }
 
         if (marketItem.Status != "Sold" || marketItem.BuyerAppUserId is null)
         {
-            return new MarketDeliveryResult { NewStatus = marketItem.DeliveryStatus ?? "DeliveryFailed", Message = "Only sold items can enter delivery flow." };
+            return await FailAsync(marketItem.DeliveryStatus ?? "DeliveryFailed", "Only sold items can enter delivery flow.");
         }
 
         if (marketItem.DeliveryStatus == "Delivered")
         {
+            await _appLogService.WriteAsync(
+                "Info",
+                $"Delivery creation skipped because item is already delivered. MarketPurchaseId={marketItem.Id}; OfferId={marketItem.DeliveryTradeOfferId ?? "<null>"}",
+                nameof(MarketDeliveryService),
+                cancellationToken: cancellationToken);
             return new MarketDeliveryResult
             {
                 Success = true,
@@ -53,6 +77,11 @@ public class MarketDeliveryService : IMarketDeliveryService
             marketItem.DeliveryStatus == "AwaitingBuyerAction" ||
             marketItem.DeliveryStatus == "AwaitingBotConfirmation")
         {
+            await _appLogService.WriteAsync(
+                "Info",
+                $"Delivery creation skipped because trade already exists. MarketPurchaseId={marketItem.Id}; DeliveryStatus={marketItem.DeliveryStatus}; OfferId={marketItem.DeliveryTradeOfferId ?? "<null>"}",
+                nameof(MarketDeliveryService),
+                cancellationToken: cancellationToken);
             return new MarketDeliveryResult
             {
                 Success = true,
@@ -67,7 +96,7 @@ public class MarketDeliveryService : IMarketDeliveryService
 
         if (buyer is null)
         {
-            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = "Buyer profile was not found." };
+            return await FailAsync("DeliveryFailed", "Buyer profile was not found.");
         }
 
         if (string.IsNullOrWhiteSpace(buyer.TradeUrl))
@@ -76,7 +105,7 @@ public class MarketDeliveryService : IMarketDeliveryService
             marketItem.DeliveryErrorMessage = "Buyer Trade URL is required before delivery can start.";
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
+            return await FailAsync("DeliveryFailed", marketItem.DeliveryErrorMessage);
         }
 
         if (string.IsNullOrWhiteSpace(marketItem.AssetId) ||
@@ -87,7 +116,7 @@ public class MarketDeliveryService : IMarketDeliveryService
             marketItem.DeliveryErrorMessage = "Bot inventory asset mapping is missing for this market item.";
             await _dbContext.SaveChangesAsync(cancellationToken);
 
-            return new MarketDeliveryResult { NewStatus = "DeliveryFailed", Message = marketItem.DeliveryErrorMessage };
+            return await FailAsync("DeliveryFailed", marketItem.DeliveryErrorMessage);
         }
 
         if (!_options.Enabled || !HasConfiguredCredentials())
@@ -118,6 +147,11 @@ public class MarketDeliveryService : IMarketDeliveryService
         marketItem.DeliveryErrorMessage = deliveryResult.Success ? null : deliveryResult.Message;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _appLogService.WriteAsync(
+            deliveryResult.Success ? "Info" : "Warning",
+            $"Delivery creation finished. MarketPurchaseId={marketItem.Id}; BuyerAppUserId={buyerAppUserId}; Success={deliveryResult.Success}; Status={marketItem.DeliveryStatus ?? "<null>"}; OfferId={marketItem.DeliveryTradeOfferId ?? "<null>"}; Message={deliveryResult.Message}",
+            nameof(MarketDeliveryService),
+            cancellationToken: cancellationToken);
         return deliveryResult;
     }
 

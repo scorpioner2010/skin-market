@@ -12,7 +12,9 @@ public class BotSaleHistoryItem
     public string Status { get; set; } = string.Empty;
     public string? DeliveryStatus { get; set; }
     public decimal Price { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
     public DateTime? PurchasedAtUtc { get; set; }
+    public DateTime UpdatedAtUtc { get; set; }
     public string? DeliveryTradeOfferId { get; set; }
     public DateTime? DeliveredAtUtc { get; set; }
     public string? DeliveryErrorMessage { get; set; }

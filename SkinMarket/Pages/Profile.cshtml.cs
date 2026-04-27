@@ -174,15 +174,7 @@ public class ProfileModel : PageModel
 
     private static bool IsValidTradeUrl(string tradeUrl)
     {
-        if (!Uri.TryCreate(tradeUrl.Trim(), UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return uri.Scheme == Uri.UriSchemeHttps &&
-               uri.Host.Equals("steamcommunity.com", StringComparison.OrdinalIgnoreCase) &&
-               uri.AbsolutePath.Equals("/tradeoffer/new/", StringComparison.OrdinalIgnoreCase) &&
-               uri.Query.Contains("partner=", StringComparison.OrdinalIgnoreCase);
+        return SteamTradeUrlUtility.IsValidTradeOfferUrl(tradeUrl);
     }
 
     public class TradeUrlInputModel

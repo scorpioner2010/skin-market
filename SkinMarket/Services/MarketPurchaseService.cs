@@ -14,19 +14,22 @@ public class MarketPurchaseService : IMarketPurchaseService
     private readonly IMarketPricingService _marketPricingService;
     private readonly IGameCatalog _gameCatalog;
     private readonly SteamBotOptions _steamBotOptions;
+    private readonly IAppLogService _appLogService;
 
     public MarketPurchaseService(
         AppDbContext dbContext,
         ISteamBotInventoryClient steamBotInventoryClient,
         IMarketPricingService marketPricingService,
         IGameCatalog gameCatalog,
-        IOptions<SteamBotOptions> steamBotOptions)
+        IOptions<SteamBotOptions> steamBotOptions,
+        IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _steamBotInventoryClient = steamBotInventoryClient;
         _marketPricingService = marketPricingService;
         _gameCatalog = gameCatalog;
         _steamBotOptions = steamBotOptions.Value;
+        _appLogService = appLogService;
     }
 
     public async Task<MarketPurchaseResult> PurchaseAsync(
@@ -34,9 +37,25 @@ public class MarketPurchaseService : IMarketPurchaseService
         Guid buyerAppUserId,
         CancellationToken cancellationToken = default)
     {
+        async Task<MarketPurchaseResult> FailAsync(string message)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Market purchase failed. BuyerAppUserId={buyerAppUserId}; RequestedAssetId={request.AssetId}; MarketHashName={request.MarketHashName ?? "<null>"}; Message={message}",
+                nameof(MarketPurchaseService),
+                cancellationToken: cancellationToken);
+            return new MarketPurchaseResult { Message = message };
+        }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Market purchase started. BuyerAppUserId={buyerAppUserId}; RequestedAssetId={request.AssetId}; ClassId={request.ClassId}; InstanceId={request.InstanceId}; MarketHashName={request.MarketHashName ?? "<null>"}",
+            nameof(MarketPurchaseService),
+            cancellationToken: cancellationToken);
+
         if (string.IsNullOrWhiteSpace(request.AssetId))
         {
-            return new MarketPurchaseResult { Message = "Market item was not found." };
+            return await FailAsync("Market item was not found.");
         }
 
         var buyer = await _dbContext.AppUsers
@@ -44,19 +63,19 @@ public class MarketPurchaseService : IMarketPurchaseService
 
         if (buyer is null)
         {
-            return new MarketPurchaseResult { Message = "Local user profile was not found." };
+            return await FailAsync("Local user profile was not found.");
         }
 
         if (string.IsNullOrWhiteSpace(_steamBotOptions.BotSteamId))
         {
-            return new MarketPurchaseResult { Message = "This item is no longer available." };
+            return await FailAsync("This item is no longer available.");
         }
 
         var game = _gameCatalog.Get(request.GameType);
         var liveInventory = await _steamBotInventoryClient.GetInventoryAsync(_steamBotOptions.BotSteamId, game.Type, cancellationToken);
         if (!liveInventory.IsSuccess)
         {
-            return new MarketPurchaseResult { Message = "This item is no longer available." };
+            return await FailAsync("This item is no longer available.");
         }
 
         var reservedAssetIds = await _dbContext.MarketPurchaseRecords
@@ -68,12 +87,20 @@ public class MarketPurchaseService : IMarketPurchaseService
             .ToListAsync(cancellationToken);
         var reservedAssetSet = new HashSet<string>(reservedAssetIds, StringComparer.Ordinal);
 
-        var candidates = liveInventory.Items
+        var matchingItems = liveInventory.Items
             .Where(item => MatchesRequestGroup(item, request) && !reservedAssetSet.Contains(item.AssetId))
+            .ToList();
+        var candidates = matchingItems
+            .Where(item => item.Tradable == true)
             .ToList();
         if (candidates.Count == 0)
         {
-            return new MarketPurchaseResult { Message = "Market item was not found." };
+            if (matchingItems.Count > 0)
+            {
+                return await FailAsync("This item is temporarily protected by Steam and cannot be delivered yet.");
+            }
+
+            return await FailAsync("Market item was not found.");
         }
 
         var sourceOperations = await _dbContext.TradeOperations
@@ -92,7 +119,7 @@ public class MarketPurchaseService : IMarketPurchaseService
         var inventoryItem = SelectCandidate(candidates, sourceOperationByAssetId, request, buyerAppUserId);
         if (inventoryItem is null)
         {
-            return new MarketPurchaseResult { Message = "Buying your own market item is not allowed." };
+            return await FailAsync("Buying your own market item is not allowed.");
         }
 
         sourceOperationByAssetId.TryGetValue(inventoryItem.AssetId, out var sourceOperation);
@@ -100,10 +127,8 @@ public class MarketPurchaseService : IMarketPurchaseService
         var price = await _marketPricingService.CalculatePriceAsync(inventoryItem, cancellationToken);
         if (buyer.Balance < price)
         {
-            return new MarketPurchaseResult { Message = "Not enough balance to buy this item." };
+            return await FailAsync("Not enough balance to buy this item.");
         }
-
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var duplicateSaleExists = await _dbContext.MarketPurchaseRecords
             .AnyAsync(
@@ -113,7 +138,7 @@ public class MarketPurchaseService : IMarketPurchaseService
                 cancellationToken);
         if (duplicateSaleExists)
         {
-            return new MarketPurchaseResult { Message = "This item is no longer available." };
+            return await FailAsync("This item is no longer available.");
         }
 
         var now = DateTime.UtcNow;
@@ -153,13 +178,17 @@ public class MarketPurchaseService : IMarketPurchaseService
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            return new MarketPurchaseResult { Message = "This item is no longer available." };
+            return await FailAsync("This item is no longer available.");
         }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Market purchase finished. BuyerAppUserId={buyerAppUserId}; PurchasedAssetId={inventoryItem.AssetId}; SourceTradeOperationId={sourceOperation?.Id.ToString() ?? "<null>"}; Price={price:0.##}; DeliveryStatus=PendingDelivery",
+            nameof(MarketPurchaseService),
+            cancellationToken: cancellationToken);
 
         return new MarketPurchaseResult
         {

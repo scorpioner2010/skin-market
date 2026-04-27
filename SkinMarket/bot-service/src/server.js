@@ -42,6 +42,24 @@ app.post("/api/trades/statuses", async (req, res, next) => {
   }
 });
 
+app.post("/api/trades/confirm", async (req, res, next) => {
+  try {
+    const result = await bot.confirmOffer(req.body);
+    res.status(result.success ? 200 : 409).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/trades/cancel", async (req, res, next) => {
+  try {
+    const result = await bot.cancelOffer(req.body);
+    res.status(result.success ? 200 : 409).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/inventory/user", async (req, res, next) => {
   try {
     const result = await bot.getUserInventory(req.body);

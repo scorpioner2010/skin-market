@@ -3,13 +3,14 @@
 @{
     ViewData["Title"] = "Bot Logs";
     var recentBotIssues = Model.BotStatus.Bot.RecentIssues ?? new List<SkinMarket.Models.BotServiceIssueSnapshot>();
+    var take = Model.Limit <= 0 ? 50 : Math.Min(Model.Limit, 200);
 }
 
 <div class="py-4">
     <div class="page-header">
         <div>
             <h1>Bot Logs</h1>
-            <p class="text-muted mb-0">Only bot-related warnings and errors are shown here.</p>
+            <p class="text-muted mb-0">Bot-service issues, app-side failures, and workflow history live here instead of taking space on the status page.</p>
         </div>
         <div class="action-row">
             <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
@@ -39,7 +40,10 @@
 
     <section class="page-section">
         <div class="section-heading">
-            <div><h2>bot-service Issues</h2></div>
+            <div>
+                <h2>Log Center</h2>
+                <p class="section-description">Use one place for service issues, application exceptions, and workflow history.</p>
+            </div>
             <form method="get" class="action-row">
                 <select name="Limit" class="form-select app-input" style="max-width: 120px;">
                     <option value="25" selected="@(Model.Limit == 25)">25</option>
@@ -48,6 +52,50 @@
                 </select>
                 <button type="submit" class="btn app-button-secondary">Apply</button>
             </form>
+        </div>
+
+        <div class="card-grid">
+            <article class="content-card live-status-card">
+                <span class="section-kicker">bot-service</span>
+                <div class="card-heading">
+                    <h3>Current Issues</h3>
+                    <span class="compact-badge compact-badge-neutral">@Math.Min(recentBotIssues.Count, take)</span>
+                </div>
+                <p class="card-subtitle">Warnings and errors reported directly by the Node bot service.</p>
+                <div class="action-row">
+                    <a class="btn app-button-secondary" href="#bot-service-issues">Open section</a>
+                </div>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Application</span>
+                <div class="card-heading">
+                    <h3>App-Side Issues</h3>
+                    <span class="compact-badge compact-badge-neutral">@Model.AppEntries.Count</span>
+                </div>
+                <p class="card-subtitle">Warnings and errors written by the ASP.NET app around bot and trade flow work.</p>
+                <div class="action-row">
+                    <a class="btn app-button-secondary" href="#application-issues">Open section</a>
+                </div>
+            </article>
+
+            <article class="content-card live-status-card">
+                <span class="section-kicker">Workflow</span>
+                <div class="card-heading">
+                    <h3>Workflow History</h3>
+                    <span class="compact-badge compact-badge-neutral">@Model.WorkflowEntries.Count</span>
+                </div>
+                <p class="card-subtitle">Manual sell, credit, buy, delivery, and refresh actions in time order.</p>
+                <div class="action-row">
+                    <a class="btn app-button-secondary" href="#workflow-logs">Open section</a>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="page-section" id="bot-service-issues">
+        <div class="section-heading">
+            <div><h2>bot-service Issues</h2></div>
         </div>
 
         @if (recentBotIssues.Count == 0)
@@ -82,7 +130,7 @@
         }
     </section>
 
-    <section class="page-section">
+    <section class="page-section" id="application-issues">
         <div class="section-heading">
             <div><h2>Application Issues</h2></div>
         </div>
@@ -105,6 +153,49 @@
                                 <p class="card-subtitle">@entry.Source</p>
                             </div>
                             <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
+                        </div>
+                        <div class="history-metrics">
+                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                        {
+                            <details class="mt-2">
+                                <summary>Stack trace</summary>
+                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                            </details>
+                        }
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="page-section" id="workflow-logs">
+        <div class="section-heading">
+            <div>
+                <h2>Workflow Logs</h2>
+                <p class="section-description">Info, warning, and error entries for manual sell, credit, buy, delivery, and admin recovery actions.</p>
+            </div>
+        </div>
+
+        @if (Model.WorkflowEntries.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No workflow log entries yet.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="stack-grid">
+                @foreach (var entry in Model.WorkflowEntries.Take(take))
+                {
+                    <article class="content-card history-card">
+                        <div class="card-heading">
+                            <div>
+                                <h3>@entry.Message</h3>
+                                <p class="card-subtitle">@entry.Source</p>
+                            </div>
+                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited")">@entry.Level</span>
                         </div>
                         <div class="history-metrics">
                             <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>

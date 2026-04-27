@@ -1,4 +1,6 @@
 using SkinMarket.Models;
+using SkinMarket.Pages;
+using SkinMarket.Pages.Admin;
 
 namespace SkinMarket.Services;
 
@@ -11,6 +13,22 @@ public static class BotDiagnosticsCatalog
         nameof(SteamTradeAutomationService),
         nameof(SteamTradeSyncService),
         nameof(LocalSteamBotHostService)
+    ];
+    public static readonly string[] WorkflowLogSources =
+    [
+        nameof(BotStatusModel),
+        nameof(TradeOperationService),
+        nameof(SteamBotIntakeService),
+        nameof(BotServiceSteamTradeClient),
+        nameof(SteamTradeAutomationService),
+        nameof(SteamTradeSyncService),
+        nameof(CreditService),
+        nameof(MarketPurchaseService),
+        nameof(MarketDeliveryService),
+        nameof(BotServiceSteamInventoryClient),
+        nameof(LocalSteamBotHostService),
+        nameof(InventoryModel),
+        nameof(MarketModel)
     ];
 
     public static bool IsImportantLevel(string? level)

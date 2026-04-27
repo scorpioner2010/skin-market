@@ -4,9 +4,29 @@
 @using System.Text.Json
 @{
     ViewData["Title"] = L["Page_Inventory_Title"];
+    string BuildSteamOfferUrl(string? offerId) => string.IsNullOrWhiteSpace(offerId)
+        ? "https://steamcommunity.com/my/tradeoffers/"
+        : $"https://steamcommunity.com/tradeoffer/{offerId}/";
+    var pendingStatuses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "Pending",
+        "BotPending",
+        "AwaitingBotConfirmation",
+        "TradeCreated",
+        "AwaitingUserAction",
+        "TradeAcceptedPendingReceipt",
+        "InEscrow"
+    };
+    var waitingForCreditStatuses = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ReceivedByBot"
+    };
     var readyToSellCount = Model.GroupedItems.Count(item => item.HasSellableItem);
-    var pendingTradeCount = Model.GroupedItems.Count(item => item.CreateTradeOperationId.HasValue && !string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal));
-    var waitingForCreditCount = Model.GroupedItems.Count(item => item.HasWaitingForCredit);
+    var pendingTradeCount = Model.GroupedItems.Count(item =>
+        item.StatusItems.Any(statusItem => !statusItem.IsReady && pendingStatuses.Contains(statusItem.Status)));
+    var waitingForCreditCount = Model.GroupedItems.Count(item =>
+        item.HasWaitingForCredit ||
+        item.StatusItems.Any(statusItem => !statusItem.IsReady && waitingForCreditStatuses.Contains(statusItem.Status)));
 }
 
 <div class="py-4">
@@ -45,9 +65,42 @@
             <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SellErrorMessage)</div>
         }
 
+        @if (!string.IsNullOrWhiteSpace(Model.TradeStatusMessage))
+        {
+            <div class="app-alert alert-warning" role="alert">@Model.TradeStatusMessage</div>
+        }
+
         @if (!string.IsNullOrWhiteSpace(Model.WarningMessage))
         {
             <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.WarningMessage)</div>
+        }
+
+        @if (Model.RecentOperations.Any(operation => operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId)))
+        {
+            var waitingOperation = Model.RecentOperations.First(operation => operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId));
+            <div class="app-alert alert-warning inventory-action-alert" role="alert">
+                <strong>Steam offer is waiting for your acceptance.</strong>
+                <span>Open the trade offer in Steam and accept it to move the item to the bot and continue the sale.</span>
+                <a class="btn app-button-primary" href="@BuildSteamOfferUrl(waitingOperation.TradeOfferId)" target="_blank" rel="noopener">Accept Steam offer</a>
+            </div>
+        }
+
+        @if (Model.CanUpdateTradeUrl && !Model.IsTradeUrlConfigured)
+        {
+            <div class="trade-url-setup" data-trade-url-setup>
+                <div class="trade-url-setup-copy">
+                    <strong>Trade URL is required before selling.</strong>
+                    <span>Open Steam trade settings, copy your Trade URL, then click Update Trade URL here. The page will save it automatically if it matches your Steam account.</span>
+                </div>
+                <div class="trade-url-setup-actions">
+                    <a class="btn app-button-secondary" href="@Model.SteamTradeSettingsUrl" target="_blank" rel="noopener">Open Steam Trade URL page</a>
+                    <form method="post" asp-page-handler="UpdateTradeUrl" class="trade-url-update-form" data-trade-url-form>
+                        <input type="hidden" asp-for="TradeUrlUpdate.TradeUrl" data-trade-url-input />
+                        <button type="button" class="btn app-button-primary" data-trade-url-update-button>Update Trade URL</button>
+                    </form>
+                </div>
+                <div class="trade-url-status" data-trade-url-status role="status" aria-live="polite" hidden></div>
+            </div>
         }
 
         @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
@@ -172,7 +225,7 @@
                                 </div>
                                 <div class="inventory-cell inventory-actions-cell" data-label="@L["Inventory_Column_Action"]">
                                     <div class="inventory-actions">
-                                        @if (item.HasSellableItem)
+                                        @if (item.HasSellableItem && Model.IsTradeUrlConfigured)
                                         {
                                             <form method="post" asp-page-handler="Sell">
                                                 <input type="hidden" name="Input.AssetId" value="@item.SellAssetId" />
@@ -183,6 +236,14 @@
                                                 <input type="hidden" name="Input.IconUrl" value="@item.SellIconUrl" />
                                                 <button type="submit" class="btn app-button-primary">@L["Common_Sell"]</button>
                                             </form>
+                                        }
+                                        else if (item.HasSellableItem)
+                                        {
+                                            <button type="button" class="btn app-button-secondary" data-trade-url-update-button>Update Trade URL</button>
+                                        }
+                                        else if (!string.IsNullOrWhiteSpace(item.AwaitingUserTradeOfferId))
+                                        {
+                                            <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.AwaitingUserTradeOfferId)" target="_blank" rel="noopener">Accept offer</a>
                                         }
                                         else if (item.CreateTradeOperationId.HasValue &&
                                                  string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal))
@@ -252,6 +313,14 @@
                                 @if (!string.IsNullOrWhiteSpace(operation.TradeOfferId))
                                 {
                                     <span class="break-value"><strong>@L["Inventory_TradeOfferId"]:</strong> @operation.TradeOfferId</span>
+                                }
+                                @if (operation.Status == "AwaitingUserAction" && !string.IsNullOrWhiteSpace(operation.TradeOfferId))
+                                {
+                                    <a class="btn app-button-primary compact-history-action" href="@BuildSteamOfferUrl(operation.TradeOfferId)" target="_blank" rel="noopener">Accept Steam offer</a>
+                                    <form method="post" asp-page-handler="RefreshTradeStatus" class="compact-history-action-form">
+                                        <input type="hidden" name="Input.TradeOperationId" value="@operation.Id" />
+                                        <button type="submit" class="btn app-button-secondary compact-history-action">Check Steam status</button>
+                                    </form>
                                 }
                             </div>
                             @if (!string.IsNullOrWhiteSpace(operation.BotTradeUrl) || !string.IsNullOrWhiteSpace(operation.ErrorMessage))
@@ -364,6 +433,94 @@
                 .finally(() => {
                     window.setTimeout(poll, 1200);
                 });
+        })();
+
+        (() => {
+            const form = document.querySelector('[data-trade-url-form]');
+            if (!form) {
+                return;
+            }
+
+            const input = form.querySelector('[data-trade-url-input]');
+            const status = document.querySelector('[data-trade-url-status]');
+            const buttons = document.querySelectorAll('[data-trade-url-update-button]');
+            const tradeUrlExpression = /https:\/\/steamcommunity\.com\/tradeoffer\/new\/\?[^\s<>"']+/i;
+            if (!input) {
+                return;
+            }
+
+            const setStatus = (state, message) => {
+                if (!status) {
+                    return;
+                }
+
+                status.hidden = false;
+                status.dataset.state = state;
+                status.textContent = message;
+                if (state !== 'waiting') {
+                    status.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            };
+
+            const setBusy = (busy) => {
+                buttons.forEach((button) => {
+                    if (!button.dataset.originalText) {
+                        button.dataset.originalText = button.textContent || 'Update Trade URL';
+                    }
+
+                    button.disabled = busy;
+                    button.textContent = busy ? 'Updating...' : button.dataset.originalText;
+                });
+            };
+
+            const readTradeUrlFromClipboard = async () => {
+                if (!navigator.clipboard?.readText) {
+                    throw new Error('Clipboard access is not available in this browser.');
+                }
+
+                const clipboardText = (await navigator.clipboard.readText()).trim();
+                const match = clipboardText.match(tradeUrlExpression);
+                if (!match) {
+                    throw new Error('Clipboard does not contain a Steam Trade URL.');
+                }
+
+                return match[0];
+            };
+
+            const updateTradeUrl = async () => {
+                setBusy(true);
+                setStatus('waiting', 'Waiting for Trade URL...');
+
+                try {
+                    const tradeUrl = await readTradeUrlFromClipboard();
+                    input.value = tradeUrl;
+
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        body: new FormData(form),
+                        credentials: 'same-origin',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    });
+                    const payload = await response.json().catch(() => null);
+                    if (!response.ok || payload?.success !== true) {
+                        throw new Error(payload?.message || 'Could not update Trade URL.');
+                    }
+
+                    setStatus('success', payload.message || 'Trade URL saved.');
+                    window.setTimeout(() => window.location.reload(), 900);
+                } catch (error) {
+                    const message = error instanceof Error ? error.message : 'Could not update Trade URL.';
+                    setStatus('failed', `${message} Copy your Steam Trade URL first, then click Update Trade URL again.`);
+                } finally {
+                    setBusy(false);
+                }
+            };
+
+            buttons.forEach((button) => {
+                button.addEventListener('click', updateTradeUrl);
+            });
         })();
     </script>
 }

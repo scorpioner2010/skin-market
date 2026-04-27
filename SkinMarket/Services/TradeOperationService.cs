@@ -9,11 +9,13 @@ public class TradeOperationService : ITradeOperationService
 {
     private readonly AppDbContext _dbContext;
     private readonly IGameCatalog _gameCatalog;
+    private readonly IAppLogService _appLogService;
 
-    public TradeOperationService(AppDbContext dbContext, IGameCatalog gameCatalog)
+    public TradeOperationService(AppDbContext dbContext, IGameCatalog gameCatalog, IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _gameCatalog = gameCatalog;
+        _appLogService = appLogService;
     }
 
     public Task<bool> HasExistingSaleAsync(Guid appUserId, string assetId, CancellationToken cancellationToken = default)
@@ -57,6 +59,11 @@ public class TradeOperationService : ITradeOperationService
 
         _dbContext.TradeOperations.Add(operation);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Pending sale request created. TradeOperationId={operation.Id}; AppUserId={appUser.Id}; SteamId={appUser.SteamId}; AssetId={item.AssetId}; ItemName={operation.ItemName}",
+            nameof(TradeOperationService),
+            cancellationToken: cancellationToken);
     }
 
     public async Task<Dictionary<string, TradeOperation>> GetLatestOperationsByAssetIdAsync(Guid appUserId, CancellationToken cancellationToken = default)

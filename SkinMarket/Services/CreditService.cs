@@ -9,47 +9,54 @@ public class CreditService : ICreditService
 {
     private readonly AppDbContext _dbContext;
     private readonly IItemPricingService _itemPricingService;
+    private readonly IAppLogService _appLogService;
 
-    public CreditService(AppDbContext dbContext, IItemPricingService itemPricingService)
+    public CreditService(AppDbContext dbContext, IItemPricingService itemPricingService, IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _itemPricingService = itemPricingService;
+        _appLogService = appLogService;
     }
 
     public async Task<BotIntakeResult> ConfirmReceivedAndCreditAsync(Guid tradeOperationId, Guid appUserId, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        async Task<BotIntakeResult> FailAsync(string status, string message, string? offerId = null)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Credit processing failed. TradeOperationId={tradeOperationId}; AppUserId={appUserId}; Status={status}; OfferId={offerId ?? "<null>"}; Message={message}",
+                nameof(CreditService),
+                cancellationToken: cancellationToken);
+            return new BotIntakeResult
+            {
+                NewStatus = status,
+                TradeOfferId = offerId,
+                Message = message
+            };
+        }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Credit processing started. TradeOperationId={tradeOperationId}; AppUserId={appUserId}",
+            nameof(CreditService),
+            cancellationToken: cancellationToken);
 
         var operation = await _dbContext.TradeOperations
             .SingleOrDefaultAsync(item => item.Id == tradeOperationId && item.AppUserId == appUserId, cancellationToken);
 
         if (operation is null)
         {
-            return new BotIntakeResult
-            {
-                NewStatus = "Failed",
-                Message = "Sale request was not found."
-            };
+            return await FailAsync("Failed", "Sale request was not found.");
         }
 
         if (operation.Status == "Credited" || operation.CreditedAtUtc.HasValue)
         {
-            return new BotIntakeResult
-            {
-                NewStatus = operation.Status,
-                TradeOfferId = operation.TradeOfferId,
-                Message = "This sale request was already credited."
-            };
+            return await FailAsync(operation.Status, "This sale request was already credited.", operation.TradeOfferId);
         }
 
         if (operation.Status != "ReceivedByBot")
         {
-            return new BotIntakeResult
-            {
-                NewStatus = operation.Status,
-                TradeOfferId = operation.TradeOfferId,
-                Message = "Only Steam-confirmed intake requests can be credited."
-            };
+            return await FailAsync(operation.Status, "Only Steam-confirmed intake requests can be credited.", operation.TradeOfferId);
         }
 
         var appUser = await _dbContext.AppUsers
@@ -57,11 +64,7 @@ public class CreditService : ICreditService
 
         if (appUser is null)
         {
-            return new BotIntakeResult
-            {
-                NewStatus = "Failed",
-                Message = "Local user profile was not found."
-            };
+            return await FailAsync("Failed", "Local user profile was not found.");
         }
 
         var amount = await _itemPricingService.CalculatePriceAsync(operation, cancellationToken);
@@ -83,7 +86,11 @@ public class CreditService : ICreditService
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Credit processing finished. TradeOperationId={operation.Id}; AppUserId={appUserId}; Amount={amount:0.##}; Status={operation.Status}",
+            nameof(CreditService),
+            cancellationToken: cancellationToken);
 
         return new BotIntakeResult
         {
