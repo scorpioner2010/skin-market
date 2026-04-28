@@ -116,7 +116,7 @@ public class BotStatusModel : PageModel
         !string.Equals(HistoryMode, "all", StringComparison.OrdinalIgnoreCase) ||
         Limit != DefaultHistoryLimit;
 
-    public async Task OnGetAsync(CancellationToken cancellationToken)
+    public virtual async Task OnGetAsync(CancellationToken cancellationToken)
     {
         Limit = NormalizeLimit(Limit);
         SearchTerm = NormalizeSearchTerm(SearchTerm);
@@ -636,7 +636,7 @@ public class BotStatusModel : PageModel
         return _appLogReader.GetRecent(Math.Max(take, 40), sources: BotDiagnosticsCatalog.WorkflowLogSources);
     }
 
-    private async Task LoadHistoryAsync(int take, CancellationToken cancellationToken)
+    protected async Task LoadHistoryAsync(int take, CancellationToken cancellationToken)
     {
         var purchaseQuery = ApplyPurchaseHistoryFilters(_dbContext.TradeOperations.AsNoTracking());
         PurchaseHistory = await purchaseQuery
@@ -823,7 +823,7 @@ public class BotStatusModel : PageModel
         });
     }
 
-    private static int NormalizeLimit(int limit)
+    protected static int NormalizeLimit(int limit)
     {
         if (limit <= 0)
         {
@@ -833,7 +833,7 @@ public class BotStatusModel : PageModel
         return Math.Min(limit, 500);
     }
 
-    private static string? NormalizeSearchTerm(string? searchTerm)
+    protected static string? NormalizeSearchTerm(string? searchTerm)
     {
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -843,7 +843,7 @@ public class BotStatusModel : PageModel
         return searchTerm.Trim();
     }
 
-    private static string NormalizeHistoryMode(string? historyMode)
+    protected static string NormalizeHistoryMode(string? historyMode)
     {
         return historyMode?.Trim().ToLowerInvariant() switch
         {

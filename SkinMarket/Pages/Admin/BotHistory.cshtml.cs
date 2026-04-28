@@ -38,4 +38,12 @@ public class BotHistoryModel : BotStatusModel
             steamBotOptions)
     {
     }
+
+    public override async Task OnGetAsync(CancellationToken cancellationToken)
+    {
+        Limit = NormalizeLimit(Limit);
+        SearchTerm = NormalizeSearchTerm(SearchTerm);
+        HistoryMode = NormalizeHistoryMode(HistoryMode);
+        await LoadHistoryAsync(Limit, cancellationToken);
+    }
 }

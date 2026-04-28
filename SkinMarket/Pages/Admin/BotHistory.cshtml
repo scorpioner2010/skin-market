@@ -16,7 +16,7 @@
     <div class="page-header">
         <div>
             <h1>Bot History</h1>
-            <p class="text-muted mb-0">Bot purchase and sale history with compact admin actions.</p>
+            <p class="text-muted mb-0">Bot purchase and sale history.</p>
         </div>
         <div class="action-row">
             <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
@@ -66,16 +66,10 @@
                             <span>Seller</span>
                             <span>Status</span>
                             <span>Credit</span>
-                            <span>Actions</span>
+                            <span>Links</span>
                         </div>
                         @foreach (var item in Model.PurchaseHistory)
                         {
-                            var hasIntakeBotActions =
-                                Model.CanCreateIntake(item) ||
-                                Model.CanConfirmIntake(item) ||
-                                Model.CanRefreshIntake(item) ||
-                                Model.CanCreditIntake(item) ||
-                                Model.CanCancelIntake(item);
                             <div class="history-table-row admin-bot-history-row">
                                 <div>
                                     <div class="history-item-title">@item.ItemName</div>
@@ -91,57 +85,6 @@
                                     <div class="card-subtitle">Credited: @FormatLocalDateTime(item.CreditedAtUtc)</div>
                                 </div>
                                 <div class="admin-bot-history-actions">
-                                    @if (Model.CanCreateIntake(item))
-                                    {
-                                        <form method="post" asp-page-handler="CreateIntake">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-primary">Create intake</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanConfirmIntake(item))
-                                    {
-                                        <form method="post" asp-page-handler="ConfirmIntake">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary">Retry confirm</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanRefreshIntake(item))
-                                    {
-                                        <form method="post" asp-page-handler="RefreshIntake">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary">Refresh</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanCreditIntake(item))
-                                    {
-                                        <form method="post" asp-page-handler="CreditIntake">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary">Credit seller</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanCancelIntake(item))
-                                    {
-                                        <form method="post" asp-page-handler="CancelIntake">
-                                            <input type="hidden" name="CancelInput.EntityId" value="@item.Id" />
-                                            <input type="hidden" name="CancelInput.Status" value="@item.Status" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary" onclick="return confirm('Cancel this Steam offer and release the sale operation?');">Cancel</button>
-                                        </form>
-                                    }
                                     @if (Model.CanOpenSellerOffer(item))
                                     {
                                         <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.TradeOfferId)" target="_blank" rel="noopener">
@@ -152,9 +95,9 @@
                                     {
                                         <a class="btn app-button-secondary" href="@BuildSteamProfileUrl(item.SellerSteamId)" target="_blank" rel="noopener">Seller Steam</a>
                                     }
-                                    @if (!hasIntakeBotActions && !Model.CanOpenSellerOffer(item))
+                                    @if (!Model.CanOpenSellerOffer(item) && string.IsNullOrWhiteSpace(item.SellerSteamId))
                                     {
-                                        <span class="compact-badge compact-badge-neutral">No manual action right now</span>
+                                        <span class="compact-badge compact-badge-neutral">No links</span>
                                     }
                                 </div>
                                 <div class="admin-bot-history-meta">
@@ -190,15 +133,10 @@
                             <span>Buyer</span>
                             <span>Status</span>
                             <span>Price</span>
-                            <span>Actions</span>
+                            <span>Links</span>
                         </div>
                         @foreach (var item in Model.SaleHistory)
                         {
-                            var hasDeliveryBotActions =
-                                Model.CanCreateDelivery(item) ||
-                                Model.CanConfirmDelivery(item) ||
-                                Model.CanRefreshDelivery(item) ||
-                                Model.CanCancelDelivery(item);
                             <div class="history-table-row admin-bot-history-row">
                                 <div>
                                     <div class="history-item-title">@item.ItemName</div>
@@ -221,51 +159,6 @@
                                 </div>
                                 <span>@item.Price</span>
                                 <div class="admin-bot-history-actions">
-                                    @if (Model.CanCreateDelivery(item))
-                                    {
-                                        <form method="post" asp-page-handler="CreateDelivery">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-primary">Create delivery trade</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanConfirmDelivery(item))
-                                    {
-                                        <form method="post" asp-page-handler="ConfirmDelivery">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary">Retry bot confirm</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanRefreshDelivery(item))
-                                    {
-                                        <form method="post" asp-page-handler="RefreshDelivery">
-                                            <input type="hidden" name="entityId" value="@item.Id" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary">Refresh Steam status</button>
-                                        </form>
-                                    }
-                                    @if (Model.CanCancelDelivery(item))
-                                    {
-                                        <form method="post" asp-page-handler="CancelDelivery">
-                                            <input type="hidden" name="CancelInput.EntityId" value="@item.Id" />
-                                            <input type="hidden" name="CancelInput.Status" value="@item.DeliveryStatus" />
-                                            <input type="hidden" name="Limit" value="@Model.Limit" />
-                                            <input type="hidden" name="SearchTerm" value="@Model.SearchTerm" />
-                                            <input type="hidden" name="HistoryMode" value="@historyMode" />
-                                            <button type="submit" class="btn app-button-secondary" onclick="return confirm('Cancel this Steam delivery offer and mark delivery as failed?');">Cancel stale delivery</button>
-                                        </form>
-                                    }
-                                    @if (!hasDeliveryBotActions)
-                                    {
-                                        <span class="compact-badge compact-badge-neutral">No manual bot action right now</span>
-                                    }
                                     @if (!string.IsNullOrWhiteSpace(item.BuyerSteamId))
                                     {
                                         <a class="btn app-button-secondary" href="@BuildSteamProfileUrl(item.BuyerSteamId)" target="_blank" rel="noopener">Buyer Steam</a>
@@ -277,6 +170,10 @@
                                         <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.DeliveryTradeOfferId)" target="_blank" rel="noopener">
                                             @(item.DeliveryStatus == "AwaitingBuyerAction" ? "Accept or decline buyer offer" : "Open exact buyer offer")
                                         </a>
+                                    }
+                                    @if (string.IsNullOrWhiteSpace(item.BuyerSteamId) && !Model.CanOpenBuyerOffer(item))
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">No links</span>
                                     }
                                 </div>
                                 <div class="admin-bot-history-meta">

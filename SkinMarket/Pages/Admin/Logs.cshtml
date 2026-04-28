@@ -10,7 +10,7 @@
     <div class="page-header">
         <div>
             <h1>Bot Logs</h1>
-            <p class="text-muted mb-0">Bot-service issues, app-side failures, and workflow history live here instead of taking space on the status page.</p>
+            <p class="text-muted mb-0">Bot-service issues, app-side failures, and workflow history.</p>
         </div>
         <div class="action-row">
             <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
@@ -43,7 +43,7 @@
         <div class="section-heading">
             <div>
                 <h2>Log Center</h2>
-                <p class="section-description">Use one place for service issues, application exceptions, and workflow history.</p>
+                <p class="section-description">Use the buttons below to switch between log groups.</p>
             </div>
             <form method="get" class="action-row">
                 <select name="Limit" class="form-select app-input" style="max-width: 120px;">
@@ -55,162 +55,173 @@
             </form>
         </div>
 
-        <div class="card-grid">
-            <article class="content-card live-status-card">
-                <span class="section-kicker">bot-service</span>
-                <div class="card-heading">
-                    <h3>Current Issues</h3>
-                    <span class="compact-badge compact-badge-neutral">@Math.Min(recentBotIssues.Count, take)</span>
-                </div>
-                <p class="card-subtitle">Warnings and errors reported directly by the Node bot service.</p>
-                <div class="action-row">
-                    <a class="btn app-button-secondary" href="#bot-service-issues">Open section</a>
-                </div>
-            </article>
-
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Application</span>
-                <div class="card-heading">
-                    <h3>App-Side Issues</h3>
-                    <span class="compact-badge compact-badge-neutral">@Model.AppEntries.Count</span>
-                </div>
-                <p class="card-subtitle">Warnings and errors written by the ASP.NET app around bot and trade flow work.</p>
-                <div class="action-row">
-                    <a class="btn app-button-secondary" href="#application-issues">Open section</a>
-                </div>
-            </article>
-
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Workflow</span>
-                <div class="card-heading">
-                    <h3>Workflow History</h3>
-                    <span class="compact-badge compact-badge-neutral">@Model.WorkflowEntries.Count</span>
-                </div>
-                <p class="card-subtitle">Manual sell, credit, buy, delivery, and refresh actions in time order.</p>
-                <div class="action-row">
-                    <a class="btn app-button-secondary" href="#workflow-logs">Open section</a>
-                </div>
-            </article>
-        </div>
-    </section>
-
-    <section class="page-section" id="bot-service-issues">
-        <div class="section-heading">
-            <div><h2>bot-service Issues</h2></div>
-        </div>
-
-        @if (recentBotIssues.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No current bot-service issues.</h3>
+        <div class="history-tabs" data-admin-log-tabs>
+            <div class="history-tab-list" role="tablist" aria-label="Log sections">
+                <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-log-tab="bot-service">bot-service Issues (@Math.Min(recentBotIssues.Count, take))</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-log-tab="application">Application Issues (@Model.AppEntries.Count)</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-log-tab="workflow">Workflow Logs (@Model.WorkflowEntries.Count)</button>
             </div>
-        }
-        else
-        {
-            <div class="stack-grid">
-                @foreach (var issue in recentBotIssues.Take(Model.Limit <= 0 ? 50 : Math.Min(Model.Limit, 200)))
+
+            <div class="history-tab-panel" data-admin-log-panel="bot-service">
+                <div class="section-heading">
+                    <div><h2>bot-service Issues</h2></div>
+                </div>
+
+                @if (recentBotIssues.Count == 0)
                 {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@issue.Message</h3>
-                                <p class="card-subtitle">bot-service</p>
-                            </div>
-                            <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
-                        </div>
-                        <div class="history-metrics">
-                            <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
-                            @foreach (var detail in issue.Details)
-                            {
-                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
-                            }
-                        </div>
-                    </article>
+                    <div class="empty-state compact">
+                        <h3>No current bot-service issues.</h3>
+                    </div>
                 }
-            </div>
-        }
-    </section>
-
-    <section class="page-section" id="application-issues">
-        <div class="section-heading">
-            <div><h2>Application Issues</h2></div>
-        </div>
-
-        @if (Model.AppEntries.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No app-side bot issues recorded.</h3>
-            </div>
-        }
-        else
-        {
-            <div class="stack-grid">
-                @foreach (var entry in Model.AppEntries)
+                else
                 {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@entry.Message</h3>
-                                <p class="card-subtitle">@entry.Source</p>
-                            </div>
-                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
-                        </div>
-                        <div class="history-metrics">
-                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                    <div class="stack-grid">
+                        @foreach (var issue in recentBotIssues.Take(take))
                         {
-                            <details class="mt-2">
-                                <summary>Stack trace</summary>
-                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                            </details>
+                            <article class="content-card history-card">
+                                <div class="card-heading">
+                                    <div>
+                                        <h3>@issue.Message</h3>
+                                        <p class="card-subtitle">bot-service</p>
+                                    </div>
+                                    <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
+                                </div>
+                                <div class="history-metrics">
+                                    <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                                    @foreach (var detail in issue.Details)
+                                    {
+                                        <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                                    }
+                                </div>
+                            </article>
                         }
-                    </article>
+                    </div>
                 }
             </div>
-        }
-    </section>
 
-    <section class="page-section" id="workflow-logs">
-        <div class="section-heading">
-            <div>
-                <h2>Workflow Logs</h2>
-                <p class="section-description">Info, warning, and error entries for manual sell, credit, buy, delivery, and admin recovery actions.</p>
+            <div class="history-tab-panel" data-admin-log-panel="application" hidden>
+                <div class="section-heading">
+                    <div><h2>Application Issues</h2></div>
+                </div>
+
+                @if (Model.AppEntries.Count == 0)
+                {
+                    <div class="empty-state compact">
+                        <h3>No app-side bot issues recorded.</h3>
+                    </div>
+                }
+                else
+                {
+                    <div class="stack-grid">
+                        @foreach (var entry in Model.AppEntries)
+                        {
+                            <article class="content-card history-card">
+                                <div class="card-heading">
+                                    <div>
+                                        <h3>@entry.Message</h3>
+                                        <p class="card-subtitle">@entry.Source</p>
+                                    </div>
+                                    <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
+                                </div>
+                                <div class="history-metrics">
+                                    <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                                {
+                                    <details class="mt-2">
+                                        <summary>Stack trace</summary>
+                                        <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                                    </details>
+                                }
+                            </article>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="history-tab-panel" data-admin-log-panel="workflow" hidden>
+                <div class="section-heading">
+                    <div>
+                        <h2>Workflow Logs</h2>
+                        <p class="section-description">Info, warning, and error entries for sell, credit, buy, delivery, sync, and recovery actions.</p>
+                    </div>
+                </div>
+
+                @if (Model.WorkflowEntries.Count == 0)
+                {
+                    <div class="empty-state compact">
+                        <h3>No workflow log entries yet.</h3>
+                    </div>
+                }
+                else
+                {
+                    <div class="stack-grid">
+                        @foreach (var entry in Model.WorkflowEntries.Take(take))
+                        {
+                            <article class="content-card history-card">
+                                <div class="card-heading">
+                                    <div>
+                                        <h3>@entry.Message</h3>
+                                        <p class="card-subtitle">@entry.Source</p>
+                                    </div>
+                                    <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited")">@entry.Level</span>
+                                </div>
+                                <div class="history-metrics">
+                                    <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                                {
+                                    <details class="mt-2">
+                                        <summary>Stack trace</summary>
+                                        <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                                    </details>
+                                }
+                            </article>
+                        }
+                    </div>
+                }
             </div>
         </div>
-
-        @if (Model.WorkflowEntries.Count == 0)
-        {
-            <div class="empty-state compact">
-                <h3>No workflow log entries yet.</h3>
-            </div>
-        }
-        else
-        {
-            <div class="stack-grid">
-                @foreach (var entry in Model.WorkflowEntries.Take(take))
-                {
-                    <article class="content-card history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@entry.Message</h3>
-                                <p class="card-subtitle">@entry.Source</p>
-                            </div>
-                            <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited")">@entry.Level</span>
-                        </div>
-                        <div class="history-metrics">
-                            <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
-                        </div>
-                        @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
-                        {
-                            <details class="mt-2">
-                                <summary>Stack trace</summary>
-                                <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                            </details>
-                        }
-                    </article>
-                }
-            </div>
-        }
     </section>
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const root = document.querySelector('[data-admin-log-tabs]');
+            if (!root) {
+                return;
+            }
+
+            const tabs = Array.from(root.querySelectorAll('[data-admin-log-tab]'));
+            const panels = Array.from(root.querySelectorAll('[data-admin-log-panel]'));
+            const storageKey = 'skinmarket-admin-log-tab';
+
+            const activate = (target) => {
+                if (!tabs.some((tab) => tab.dataset.adminLogTab === target)) {
+                    return;
+                }
+
+                tabs.forEach((candidate) => {
+                    const isActive = candidate.dataset.adminLogTab === target;
+                    candidate.classList.toggle('active', isActive);
+                    candidate.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.adminLogPanel !== target;
+                });
+            };
+
+            activate(localStorage.getItem(storageKey) || 'bot-service');
+
+            tabs.forEach((tab) => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.adminLogTab;
+                    localStorage.setItem(storageKey, target);
+                    activate(target);
+                });
+            });
+        })();
+    </script>
+}

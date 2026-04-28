@@ -77,99 +77,83 @@
     }
 
     <section class="page-section">
-        <div class="section-heading">
-            <div>
-                <h2>Live Bot State</h2>
-                <p class="section-description">Shows whether the bot is logging into Steam, waiting for the web session, or processing a trade right now.</p>
+        <div class="history-tabs" data-admin-bot-status-tabs>
+            <div class="history-tab-list" role="tablist" aria-label="Bot status sections">
+                <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-bot-status-tab="live">Live Bot State</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-bot-status-tab="account">Account</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-bot-status-tab="work">Current Work</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-bot-status-tab="completed">Last Completed</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-bot-status-tab="issues">Recent Issues</button>
             </div>
-            <div class="action-row" data-bot-live-refresh data-refresh-interval-seconds="15">
-                <span class="compact-badge compact-badge-neutral" data-bot-live-refresh-status>Auto refresh on</span>
-                <span class="meta-note" data-bot-live-refresh-countdown>Refresh in 15s.</span>
-                <button type="button" class="btn app-button-secondary" data-bot-live-refresh-toggle>Pause auto refresh</button>
-                <a class="btn app-button-primary"
-                   asp-page="/Admin/BotStatus"
-                   asp-route-limit="@Model.Limit"
-                   asp-route-searchTerm="@Model.SearchTerm"
-                   asp-route-historyMode="@(historyMode == "all" ? null : historyMode)">Refresh now</a>
+
+            <div class="history-tab-panel" data-admin-bot-status-panel="live">
+                <div class="section-heading">
+                    <div>
+                        <h2>Live Bot State</h2>
+                        <p class="section-description">Shows whether the bot is logging into Steam, waiting for the web session, or processing a trade right now.</p>
+                    </div>
+                    <div class="action-row" data-bot-live-refresh data-refresh-interval-seconds="15">
+                        <span class="compact-badge compact-badge-neutral" data-bot-live-refresh-status>Auto refresh on</span>
+                        <span class="meta-note" data-bot-live-refresh-countdown>Refresh in 15s.</span>
+                        <button type="button" class="btn app-button-secondary" data-bot-live-refresh-toggle>Pause auto refresh</button>
+                        <a class="btn app-button-primary"
+                           asp-page="/Admin/BotStatus"
+                           asp-route-limit="@Model.Limit"
+                           asp-route-searchTerm="@Model.SearchTerm"
+                           asp-route-historyMode="@(historyMode == "all" ? null : historyMode)">Refresh now</a>
+                    </div>
+                </div>
+
+                <div class="card-grid live-status-grid">
+                    <article class="content-card live-status-card">
+                        <span class="section-kicker">Current State</span>
+                        <div class="card-heading">
+                            <h3>@serviceState</h3>
+                            <span class="status-badge" data-status="@serviceBadgeStatus">@serviceState</span>
+                        </div>
+                        <p class="card-subtitle">@serviceStateDescription</p>
+                        <div class="history-metrics">
+                            <span><strong>State updated:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</span>
+                            <span><strong>Service reachable:</strong> @(Model.ServiceStatus.Reachable ? "Yes" : "No")</span>
+                        </div>
+                    </article>
+
+                    <article class="content-card live-status-card">
+                        <span class="section-kicker">Steam Login</span>
+                        <div class="card-heading">
+                            <h3>@(Model.ServiceStatus.Bot.LoggedOn ? "Logged into Steam" : "Steam login pending")</h3>
+                            <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.LoggedOn ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.LoggedOn ? "Logged On" : "Waiting")</span>
+                        </div>
+                        <p class="card-subtitle">@(
+                            Model.ServiceStatus.Bot.LoggedOn
+                                ? "Steam account session is authenticated."
+                                : serviceStateDescription)</p>
+                        <div class="history-metrics">
+                            <span><strong>Username configured:</strong> @(Model.ServiceStatus.Bot.UsernameConfigured ? "Yes" : "No")</span>
+                            <span><strong>Shared secret:</strong> @(Model.ServiceStatus.Bot.SharedSecretConfigured ? "Yes" : "No")</span>
+                            <span><strong>Identity secret:</strong> @(Model.ServiceStatus.Bot.IdentitySecretConfigured ? "Yes" : "No")</span>
+                        </div>
+                    </article>
+
+                    <article class="content-card live-status-card">
+                        <span class="section-kicker">Web Session</span>
+                        <div class="card-heading">
+                            <h3>@(Model.ServiceStatus.Bot.Ready ? "Trade manager ready" : "Waiting for web session")</h3>
+                            <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.Ready ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.Ready ? "Ready" : "Waiting")</span>
+                        </div>
+                        <p class="card-subtitle">@(
+                            Model.ServiceStatus.Bot.Ready
+                                ? "Steam cookies and trade manager session are ready for work."
+                                : "The bot may already be logged into Steam but still waiting for cookies or a refreshed web session.")</p>
+                        <div class="history-metrics">
+                            <span><strong>Last ready:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastReadyAt)</span>
+                            <span><strong>Active activities:</strong> @Model.ServiceStatus.Bot.ActiveActivityCount</span>
+                        </div>
+                    </article>
+                </div>
             </div>
-        </div>
 
-        <div class="card-grid live-status-grid">
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Current State</span>
-                <div class="card-heading">
-                    <h3>@serviceState</h3>
-                    <span class="status-badge" data-status="@serviceBadgeStatus">@serviceState</span>
-                </div>
-                <p class="card-subtitle">@serviceStateDescription</p>
-                <div class="history-metrics">
-                    <span><strong>State updated:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</span>
-                    <span><strong>Service reachable:</strong> @(Model.ServiceStatus.Reachable ? "Yes" : "No")</span>
-                </div>
-            </article>
-
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Steam Login</span>
-                <div class="card-heading">
-                    <h3>@(Model.ServiceStatus.Bot.LoggedOn ? "Logged into Steam" : "Steam login pending")</h3>
-                    <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.LoggedOn ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.LoggedOn ? "Logged On" : "Waiting")</span>
-                </div>
-                <p class="card-subtitle">@(
-                    Model.ServiceStatus.Bot.LoggedOn
-                        ? "Steam account session is authenticated."
-                        : serviceStateDescription)</p>
-                <div class="history-metrics">
-                    <span><strong>Username configured:</strong> @(Model.ServiceStatus.Bot.UsernameConfigured ? "Yes" : "No")</span>
-                    <span><strong>Shared secret:</strong> @(Model.ServiceStatus.Bot.SharedSecretConfigured ? "Yes" : "No")</span>
-                    <span><strong>Identity secret:</strong> @(Model.ServiceStatus.Bot.IdentitySecretConfigured ? "Yes" : "No")</span>
-                </div>
-            </article>
-
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Web Session</span>
-                <div class="card-heading">
-                    <h3>@(Model.ServiceStatus.Bot.Ready ? "Trade manager ready" : "Waiting for web session")</h3>
-                    <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.Ready ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.Ready ? "Ready" : "Waiting")</span>
-                </div>
-                <p class="card-subtitle">@(
-                    Model.ServiceStatus.Bot.Ready
-                        ? "Steam cookies and trade manager session are ready for work."
-                        : "The bot may already be logged into Steam but still waiting for cookies or a refreshed web session.")</p>
-                <div class="history-metrics">
-                    <span><strong>Last ready:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastReadyAt)</span>
-                    <span><strong>Active activities:</strong> @Model.ServiceStatus.Bot.ActiveActivityCount</span>
-                </div>
-            </article>
-
-            <article class="content-card live-status-card">
-                <span class="section-kicker">Current Focus</span>
-                <div class="card-heading">
-                    <h3>@(currentActivity?.Description ?? "No active trade action")</h3>
-                    <span class="status-badge" data-status="@(currentActivity is null ? "Credited" : "Pending")">@(currentActivity is null ? "Idle" : "Running")</span>
-                </div>
-                <p class="card-subtitle">@(
-                    currentActivity is null
-                        ? "If the bot is not busy, this panel follows the service state above."
-                        : $"Current activity type: {currentActivity.Type}")</p>
-                <div class="history-metrics">
-                    @if (currentActivity is null)
-                    {
-                        <span><strong>Focus:</strong> @serviceStateDescription</span>
-                    }
-                    else
-                    {
-                        <span><strong>Started:</strong> @FormatLocalDateTimeOffset(currentActivity.StartedAt, "Unknown")</span>
-                        @foreach (var detail in currentActivity.Meta)
-                        {
-                            <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
-                        }
-                    }
-                </div>
-            </article>
-        </div>
-    </section>
-
-    <div class="profile-grid">
+            <div class="history-tab-panel" data-admin-bot-status-panel="account" hidden>
         <section class="content-card profile-card">
             <div class="card-heading">
                 <h2>Account</h2>
@@ -232,17 +216,11 @@
                     <dt>Service URL</dt>
                     <dd class="break-value">@Model.ServiceUrl</dd>
                 </div>
-                <div class="detail-row">
-                    <dt>Inventory Items</dt>
-                    <dd>@Model.InventoryItemCount</dd>
-                </div>
-                <div class="detail-row">
-                    <dt>Visible In Market</dt>
-                    <dd>@Model.AvailableMarketItemCount</dd>
-                </div>
             </dl>
         </section>
+            </div>
 
+            <div class="history-tab-panel" data-admin-bot-status-panel="work" hidden>
         <section class="content-card">
             <div class="card-heading">
                 <h2>Current Work</h2>
@@ -282,8 +260,11 @@
                     }
                 </div>
             }
+        </section>
+            </div>
 
-            <div class="mt-4">
+            <div class="history-tab-panel" data-admin-bot-status-panel="completed" hidden>
+        <section class="content-card">
                 <h3>Last Completed</h3>
                 @if (Model.ServiceStatus.Bot.LastCompletedActivity is null)
                 {
@@ -310,23 +291,17 @@
                         </div>
                     </article>
                 }
-            </div>
         </section>
-    </div>
-
-    <section class="page-section">
-        <div class="section-heading">
-            <div>
-                <h2>Logs</h2>
-                <p class="section-description">Bot logs were moved out of this page so the status and trade actions stay compact.</p>
             </div>
-            <div class="action-row">
-                <a class="btn app-button-primary" asp-page="/Admin/Logs" asp-route-limit="50">Open Log Tab</a>
-            </div>
-        </div>
 
-        <div class="card-grid">
-            <article class="content-card live-status-card">
+            <div class="history-tab-panel" data-admin-bot-status-panel="issues" hidden>
+        <section class="content-card">
+            <div class="card-heading">
+                <h2>Recent Issues</h2>
+                <a class="btn app-button-primary" asp-page="/Admin/Logs" asp-route-limit="50">Open Logs</a>
+            </div>
+            <div class="card-grid mt-3">
+                <article class="content-card live-status-card">
                 <span class="section-kicker">bot-service</span>
                 <div class="card-heading">
                     <h3>Current Issues</h3>
@@ -352,6 +327,9 @@
                 </div>
                 <p class="card-subtitle">Manual and automatic workflow entries now live on the separate Logs page.</p>
             </article>
+            </div>
+        </section>
+            </div>
         </div>
     </section>
 
@@ -426,6 +404,43 @@
 
                 render();
             }, 1000);
+        })();
+
+        (() => {
+            const root = document.querySelector('[data-admin-bot-status-tabs]');
+            if (!root) {
+                return;
+            }
+
+            const tabs = Array.from(root.querySelectorAll('[data-admin-bot-status-tab]'));
+            const panels = Array.from(root.querySelectorAll('[data-admin-bot-status-panel]'));
+            const storageKey = 'skinmarket-admin-bot-status-tab';
+
+            const activate = (target) => {
+                if (!tabs.some((tab) => tab.dataset.adminBotStatusTab === target)) {
+                    return;
+                }
+
+                tabs.forEach((candidate) => {
+                    const isActive = candidate.dataset.adminBotStatusTab === target;
+                    candidate.classList.toggle('active', isActive);
+                    candidate.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.adminBotStatusPanel !== target;
+                });
+            };
+
+            activate(localStorage.getItem(storageKey) || 'live');
+
+            tabs.forEach((tab) => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.adminBotStatusTab;
+                    localStorage.setItem(storageKey, target);
+                    activate(target);
+                });
+            });
         })();
 
     </script>
