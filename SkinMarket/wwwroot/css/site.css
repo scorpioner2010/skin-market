@@ -217,6 +217,18 @@ a:hover {
   transition: color 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
 }
 
+.app-side-link.chat-unread-link,
+.btn.chat-unread-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-side-link.chat-unread-link {
+  width: 100%;
+  justify-content: space-between;
+}
+
 .app-side-link:hover {
   background: var(--vk-sidebar-hover);
   text-decoration: none;
@@ -1437,6 +1449,21 @@ a:hover {
 .chat-contact time {
   color: var(--vk-muted);
   font-size: 11px;
+}
+
+.chat-unread-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: #d93f3f;
+  border: 1px solid #b72f2f;
+  box-shadow: 0 3px 8px rgba(217, 63, 63, 0.26);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
 }
 
 .chat-thread {

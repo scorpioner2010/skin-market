@@ -13,6 +13,7 @@
 </head>
 <body class="app-body">
     @inject SkinMarket.Infrastructure.AppRuntimeState RuntimeState
+    @inject SkinMarket.Contracts.IItemChatService ItemChatService
     @{
         var userAvatarUrl = User.FindFirst("AvatarUrl")?.Value;
         var userDisplayName = User.Identity?.Name ?? User.FindFirst("SteamId")?.Value ?? L["Layout_UserFallback"];
@@ -26,7 +27,29 @@
         var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
         var currentPath = Context.Request.Path.Value ?? string.Empty;
         var isAdmin = string.Equals(User.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var userUnreadChatCount = 0;
+        var adminUnreadChatCount = 0;
+        if ((User.Identity?.IsAuthenticated ?? false) &&
+            !RuntimeState.IsDegradedMode &&
+            Guid.TryParse(User.FindFirst("AppUserId")?.Value, out var currentAppUserId))
+        {
+            try
+            {
+                userUnreadChatCount = await ItemChatService.CountUserUnreadThreadsAsync(currentAppUserId, Context.RequestAborted);
+                if (isAdmin)
+                {
+                    adminUnreadChatCount = await ItemChatService.CountAdminUnreadThreadsAsync(Context.RequestAborted);
+                }
+            }
+            catch
+            {
+                userUnreadChatCount = 0;
+                adminUnreadChatCount = 0;
+            }
+        }
+
         string IsActivePage(string path) => currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty;
+        string FormatUnreadCount(int count) => count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
     <header class="app-header">
         <div class="app-shell">
@@ -78,7 +101,13 @@
                 <nav class="app-side-nav">
                     <a class="app-side-link @IsActivePage("/Profile")" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
                     <a class="app-side-link @IsActivePage("/Items")" asp-page="/Items">@L["Layout_Nav_Items"]</a>
-                    <a class="app-side-link @IsActivePage("/Chats")" asp-page="/Chats">@L["Layout_Nav_Chats"]</a>
+                    <a class="app-side-link chat-unread-link @IsActivePage("/Chats")" asp-page="/Chats" data-chat-unread-target="user">
+                        <span>@L["Layout_Nav_Chats"]</span>
+                        @if (userUnreadChatCount > 0)
+                        {
+                            <span class="chat-unread-badge" data-chat-unread-badge>@FormatUnreadCount(userUnreadChatCount)</span>
+                        }
+                    </a>
                     <a class="app-side-link @IsActivePage("/Market")" asp-page="/Market">@L["Layout_Nav_Market"]</a>
                     <a class="app-side-link @IsActivePage("/Inventory")" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
                     <a class="app-side-link @IsActivePage("/History")" asp-page="/History">@L["Layout_Nav_History"]</a>
@@ -87,6 +116,10 @@
                         <a class="app-side-link @IsActivePage("/Admin")" asp-page="/Admin/BotStatus">Admin</a>
                     }
                 </nav>
+                @if (User.Identity?.IsAuthenticated ?? false)
+                {
+                    <div hidden data-chat-unread-source data-user-unread="@userUnreadChatCount" data-admin-unread="@adminUnreadChatCount"></div>
+                }
                 <div class="app-sidebar-card">
                     <div><strong>x-mania</strong></div>
                     <div>@layoutSubtitle</div>

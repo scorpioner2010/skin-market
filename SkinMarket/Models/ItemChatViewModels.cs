@@ -13,9 +13,17 @@ public sealed class ItemChatThreadSummary
     public decimal ItemPrice { get; init; }
     public string? LastMessagePreview { get; init; }
     public DateTime? LastMessageAtUtc { get; init; }
+    public DateTime? LastUserMessageAtUtc { get; init; }
+    public DateTime? LastAdminMessageAtUtc { get; init; }
+    public DateTime? UserLastReadAtUtc { get; init; }
+    public DateTime? AdminLastReadAtUtc { get; init; }
     public DateTime CreatedAtUtc { get; init; }
     public DateTime UpdatedAtUtc { get; init; }
     public string UserName => string.IsNullOrWhiteSpace(UserDisplayName) ? UserSteamId : UserDisplayName;
+    public bool HasUnreadForUser => LastAdminMessageAtUtc.HasValue &&
+                                    (!UserLastReadAtUtc.HasValue || LastAdminMessageAtUtc > UserLastReadAtUtc);
+    public bool HasUnreadForAdmin => LastUserMessageAtUtc.HasValue &&
+                                     (!AdminLastReadAtUtc.HasValue || LastUserMessageAtUtc > AdminLastReadAtUtc);
 }
 
 public sealed class ItemChatMessageItem

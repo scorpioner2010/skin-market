@@ -646,6 +646,56 @@ app.MapGet("/api/sales/status", async (
     });
 });
 
+app.MapGet("/api/chats/unread-counts", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    IItemChatService itemChatService,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var appUserIdClaim = httpContext.User.FindFirst("AppUserId")?.Value;
+    var steamId = httpContext.User.FindFirst("SteamId")?.Value;
+    AppUser? appUser = null;
+    if (Guid.TryParse(appUserIdClaim, out var appUserId))
+    {
+        appUser = await dbContext.AppUsers
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.Id == appUserId, cancellationToken);
+    }
+
+    if (appUser is null && !string.IsNullOrWhiteSpace(steamId))
+    {
+        appUser = await dbContext.AppUsers
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
+    }
+
+    if (appUser is null)
+    {
+        return Results.NotFound(new
+        {
+            success = false,
+            message = "Local user profile was not found."
+        });
+    }
+
+    var userUnreadChats = await itemChatService.CountUserUnreadThreadsAsync(appUser.Id, cancellationToken);
+    var adminUnreadChats = appUser.IsAdmin
+        ? await itemChatService.CountAdminUnreadThreadsAsync(cancellationToken)
+        : 0;
+
+    return Results.Ok(new
+    {
+        success = true,
+        userUnreadChats,
+        adminUnreadChats
+    });
+});
+
 app.MapPost("/api/sales/cancel", async (
     HttpContext httpContext,
     AppDbContext dbContext,

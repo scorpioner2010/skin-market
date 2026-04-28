@@ -87,6 +87,29 @@ public sealed class ItemChatService : IItemChatService
         return threads.Select(ToSummary).ToList();
     }
 
+    public async Task<int> CountUserUnreadThreadsAsync(Guid appUserId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.ItemChatThreads
+            .AsNoTracking()
+            .CountAsync(
+                thread =>
+                    thread.AppUserId == appUserId &&
+                    thread.LastAdminMessageAtUtc.HasValue &&
+                    (!thread.UserLastReadAtUtc.HasValue || thread.LastAdminMessageAtUtc > thread.UserLastReadAtUtc),
+                cancellationToken);
+    }
+
+    public async Task<int> CountAdminUnreadThreadsAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.ItemChatThreads
+            .AsNoTracking()
+            .CountAsync(
+                thread =>
+                    thread.LastUserMessageAtUtc.HasValue &&
+                    (!thread.AdminLastReadAtUtc.HasValue || thread.LastUserMessageAtUtc > thread.AdminLastReadAtUtc),
+                cancellationToken);
+    }
+
     public async Task<ItemChatConversation?> GetUserConversationAsync(Guid appUserId, Guid? threadId, CancellationToken cancellationToken = default)
     {
         if (!threadId.HasValue)
@@ -112,6 +135,7 @@ public sealed class ItemChatService : IItemChatService
             return null;
         }
 
+        await MarkUserThreadReadAsync(thread.Id, thread.LastAdminMessageAtUtc, cancellationToken);
         return ToConversation(thread);
     }
 
@@ -134,7 +158,13 @@ public sealed class ItemChatService : IItemChatService
         }
 
         var thread = await LoadConversationThreadAsync(threadId.Value, cancellationToken);
-        return thread is null ? null : ToConversation(thread);
+        if (thread is null)
+        {
+            return null;
+        }
+
+        await MarkAdminThreadReadAsync(thread.Id, thread.LastUserMessageAtUtc, cancellationToken);
+        return ToConversation(thread);
     }
 
     public async Task<ItemChatSendResult> SendUserMessageAsync(Guid appUserId, Guid threadId, string body, CancellationToken cancellationToken = default)
@@ -234,8 +264,57 @@ public sealed class ItemChatService : IItemChatService
 
         thread.LastMessageAtUtc = now;
         thread.LastMessagePreview = BuildPreview(body);
+        if (authorType == ItemChatAuthorType.User)
+        {
+            thread.LastUserMessageAtUtc = now;
+            thread.UserLastReadAtUtc = now;
+        }
+        else if (authorType == ItemChatAuthorType.Admin)
+        {
+            thread.LastAdminMessageAtUtc = now;
+            thread.AdminLastReadAtUtc = now;
+        }
+
         thread.UpdatedAtUtc = now;
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task MarkUserThreadReadAsync(Guid threadId, DateTime? readAtUtc, CancellationToken cancellationToken)
+    {
+        if (!readAtUtc.HasValue)
+        {
+            return;
+        }
+
+        var thread = await _dbContext.ItemChatThreads
+            .SingleOrDefaultAsync(item => item.Id == threadId, cancellationToken);
+        if (thread is null ||
+            (thread.UserLastReadAtUtc.HasValue && thread.UserLastReadAtUtc >= readAtUtc.Value))
+        {
+            return;
+        }
+
+        thread.UserLastReadAtUtc = readAtUtc.Value;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task MarkAdminThreadReadAsync(Guid threadId, DateTime? readAtUtc, CancellationToken cancellationToken)
+    {
+        if (!readAtUtc.HasValue)
+        {
+            return;
+        }
+
+        var thread = await _dbContext.ItemChatThreads
+            .SingleOrDefaultAsync(item => item.Id == threadId, cancellationToken);
+        if (thread is null ||
+            (thread.AdminLastReadAtUtc.HasValue && thread.AdminLastReadAtUtc >= readAtUtc.Value))
+        {
+            return;
+        }
+
+        thread.AdminLastReadAtUtc = readAtUtc.Value;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -296,6 +375,10 @@ public sealed class ItemChatService : IItemChatService
             ItemPrice = thread.ServiceItem?.Price ?? thread.ItemPriceSnapshot,
             LastMessagePreview = thread.LastMessagePreview,
             LastMessageAtUtc = thread.LastMessageAtUtc,
+            LastUserMessageAtUtc = thread.LastUserMessageAtUtc,
+            LastAdminMessageAtUtc = thread.LastAdminMessageAtUtc,
+            UserLastReadAtUtc = thread.UserLastReadAtUtc,
+            AdminLastReadAtUtc = thread.AdminLastReadAtUtc,
             CreatedAtUtc = thread.CreatedAtUtc,
             UpdatedAtUtc = thread.UpdatedAtUtc
         };

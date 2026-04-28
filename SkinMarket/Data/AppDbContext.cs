@@ -140,6 +140,8 @@ public class AppDbContext : DbContext
             entity.Property(thread => thread.LastMessagePreview).HasMaxLength(300);
             entity.HasIndex(thread => new { thread.AppUserId, thread.ServiceItemId }).IsUnique();
             entity.HasIndex(thread => thread.LastMessageAtUtc);
+            entity.HasIndex(thread => thread.LastUserMessageAtUtc);
+            entity.HasIndex(thread => new { thread.AppUserId, thread.LastAdminMessageAtUtc });
             entity.HasIndex(thread => thread.UpdatedAtUtc);
             entity.HasOne(thread => thread.AppUser)
                 .WithMany(user => user.ItemChatThreads)

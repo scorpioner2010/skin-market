@@ -3,6 +3,91 @@
 
 // Write your JavaScript code.
 (() => {
+    const source = document.querySelector('[data-chat-unread-source]');
+    if (!source) {
+        return;
+    }
+
+    const formatCount = (count) => count > 99 ? '99+' : String(count);
+
+    const readCount = (value) => {
+        const parsed = Number.parseInt(value ?? '0', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    };
+
+    const isChatPath = (link, path) => {
+        try {
+            return new URL(link.href, window.location.origin).pathname.toLowerCase() === path;
+        } catch {
+            return false;
+        }
+    };
+
+    const setLinkBadge = (link, count) => {
+        link.classList.add('chat-unread-link');
+        let badge = link.querySelector('[data-chat-unread-badge]');
+        if (count <= 0) {
+            badge?.remove();
+            return;
+        }
+
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'chat-unread-badge';
+            badge.dataset.chatUnreadBadge = '';
+            link.appendChild(badge);
+        }
+
+        badge.textContent = formatCount(count);
+        badge.setAttribute('aria-label', `${count} unread chats`);
+    };
+
+    const applyCounts = (userUnreadChats, adminUnreadChats) => {
+        source.dataset.userUnread = String(userUnreadChats);
+        source.dataset.adminUnread = String(adminUnreadChats);
+
+        document.querySelectorAll('a[href]').forEach((link) => {
+            if (isChatPath(link, '/chats')) {
+                setLinkBadge(link, userUnreadChats);
+                return;
+            }
+
+            if (isChatPath(link, '/admin/chats')) {
+                setLinkBadge(link, adminUnreadChats);
+            }
+        });
+    };
+
+    const poll = async () => {
+        try {
+            const response = await fetch('/api/chats/unread-counts', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            if (!response.ok) {
+                return;
+            }
+
+            const payload = await response.json();
+            if (payload?.success !== true) {
+                return;
+            }
+
+            applyCounts(readCount(payload.userUnreadChats), readCount(payload.adminUnreadChats));
+        } catch {
+        } finally {
+            window.setTimeout(poll, 5000);
+        }
+    };
+
+    applyCounts(readCount(source.dataset.userUnread), readCount(source.dataset.adminUnread));
+    window.setTimeout(poll, 1500);
+})();
+
+(() => {
     const panel = document.querySelector('[data-global-sale-action-panel]');
     if (!panel) {
         return;

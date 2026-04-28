@@ -10,6 +10,10 @@ public class ItemChatThread
     public decimal ItemPriceSnapshot { get; set; }
     public string? LastMessagePreview { get; set; }
     public DateTime? LastMessageAtUtc { get; set; }
+    public DateTime? LastUserMessageAtUtc { get; set; }
+    public DateTime? LastAdminMessageAtUtc { get; set; }
+    public DateTime? UserLastReadAtUtc { get; set; }
+    public DateTime? AdminLastReadAtUtc { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 
