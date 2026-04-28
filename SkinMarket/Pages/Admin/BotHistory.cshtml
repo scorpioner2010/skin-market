@@ -34,16 +34,6 @@
         <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
-    {
-        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ActionErrorMessage))
-    {
-        <div class="app-alert alert-danger" role="alert">@Model.ActionErrorMessage</div>
-    }
-
     <section class="page-section history-tabs" data-admin-bot-history-tabs>
         <div class="history-tab-list" role="tablist" aria-label="Bot history">
             <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-bot-history-tab="purchases">Bot purchases</button>

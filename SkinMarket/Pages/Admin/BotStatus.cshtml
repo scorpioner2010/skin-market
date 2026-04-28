@@ -54,26 +54,11 @@
         <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
-    {
-        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ActionErrorMessage))
-    {
-        <div class="app-alert alert-danger" role="alert">@Model.ActionErrorMessage</div>
-    }
-
     @if (!Model.ServiceStatus.Reachable)
     {
         <div class="app-alert alert-danger" role="alert">
             Bot service is unreachable. @(Model.ServiceStatus.ReachabilityError ?? "No response from bot service.")
         </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.InventoryErrorMessage))
-    {
-        <div class="app-alert alert-warning" role="alert">@Model.InventoryErrorMessage</div>
     }
 
     <section class="page-section">
