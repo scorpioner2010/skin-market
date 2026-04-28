@@ -88,6 +88,19 @@
                         </dl>
 
                         <p class="meta-note market-owner-note">Created: @FormatLocalDateTime(item.CreatedAtUtc)</p>
+                        @if (User.Identity?.IsAuthenticated ?? false)
+                        {
+                            <form method="post" asp-page-handler="OpenChat" class="action-row market-item-actions">
+                                <input type="hidden" asp-for="ChatItemId" value="@item.Id" />
+                                <button type="submit" class="btn app-button-primary market-action-button">Chat</button>
+                            </form>
+                        }
+                        else
+                        {
+                            <div class="action-row market-item-actions">
+                                <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">Chat</a>
+                            </div>
+                        }
                     </article>
                 }
             </div>
@@ -99,7 +112,7 @@
                         <div class="market-table-cell">Price</div>
                         <div class="market-table-cell">Created</div>
                         <div class="market-table-cell market-table-asset-cell">Item ID</div>
-                        <div class="market-table-cell market-table-actions-cell">Status</div>
+                        <div class="market-table-cell market-table-actions-cell">Action</div>
                     </div>
                     @foreach (var item in Model.Items)
                     {
@@ -137,8 +150,18 @@
                             <div class="market-table-cell market-table-asset-cell" data-label="Item ID">
                                 <span class="inventory-meta break-value">@item.Id</span>
                             </div>
-                            <div class="market-table-cell market-table-actions-cell" data-label="Status">
-                                <span class="compact-badge compact-badge-neutral">Available</span>
+                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
+                                @if (User.Identity?.IsAuthenticated ?? false)
+                                {
+                                    <form method="post" asp-page-handler="OpenChat" class="market-table-action-form">
+                                        <input type="hidden" name="ChatItemId" value="@item.Id" />
+                                        <button type="submit" class="btn app-button-primary market-table-action-button">Chat</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <a class="btn app-button-primary market-table-action-button" asp-page="/Auth/Login">Chat</a>
+                                }
                             </div>
                         </article>
                     }

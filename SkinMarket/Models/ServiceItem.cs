@@ -12,4 +12,6 @@ public class ServiceItem
     public string? ImageContentType { get; set; }
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+
+    public ICollection<ItemChatThread> ChatThreads { get; set; } = new List<ItemChatThread>();
 }

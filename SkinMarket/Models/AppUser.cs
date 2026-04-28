@@ -14,4 +14,6 @@ public class AppUser
 
     public ICollection<BalanceTransaction> BalanceTransactions { get; set; } = new List<BalanceTransaction>();
     public ICollection<TradeOperation> TradeOperations { get; set; } = new List<TradeOperation>();
+    public ICollection<ItemChatThread> ItemChatThreads { get; set; } = new List<ItemChatThread>();
+    public ICollection<ItemChatMessage> ItemChatMessages { get; set; } = new List<ItemChatMessage>();
 }

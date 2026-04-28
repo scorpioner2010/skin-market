@@ -1,0 +1,130 @@
+@page
+@model SkinMarket.Pages.ChatsModel
+@{
+    ViewData["Title"] = L["Page_Chats_Title"];
+    string FormatLocalDateTime(DateTime? timestamp) => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No messages";
+    string FormatMessageTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    var activeThreadId = Model.ActiveThreadId;
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>@L["Page_Chats_Title"]</h1>
+            <p class="text-muted mb-0">Item conversations with the service team.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.RequiresLogin)
+    {
+        <div class="empty-state">
+            <h2>Steam login required</h2>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+        </div>
+    }
+    else if (Model.Threads.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No chats yet</h2>
+            <a class="btn app-button-primary" asp-page="/Items">Open Items</a>
+        </div>
+    }
+    else
+    {
+        <section class="chat-shell">
+            <aside class="chat-contact-list" aria-label="Item chats">
+                <div class="chat-contact-list-header">
+                    <h2>Items</h2>
+                    <span class="compact-badge compact-badge-neutral">@Model.Threads.Count</span>
+                </div>
+                @foreach (var thread in Model.Threads)
+                {
+                    var isActive = activeThreadId == thread.Id;
+                    <a class="chat-contact @(isActive ? "active" : null)" asp-page="/Chats" asp-route-threadId="@thread.Id">
+                        @if (!string.IsNullOrWhiteSpace(thread.ItemImageUrl))
+                        {
+                            <img class="chat-contact-avatar" src="@thread.ItemImageUrl" alt="@thread.ItemName" />
+                        }
+                        else
+                        {
+                            <span class="chat-contact-avatar chat-contact-avatar-fallback" aria-hidden="true">
+                                @((thread.ItemName.FirstOrDefault()).ToString().ToUpperInvariant())
+                            </span>
+                        }
+                        <span class="chat-contact-copy">
+                            <strong>@thread.ItemName</strong>
+                            <span>@(thread.LastMessagePreview ?? $"${thread.ItemPrice:0.00}")</span>
+                        </span>
+                        <time>@FormatLocalDateTime(thread.LastMessageAtUtc)</time>
+                    </a>
+                }
+            </aside>
+
+            <div class="chat-thread">
+                @if (Model.Conversation is null)
+                {
+                    <div class="empty-state compact">
+                        <h3>Select a chat.</h3>
+                    </div>
+                }
+                else
+                {
+                    <header class="chat-thread-header">
+                        <div class="chat-subject">
+                            @if (!string.IsNullOrWhiteSpace(Model.Conversation.Thread.ItemImageUrl))
+                            {
+                                <img class="chat-subject-image" src="@Model.Conversation.Thread.ItemImageUrl" alt="@Model.Conversation.Thread.ItemName" />
+                            }
+                            <div>
+                                <span class="section-kicker">Item chat</span>
+                                <h2>@Model.Conversation.Thread.ItemName</h2>
+                                <p class="card-subtitle mb-0">$@Model.Conversation.Thread.ItemPrice.ToString("0.00")</p>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div class="chat-message-list">
+                        @if (Model.Conversation.Messages.Count == 0)
+                        {
+                            <div class="empty-state compact">
+                                <h3>No messages yet.</h3>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var message in Model.Conversation.Messages)
+                            {
+                                var isMine = message.AuthorType == ItemChatAuthorType.User;
+                                <article class="chat-message @(isMine ? "mine" : "theirs")">
+                                    <div class="chat-message-bubble">
+                                        <div class="chat-message-meta">
+                                            <strong>@(isMine ? "You" : "Admin")</strong>
+                                            <time>@FormatMessageTime(message.CreatedAtUtc)</time>
+                                        </div>
+                                        <div class="chat-message-body">@message.Body</div>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </div>
+
+                    <form method="post" asp-page-handler="Send" class="chat-compose">
+                        <input type="hidden" asp-for="MessageInput.ThreadId" value="@Model.Conversation.Thread.Id" />
+                        <textarea class="form-control app-input chat-compose-input" asp-for="MessageInput.Body" maxlength="4000" placeholder="Write a message"></textarea>
+                        <button type="submit" class="btn app-button-primary">Send</button>
+                    </form>
+                }
+            </div>
+        </section>
+    }
+</div>

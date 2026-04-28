@@ -132,6 +132,7 @@ builder.Services.AddScoped<IMarketPricingService, MarketPricingService>();
 builder.Services.AddScoped<IMarketService, MarketService>();
 builder.Services.AddScoped<IMarketPurchaseService, MarketPurchaseService>();
 builder.Services.AddScoped<IMarketDeliveryService, MarketDeliveryService>();
+builder.Services.AddScoped<IItemChatService, ItemChatService>();
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();

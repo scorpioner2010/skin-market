@@ -18,6 +18,7 @@
   <data name="Layout_Nav_Home" xml:space="preserve"><value>Home</value></data>
   <data name="Layout_Nav_Profile" xml:space="preserve"><value>Profile</value></data>
   <data name="Layout_Nav_Items" xml:space="preserve"><value>Items</value></data>
+  <data name="Layout_Nav_Chats" xml:space="preserve"><value>Chats</value></data>
   <data name="Layout_Nav_Market" xml:space="preserve"><value>Market</value></data>
   <data name="Layout_Nav_Inventory" xml:space="preserve"><value>Inventory</value></data>
   <data name="Layout_Nav_History" xml:space="preserve"><value>History</value></data>
@@ -40,6 +41,7 @@
   <data name="Page_Profile_Title" xml:space="preserve"><value>Profile</value></data>
   <data name="Page_Inventory_Title" xml:space="preserve"><value>Inventory</value></data>
   <data name="Page_Items_Title" xml:space="preserve"><value>Items</value></data>
+  <data name="Page_Chats_Title" xml:space="preserve"><value>Chats</value></data>
   <data name="Page_Market_Title" xml:space="preserve"><value>Market</value></data>
   <data name="Page_History_Title" xml:space="preserve"><value>History</value></data>
   <data name="Home_Kicker" xml:space="preserve"><value>Multi-game ready service</value></data>

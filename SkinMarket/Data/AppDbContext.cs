@@ -16,6 +16,8 @@ public class AppDbContext : DbContext
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<TradeOperation> TradeOperations => Set<TradeOperation>();
     public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
+    public DbSet<ItemChatThread> ItemChatThreads => Set<ItemChatThread>();
+    public DbSet<ItemChatMessage> ItemChatMessages => Set<ItemChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -126,6 +128,44 @@ public class AppDbContext : DbContext
             entity.Property(item => item.ImageContentType).HasMaxLength(100);
             entity.HasIndex(item => item.Name);
             entity.HasIndex(item => item.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<ItemChatThread>(entity =>
+        {
+            entity.ToTable("ItemChatThreads");
+            entity.HasKey(thread => thread.Id);
+            entity.Property(thread => thread.ItemNameSnapshot).IsRequired().HasMaxLength(160);
+            entity.Property(thread => thread.ItemImageUrlSnapshot).HasMaxLength(500);
+            entity.Property(thread => thread.ItemPriceSnapshot).HasPrecision(18, 2);
+            entity.Property(thread => thread.LastMessagePreview).HasMaxLength(300);
+            entity.HasIndex(thread => new { thread.AppUserId, thread.ServiceItemId }).IsUnique();
+            entity.HasIndex(thread => thread.LastMessageAtUtc);
+            entity.HasIndex(thread => thread.UpdatedAtUtc);
+            entity.HasOne(thread => thread.AppUser)
+                .WithMany(user => user.ItemChatThreads)
+                .HasForeignKey(thread => thread.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(thread => thread.ServiceItem)
+                .WithMany(item => item.ChatThreads)
+                .HasForeignKey(thread => thread.ServiceItemId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ItemChatMessage>(entity =>
+        {
+            entity.ToTable("ItemChatMessages");
+            entity.HasKey(message => message.Id);
+            entity.Property(message => message.AuthorType).IsRequired().HasMaxLength(20);
+            entity.Property(message => message.Body).IsRequired().HasMaxLength(4000);
+            entity.HasIndex(message => new { message.ItemChatThreadId, message.CreatedAtUtc });
+            entity.HasOne(message => message.ItemChatThread)
+                .WithMany(thread => thread.Messages)
+                .HasForeignKey(message => message.ItemChatThreadId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(message => message.AuthorAppUser)
+                .WithMany(user => user.ItemChatMessages)
+                .HasForeignKey(message => message.AuthorAppUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

@@ -1,0 +1,139 @@
+@page
+@model SkinMarket.Pages.Admin.ChatsModel
+@{
+    ViewData["Title"] = "Admin Chats";
+    string FormatLocalDateTime(DateTime? timestamp) => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No messages";
+    string FormatMessageTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    var activeThreadId = Model.ActiveThreadId;
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>Chats</h1>
+            <p class="text-muted mb-0">Item conversations from Steam users.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Chats">Chats</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Threads.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No chats yet</h2>
+        </div>
+    }
+    else
+    {
+        <section class="chat-shell admin-chat-shell">
+            <aside class="chat-contact-list" aria-label="User chats">
+                <div class="chat-contact-list-header">
+                    <h2>Steam accounts</h2>
+                    <span class="compact-badge compact-badge-neutral">@Model.Threads.Count</span>
+                </div>
+                @foreach (var thread in Model.Threads)
+                {
+                    var isActive = activeThreadId == thread.Id;
+                    <a class="chat-contact @(isActive ? "active" : null)" asp-page="/Admin/Chats" asp-route-threadId="@thread.Id">
+                        @if (!string.IsNullOrWhiteSpace(thread.UserAvatarUrl))
+                        {
+                            <img class="chat-contact-avatar" src="@thread.UserAvatarUrl" alt="@thread.UserName" />
+                        }
+                        else
+                        {
+                            <span class="chat-contact-avatar chat-contact-avatar-fallback" aria-hidden="true">
+                                @((thread.UserName.FirstOrDefault()).ToString().ToUpperInvariant())
+                            </span>
+                        }
+                        <span class="chat-contact-copy">
+                            <strong>@thread.UserName</strong>
+                            <span>@thread.ItemName</span>
+                            <span class="break-value">@thread.UserSteamId</span>
+                        </span>
+                        <time>@FormatLocalDateTime(thread.LastMessageAtUtc)</time>
+                    </a>
+                }
+            </aside>
+
+            <div class="chat-thread">
+                @if (Model.Conversation is null)
+                {
+                    <div class="empty-state compact">
+                        <h3>Select a chat.</h3>
+                    </div>
+                }
+                else
+                {
+                    <header class="chat-thread-header">
+                        <div class="chat-thread-header-main">
+                            <div class="chat-subject">
+                                @if (!string.IsNullOrWhiteSpace(Model.Conversation.Thread.ItemImageUrl))
+                                {
+                                    <img class="chat-subject-image" src="@Model.Conversation.Thread.ItemImageUrl" alt="@Model.Conversation.Thread.ItemName" />
+                                }
+                                <div>
+                                    <span class="section-kicker">Subject item</span>
+                                    <h2>@Model.Conversation.Thread.ItemName</h2>
+                                    <p class="card-subtitle mb-0">
+                                        $@Model.Conversation.Thread.ItemPrice.ToString("0.00") / @Model.Conversation.Thread.UserName / @Model.Conversation.Thread.UserSteamId
+                                    </p>
+                                </div>
+                            </div>
+                            <form method="post" asp-page-handler="Delete" class="chat-delete-form" onsubmit="return confirm('Delete this chat and all messages?');">
+                                <input type="hidden" asp-for="DeleteThreadId" value="@Model.Conversation.Thread.Id" />
+                                <button type="submit" class="btn app-button-secondary chat-delete-button">Delete chat</button>
+                            </form>
+                        </div>
+                    </header>
+
+                    <div class="chat-message-list">
+                        @if (Model.Conversation.Messages.Count == 0)
+                        {
+                            <div class="empty-state compact">
+                                <h3>No messages yet.</h3>
+                            </div>
+                        }
+                        else
+                        {
+                            @foreach (var message in Model.Conversation.Messages)
+                            {
+                                var isAdminMessage = message.AuthorType == ItemChatAuthorType.Admin;
+                                <article class="chat-message @(isAdminMessage ? "mine" : "theirs")">
+                                    <div class="chat-message-bubble">
+                                        <div class="chat-message-meta">
+                                            <strong>@(isAdminMessage ? "Admin" : Model.Conversation.Thread.UserName)</strong>
+                                            <time>@FormatMessageTime(message.CreatedAtUtc)</time>
+                                        </div>
+                                        <div class="chat-message-body">@message.Body</div>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </div>
+
+                    <form method="post" asp-page-handler="Send" class="chat-compose">
+                        <input type="hidden" asp-for="MessageInput.ThreadId" value="@Model.Conversation.Thread.Id" />
+                        <textarea class="form-control app-input chat-compose-input" asp-for="MessageInput.Body" maxlength="4000" placeholder="Write a reply"></textarea>
+                        <button type="submit" class="btn app-button-primary">Send</button>
+                    </form>
+                }
+            </div>
+        </section>
+    }
+</div>
