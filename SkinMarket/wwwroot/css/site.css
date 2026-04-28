@@ -624,6 +624,39 @@ a:hover {
   grid-template-columns: minmax(170px, 1.4fr) minmax(150px, 1fr) minmax(120px, 0.75fr) minmax(110px, 0.7fr) minmax(220px, 1.35fr);
 }
 
+.admin-accounts-table {
+  min-width: 980px;
+}
+
+.admin-accounts-table .history-table-row {
+  grid-template-columns: minmax(260px, 1.35fr) minmax(110px, 0.5fr) minmax(90px, 0.4fr) minmax(230px, 0.95fr) minmax(320px, 1.25fr);
+}
+
+.admin-account-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-account-main .profile-avatar {
+  width: 42px;
+  height: 42px;
+}
+
+.admin-account-records,
+.admin-account-actions,
+.admin-balance-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.admin-balance-input {
+  width: 110px;
+}
+
 .admin-bot-history-row {
   align-items: start;
 }
@@ -661,12 +694,14 @@ a:hover {
 
 @media (max-width: 900px) {
   .admin-bot-purchases-table .history-table-row,
-  .admin-bot-sales-table .history-table-row {
+  .admin-bot-sales-table .history-table-row,
+  .admin-accounts-table .history-table-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-bot-purchases-table .history-table-header,
-  .admin-bot-sales-table .history-table-header {
+  .admin-bot-sales-table .history-table-header,
+  .admin-accounts-table .history-table-header {
     display: none;
   }
 

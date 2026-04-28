@@ -108,6 +108,24 @@
                     </div>
                 </form>
             </section>
+
+            <section class="content-card">
+                <div class="card-heading">
+                    <h2>Gift code</h2>
+                    @if (Model.AppUser?.IsAdmin == true)
+                    {
+                        <span class="status-badge" data-status="Credited">Admin active</span>
+                    }
+                </div>
+                <form method="post" asp-page-handler="ActivateGiftCode" class="stack-form">
+                    <div>
+                        <label asp-for="GiftCodeInput.Code" class="form-label">Gift code</label>
+                        <input asp-for="GiftCodeInput.Code" class="form-control app-input" placeholder="Enter gift code" autocomplete="off" />
+                        <span asp-validation-for="GiftCodeInput.Code" class="text-danger small"></span>
+                    </div>
+                    <button type="submit" class="btn app-button-secondary">Enter</button>
+                </form>
+            </section>
         </div>
     }
     else

@@ -28,6 +28,7 @@ public class AppDbContext : DbContext
             entity.Property(user => user.PersonaName).HasMaxLength(200);
             entity.Property(user => user.AvatarUrl).HasMaxLength(500);
             entity.Property(user => user.TradeUrl).HasMaxLength(500);
+            entity.Property(user => user.IsAdmin).HasDefaultValue(false);
             entity.Property(user => user.Balance).HasDefaultValue(0m);
             entity.HasIndex(user => user.SteamId).IsUnique();
         });

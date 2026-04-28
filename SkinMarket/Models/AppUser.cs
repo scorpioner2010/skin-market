@@ -8,6 +8,7 @@ public class AppUser
     public string? PersonaName { get; set; }
     public string? AvatarUrl { get; set; }
     public string? TradeUrl { get; set; }
+    public bool IsAdmin { get; set; }
     public decimal Balance { get; set; }
     public DateTime CreatedAtUtc { get; set; }
 

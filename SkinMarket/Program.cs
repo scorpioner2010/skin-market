@@ -12,6 +12,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.Mvc;
 
 LocalEnvFileLoader.TryLoad(Directory.GetCurrentDirectory());
 
@@ -89,13 +90,19 @@ builder.Services.AddSingleton<BotServiceAvailabilityTracker>();
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.AddScoped<AdminAccessPageFilter>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
-builder.Services.AddRazorPages()
+builder.Services.AddRazorPages(options =>
+    {
+        options.Conventions.AddFolderApplicationModelConvention(
+            "/Admin",
+            model => model.Filters.Add(new ServiceFilterAttribute(typeof(AdminAccessPageFilter))));
+    })
     .AddViewLocalization()
     .AddDataAnnotationsLocalization();
 builder.Services.Configure<RequestLocalizationOptions>(options =>

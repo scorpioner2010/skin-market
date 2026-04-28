@@ -122,6 +122,7 @@ public class CallbackModel : PageModel
             new("SteamId", steamId),
             new(ClaimTypes.NameIdentifier, steamId),
             new(ClaimTypes.Name, displayName),
+            new("IsAdmin", appUser.IsAdmin ? "true" : "false"),
             new("AvatarUrl", appUser.AvatarUrl ?? string.Empty)
         };
 

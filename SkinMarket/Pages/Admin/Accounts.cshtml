@@ -1,0 +1,113 @@
+@page
+@model SkinMarket.Pages.Admin.AccountsModel
+@{
+    ViewData["Title"] = "Admin Accounts";
+    string FormatLocalDateTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>Accounts</h1>
+            <p class="text-muted mb-0">Registered users, balances, and destructive account actions.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Accounts">Accounts</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Registered Accounts</h2>
+                <p class="section-description">@Model.Accounts.Count account(s) currently stored in the database.</p>
+            </div>
+        </div>
+
+        @if (Model.Accounts.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No accounts registered yet.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="history-table-shell admin-accounts-shell">
+                <div class="history-table admin-accounts-table">
+                    <div class="history-table-row history-table-header">
+                        <span>Account</span>
+                        <span>Balance</span>
+                        <span>Admin</span>
+                        <span>Records</span>
+                        <span>Actions</span>
+                    </div>
+                    @foreach (var account in Model.Accounts)
+                    {
+                        <article class="history-table-row admin-account-row">
+                            <div class="admin-account-main">
+                                @if (!string.IsNullOrWhiteSpace(account.AvatarUrl))
+                                {
+                                    <img class="profile-avatar" src="@account.AvatarUrl" alt="@account.Name" />
+                                }
+                                else
+                                {
+                                    <div class="profile-avatar profile-avatar-fallback" aria-hidden="true">
+                                        @((account.Name.FirstOrDefault()).ToString().ToUpperInvariant())
+                                    </div>
+                                }
+                                <div>
+                                    <strong>@account.Name</strong>
+                                    <div class="inventory-meta break-value">SteamID: @account.SteamId</div>
+                                    <div class="inventory-meta">Created: @FormatLocalDateTime(account.CreatedAtUtc)</div>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="balance-pill">$@account.Balance.ToString("0.00")</span>
+                            </div>
+                            <div>
+                                <span class="status-badge" data-status="@(account.IsAdmin ? "Credited" : "Sold")">
+                                    @(account.IsAdmin ? "Admin" : "User")
+                                </span>
+                            </div>
+                            <div class="admin-account-records">
+                                <span class="compact-badge compact-badge-neutral">Trades: @account.TradeOperationCount</span>
+                                <span class="compact-badge compact-badge-neutral">Purchases: @account.PurchaseCount</span>
+                                <span class="compact-badge compact-badge-neutral">Balance tx: @account.BalanceTransactionCount</span>
+                            </div>
+                            <div class="admin-account-actions">
+                                <form method="post" asp-page-handler="UpdateBalance" class="admin-balance-form">
+                                    <input type="hidden" asp-for="BalanceInput.UserId" value="@account.Id" />
+                                    <input class="form-control app-input admin-balance-input"
+                                           asp-for="BalanceInput.Balance"
+                                           value="@account.Balance.ToString("0.00")"
+                                           type="number"
+                                           step="0.01" />
+                                    <button type="submit" class="btn app-button-primary">Set balance</button>
+                                </form>
+                                <form method="post"
+                                      asp-page-handler="Delete"
+                                      onsubmit="return confirm('Delete this account and its related records from the database? This cannot be undone.');">
+                                    <input type="hidden" asp-for="DeleteUserId" value="@account.Id" />
+                                    <button type="submit" class="btn app-button-secondary">Delete account</button>
+                                </form>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </div>
+        }
+    </section>
+</div>

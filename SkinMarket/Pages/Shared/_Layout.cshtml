@@ -25,6 +25,7 @@
         };
         var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
         var currentPath = Context.Request.Path.Value ?? string.Empty;
+        var isAdmin = string.Equals(User.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase);
         string IsActivePage(string path) => currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty;
     }
     <header class="app-header">
@@ -79,7 +80,10 @@
                     <a class="app-side-link @IsActivePage("/Market")" asp-page="/Market">@L["Layout_Nav_Market"]</a>
                     <a class="app-side-link @IsActivePage("/Inventory")" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
                     <a class="app-side-link @IsActivePage("/History")" asp-page="/History">@L["Layout_Nav_History"]</a>
-                    <a class="app-side-link @IsActivePage("/Admin")" asp-page="/Admin/BotStatus">Admin</a>
+                    @if (isAdmin)
+                    {
+                        <a class="app-side-link @IsActivePage("/Admin")" asp-page="/Admin/BotStatus">Admin</a>
+                    }
                 </nav>
                 <div class="app-sidebar-card">
                     <div><strong>x-mania</strong></div>
