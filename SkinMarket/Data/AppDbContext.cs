@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<MarketPurchaseRecord> MarketPurchaseRecords => Set<MarketPurchaseRecord>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
     public DbSet<TradeOperation> TradeOperations => Set<TradeOperation>();
+    public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -110,6 +111,21 @@ public class AppDbContext : DbContext
             entity.Property(snapshot => snapshot.Status).IsRequired().HasMaxLength(50);
             entity.Property(snapshot => snapshot.FailureReason).HasMaxLength(500);
             entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency }).IsUnique();
+        });
+
+        modelBuilder.Entity<ServiceItem>(entity =>
+        {
+            entity.ToTable("ServiceItems");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Name).IsRequired().HasMaxLength(160);
+            entity.Property(item => item.Description).HasMaxLength(1000);
+            entity.Property(item => item.Price).HasPrecision(18, 2);
+            entity.Property(item => item.ImageUrl).IsRequired().HasMaxLength(500);
+            entity.Property(item => item.ImageStoragePath).IsRequired().HasMaxLength(500);
+            entity.Property(item => item.ImageFileName).HasMaxLength(260);
+            entity.Property(item => item.ImageContentType).HasMaxLength(100);
+            entity.HasIndex(item => item.Name);
+            entity.HasIndex(item => item.CreatedAtUtc);
         });
     }
 }

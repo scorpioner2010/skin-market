@@ -1,0 +1,132 @@
+@page
+@model SkinMarket.Pages.Admin.ItemsModel
+@{
+    ViewData["Title"] = "Admin Items";
+    string FormatLocalDateTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>Items</h1>
+            <p class="text-muted mb-0">Create and delete custom service items shown in the public Items tab.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Items">Items</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <section class="page-section admin-items-grid">
+        <form method="post" asp-page-handler="Create" enctype="multipart/form-data" class="content-card stack-form admin-item-create-form">
+            <div class="card-heading">
+                <div>
+                    <h2>Create item</h2>
+                    <p class="card-subtitle">Name and image are required. Description is optional.</p>
+                </div>
+            </div>
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div>
+                <label class="form-label" asp-for="CreateInput.Name">Name</label>
+                <input class="form-control app-input" asp-for="CreateInput.Name" maxlength="160" />
+                <span class="text-danger" asp-validation-for="CreateInput.Name"></span>
+            </div>
+            <div>
+                <label class="form-label" asp-for="CreateInput.Description">Description</label>
+                <textarea class="form-control app-input admin-item-description-input" asp-for="CreateInput.Description" maxlength="1000"></textarea>
+                <span class="text-danger" asp-validation-for="CreateInput.Description"></span>
+            </div>
+            <div>
+                <label class="form-label" asp-for="CreateInput.Price">Price</label>
+                <input class="form-control app-input" asp-for="CreateInput.Price" type="number" min="0.01" max="1000000" step="0.01" />
+                <span class="text-danger" asp-validation-for="CreateInput.Price"></span>
+            </div>
+            <div>
+                <label class="form-label" asp-for="CreateInput.Image">Image</label>
+                <input class="form-control app-input" asp-for="CreateInput.Image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <span class="text-danger" asp-validation-for="CreateInput.Image"></span>
+                <div class="meta-note mt-2">Allowed formats: JPG, PNG, WEBP, GIF. Max size: 5 MB.</div>
+            </div>
+            <button type="submit" class="btn app-button-primary">Create item</button>
+        </form>
+
+        <div class="content-card">
+            <div class="card-heading">
+                <div>
+                    <h2>Stored items</h2>
+                    <p class="card-subtitle">@Model.Items.Count item(s) stored in the database.</p>
+                </div>
+                <a class="btn app-button-secondary" asp-page="/Items">Open Items tab</a>
+            </div>
+
+            @if (Model.Items.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>No items created yet.</h3>
+                </div>
+            }
+            else
+            {
+                <div class="history-table-shell admin-items-shell">
+                    <div class="history-table admin-items-table">
+                        <div class="history-table-row history-table-header">
+                            <span>Item</span>
+                            <span>Image</span>
+                            <span>Price</span>
+                            <span>Created</span>
+                            <span>Actions</span>
+                        </div>
+                        @foreach (var item in Model.Items)
+                        {
+                            <article class="history-table-row admin-item-row">
+                                <div class="admin-item-main">
+                                    <strong>@item.Name</strong>
+                                    @if (!string.IsNullOrWhiteSpace(item.Description))
+                                    {
+                                        <div class="inventory-meta">@item.Description</div>
+                                    }
+                                    <div class="inventory-meta break-value">@item.Id</div>
+                                </div>
+                                <div>
+                                    <img class="admin-item-thumbnail" src="@item.ImageUrl" alt="@item.Name" />
+                                </div>
+                                <div>
+                                    <span class="price-value">$@item.Price.ToString("0.00")</span>
+                                </div>
+                                <div>
+                                    <div>@FormatLocalDateTime(item.CreatedAtUtc)</div>
+                                    <div class="inventory-meta break-value">@item.ImageFileName</div>
+                                </div>
+                                <div class="admin-item-actions">
+                                    <form method="post"
+                                          asp-page-handler="Delete"
+                                          onsubmit="return confirm('Delete this item from the database and remove its uploaded image?');">
+                                        <input type="hidden" asp-for="DeleteItemId" value="@item.Id" />
+                                        <button type="submit" class="btn app-button-secondary">Delete item</button>
+                                    </form>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

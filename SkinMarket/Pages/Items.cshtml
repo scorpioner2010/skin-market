@@ -1,0 +1,184 @@
+@page
+@model SkinMarket.Pages.ItemsModel
+@{
+    ViewData["Title"] = L["Page_Items_Title"];
+    string FormatLocalDateTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+}
+
+<div class="market-page items-page py-4">
+    <div class="page-header">
+        <div>
+            <h1>@L["Page_Items_Title"]</h1>
+            <p class="text-muted mb-0">Custom service items created from the admin panel.</p>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Items.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No items created yet</h2>
+        </div>
+    }
+    else
+    {
+        <section class="page-section">
+            <div class="section-heading">
+                <div>
+                    <h2>Items</h2>
+                    <p class="section-description">@Model.Items.Count item(s) currently available.</p>
+                </div>
+                <div class="market-view-toggle" role="group" aria-label="Items view">
+                    <button type="button" class="market-view-button active" data-market-view-button="cards">Cards</button>
+                    <button type="button" class="market-view-button" data-market-view-button="table">Table</button>
+                </div>
+            </div>
+
+            <div class="card-grid market-card-grid" data-market-view-panel="cards">
+                @foreach (var item in Model.Items)
+                {
+                    <article class="content-card item-card market-item-card">
+                        <div class="market-item-top">
+                            <div class="market-item-visual">
+                                @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                {
+                                    <img src="@item.ImageUrl" alt="@item.Name" class="item-icon market-item-icon" />
+                                }
+                                else
+                                {
+                                    <div class="market-item-icon-fallback" aria-hidden="true">
+                                        @((item.Name.FirstOrDefault()).ToString().ToUpperInvariant())
+                                    </div>
+                                }
+                            </div>
+                            <div class="market-item-copy">
+                                <div class="market-item-head">
+                                    <div>
+                                        <h2 class="card-title market-item-title">@item.Name</h2>
+                                        @if (!string.IsNullOrWhiteSpace(item.Description))
+                                        {
+                                            <p class="card-subtitle market-item-subtitle">@item.Description</p>
+                                        }
+                                    </div>
+                                    <div class="market-price-block">
+                                        <span class="compact-badge market-quantity-badge">Item</span>
+                                        <span class="market-price-label">Price</span>
+                                        <p class="price-tag market-price-tag">$@item.Price.ToString("0.00")</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <dl class="detail-list compact market-detail-list">
+                            <div class="detail-row market-detail-row">
+                                <dt>Item ID</dt>
+                                <dd class="break-value market-detail-value">@item.Id</dd>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(item.Description))
+                            {
+                                <div class="detail-row market-detail-row">
+                                    <dt>Description</dt>
+                                    <dd class="break-value market-detail-value">@item.Description</dd>
+                                </div>
+                            }
+                        </dl>
+
+                        <p class="meta-note market-owner-note">Created: @FormatLocalDateTime(item.CreatedAtUtc)</p>
+                    </article>
+                }
+            </div>
+            <div class="market-table-shell" data-market-view-panel="table" hidden>
+                <div class="market-table-list">
+                    <div class="market-table-row market-table-header">
+                        <div class="market-table-cell market-table-item-cell">Item</div>
+                        <div class="market-table-cell">Type</div>
+                        <div class="market-table-cell">Price</div>
+                        <div class="market-table-cell">Created</div>
+                        <div class="market-table-cell market-table-asset-cell">Item ID</div>
+                        <div class="market-table-cell market-table-actions-cell">Status</div>
+                    </div>
+                    @foreach (var item in Model.Items)
+                    {
+                        <article class="market-table-row">
+                            <div class="market-table-cell market-table-item-cell" data-label="Item">
+                                <div class="market-table-main">
+                                    @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
+                                    {
+                                        <img src="@item.ImageUrl" alt="@item.Name" class="inventory-icon" />
+                                    }
+                                    else
+                                    {
+                                        <div class="inventory-icon inventory-icon-fallback" aria-hidden="true">
+                                            @((item.Name.FirstOrDefault()).ToString().ToUpperInvariant())
+                                        </div>
+                                    }
+                                    <div class="market-table-copy">
+                                        <h2 class="inventory-item-name">@item.Name</h2>
+                                        @if (!string.IsNullOrWhiteSpace(item.Description))
+                                        {
+                                            <div class="inventory-meta market-table-subtitle">@item.Description</div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="market-table-cell" data-label="Type">
+                                <span class="balance-pill inventory-count-pill">Item</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Price">
+                                <span class="price-value">$@item.Price.ToString("0.00")</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Created">
+                                <span class="inventory-meta">@FormatLocalDateTime(item.CreatedAtUtc)</span>
+                            </div>
+                            <div class="market-table-cell market-table-asset-cell" data-label="Item ID">
+                                <span class="inventory-meta break-value">@item.Id</span>
+                            </div>
+                            <div class="market-table-cell market-table-actions-cell" data-label="Status">
+                                <span class="compact-badge compact-badge-neutral">Available</span>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </div>
+        </section>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const buttons = Array.from(document.querySelectorAll('[data-market-view-button]'));
+            const panels = Array.from(document.querySelectorAll('[data-market-view-panel]'));
+            if (buttons.length === 0 || panels.length === 0) {
+                return;
+            }
+
+            const storageKey = 'skinmarket-items-view';
+            const activate = (view) => {
+                const target = view === 'table' ? 'table' : 'cards';
+
+                buttons.forEach((button) => {
+                    button.classList.toggle('active', button.dataset.marketViewButton === target);
+                });
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.marketViewPanel !== target;
+                });
+            };
+
+            activate(localStorage.getItem(storageKey) || 'cards');
+
+            buttons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    const view = button.dataset.marketViewButton || 'cards';
+                    localStorage.setItem(storageKey, view);
+                    activate(view);
+                });
+            });
+        })();
+    </script>
+}

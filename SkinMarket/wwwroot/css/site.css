@@ -632,6 +632,50 @@ a:hover {
   grid-template-columns: minmax(260px, 1.35fr) minmax(110px, 0.5fr) minmax(90px, 0.4fr) minmax(230px, 0.95fr) minmax(320px, 1.25fr);
 }
 
+.admin-items-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-item-description-input {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.admin-items-table {
+  min-width: 820px;
+}
+
+.admin-items-table .history-table-row {
+  grid-template-columns: minmax(230px, 1.3fr) minmax(90px, 0.45fr) minmax(90px, 0.45fr) minmax(160px, 0.85fr) minmax(120px, 0.55fr);
+}
+
+.admin-item-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-item-thumbnail {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid #d8e0ea;
+  border-radius: var(--vk-radius);
+  background: #f8fafc;
+}
+
+.admin-item-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-item-actions form {
+  margin: 0;
+}
+
 .admin-account-main {
   display: flex;
   align-items: center;
@@ -695,18 +739,28 @@ a:hover {
 @media (max-width: 900px) {
   .admin-bot-purchases-table .history-table-row,
   .admin-bot-sales-table .history-table-row,
-  .admin-accounts-table .history-table-row {
+  .admin-accounts-table .history-table-row,
+  .admin-items-table .history-table-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-bot-purchases-table .history-table-header,
   .admin-bot-sales-table .history-table-header,
-  .admin-accounts-table .history-table-header {
+  .admin-accounts-table .history-table-header,
+  .admin-items-table .history-table-header {
     display: none;
   }
 
   .admin-bot-history-meta {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-items-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-item-actions {
+    justify-content: flex-start;
   }
 }
 
