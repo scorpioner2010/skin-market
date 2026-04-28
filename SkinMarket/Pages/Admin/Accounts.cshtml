@@ -79,9 +79,19 @@
                                 <span class="balance-pill">$@account.Balance.ToString("0.00")</span>
                             </div>
                             <div>
-                                <span class="status-badge" data-status="@(account.IsAdmin ? "Credited" : "Sold")">
-                                    @(account.IsAdmin ? "Admin" : "User")
-                                </span>
+                                <form method="post" asp-page-handler="UpdateAdmin" class="admin-role-form">
+                                    <input type="hidden" name="AdminRoleInput.UserId" value="@account.Id" />
+                                    <label class="admin-role-toggle">
+                                        <input class="form-check-input"
+                                               type="checkbox"
+                                               name="AdminRoleInput.IsAdmin"
+                                               value="true"
+                                               checked="@account.IsAdmin" />
+                                        <input type="hidden" name="AdminRoleInput.IsAdmin" value="false" />
+                                        <span>Admin</span>
+                                    </label>
+                                    <button type="submit" class="btn app-button-secondary">Save</button>
+                                </form>
                             </div>
                             <div class="admin-account-records">
                                 <span class="compact-badge compact-badge-neutral">Trades: @account.TradeOperationCount</span>

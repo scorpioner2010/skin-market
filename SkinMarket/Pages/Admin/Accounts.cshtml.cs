@@ -27,6 +27,8 @@ public class AccountsModel : PageModel
     [BindProperty]
     public BalanceInputModel BalanceInput { get; set; } = new();
     [BindProperty]
+    public AdminRoleInputModel AdminRoleInput { get; set; } = new();
+    [BindProperty]
     public Guid DeleteUserId { get; set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
@@ -79,6 +81,56 @@ public class AccountsModel : PageModel
         return RedirectToPage();
     }
 
+    public async Task<IActionResult> OnPostUpdateAdminAsync(CancellationToken cancellationToken)
+    {
+        if (AdminRoleInput.UserId == Guid.Empty)
+        {
+            ErrorMessage = "Account was not found.";
+            return RedirectToPage();
+        }
+
+        var user = await _dbContext.AppUsers
+            .SingleOrDefaultAsync(item => item.Id == AdminRoleInput.UserId, cancellationToken);
+        if (user is null)
+        {
+            ErrorMessage = "Account was not found.";
+            return RedirectToPage();
+        }
+
+        if (user.IsAdmin == AdminRoleInput.IsAdmin)
+        {
+            SuccessMessage = $"Admin access is already {(user.IsAdmin ? "enabled" : "disabled")} for {ResolveAccountName(user)}.";
+            return RedirectToPage();
+        }
+
+        if (!AdminRoleInput.IsAdmin && user.IsAdmin)
+        {
+            var adminCount = await _dbContext.AppUsers
+                .CountAsync(item => item.IsAdmin, cancellationToken);
+            if (adminCount <= 1)
+            {
+                ErrorMessage = "At least one admin account must remain.";
+                return RedirectToPage();
+            }
+        }
+
+        var previousIsAdmin = user.IsAdmin;
+        user.IsAdmin = AdminRoleInput.IsAdmin;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var actingSteamId = User.FindFirst("SteamId")?.Value ?? "<unknown>";
+        await _appLogService.WriteAsync(
+            "Warning",
+            $"Admin role changed. TargetAppUserId={user.Id}; TargetSteamId={user.SteamId}; Name={ResolveAccountName(user)}; PreviousIsAdmin={previousIsAdmin}; NewIsAdmin={user.IsAdmin}; ChangedBySteamId={actingSteamId}",
+            nameof(AccountsModel),
+            cancellationToken: cancellationToken);
+
+        SuccessMessage = user.IsAdmin
+            ? $"Admin access enabled for {ResolveAccountName(user)}."
+            : $"Admin access disabled for {ResolveAccountName(user)}.";
+        return RedirectToPage();
+    }
+
     public async Task<IActionResult> OnPostDeleteAsync(CancellationToken cancellationToken)
     {
         var user = await _dbContext.AppUsers
@@ -87,6 +139,17 @@ public class AccountsModel : PageModel
         {
             ErrorMessage = "Account was not found.";
             return RedirectToPage();
+        }
+
+        if (user.IsAdmin)
+        {
+            var adminCount = await _dbContext.AppUsers
+                .CountAsync(item => item.IsAdmin, cancellationToken);
+            if (adminCount <= 1)
+            {
+                ErrorMessage = "The last admin account cannot be deleted.";
+                return RedirectToPage();
+            }
         }
 
         var userTradeOperationIds = await _dbContext.TradeOperations
@@ -175,5 +238,11 @@ public class AccountsModel : PageModel
         public Guid UserId { get; set; }
         [Range(-1_000_000, 1_000_000)]
         public decimal Balance { get; set; }
+    }
+
+    public sealed class AdminRoleInputModel
+    {
+        public Guid UserId { get; set; }
+        public bool IsAdmin { get; set; }
     }
 }

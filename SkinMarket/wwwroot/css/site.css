@@ -690,11 +690,29 @@ a:hover {
 
 .admin-account-records,
 .admin-account-actions,
-.admin-balance-form {
+.admin-balance-form,
+.admin-role-form,
+.admin-role-toggle {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+.admin-role-form {
+  margin: 0;
+}
+
+.admin-role-toggle {
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid #d8e0ea;
+  border-radius: var(--vk-radius);
+  background: #f8fafc;
+  color: #304252;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .admin-balance-input {
