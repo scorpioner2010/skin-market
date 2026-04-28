@@ -61,8 +61,6 @@ public class InventoryModel : PageModel
     public string? ErrorMessage { get; private set; }
     public string? WarningMessage { get; private set; }
     public bool IsTradeUrlConfigured { get; private set; }
-    public bool CanUpdateTradeUrl { get; private set; }
-    public string SteamTradeSettingsUrl { get; } = "https://steamcommunity.com/my/tradeoffers/privacy#trade_offer_access_url";
     [TempData]
     public string? SuccessMessage { get; set; }
     [TempData]
@@ -73,8 +71,6 @@ public class InventoryModel : PageModel
     public string CurrentGameDisplayName { get; private set; } = string.Empty;
     [BindProperty]
     public SellInputModel Input { get; set; } = new();
-    [BindProperty]
-    public TradeUrlUpdateInputModel TradeUrlUpdate { get; set; } = new();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -155,77 +151,6 @@ public class InventoryModel : PageModel
         await _tradeOperationService.CreatePendingSaleAsync(appUser, item, cancellationToken);
         SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request created. Intake trade will start automatically.");
         return RedirectToPage();
-    }
-
-    public async Task<IActionResult> OnPostUpdateTradeUrlAsync(CancellationToken cancellationToken)
-    {
-        if (_runtimeState.IsDegradedMode)
-        {
-            return new JsonResult(new
-            {
-                success = false,
-                message = _runtimeState.ServiceUnavailableMessage
-            });
-        }
-
-        var appUser = await GetCurrentTrackedUserAsync(cancellationToken);
-        if (appUser is null)
-        {
-            return new JsonResult(new
-            {
-                success = false,
-                message = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.")
-            });
-        }
-
-        var tradeUrl = TradeUrlUpdate.TradeUrl?.Trim();
-        if (string.IsNullOrWhiteSpace(tradeUrl) ||
-            tradeUrl.Length > 500 ||
-            !SteamTradeUrlUtility.IsValidTradeOfferUrl(tradeUrl))
-        {
-            await _appLogService.WriteAsync(
-                "Warning",
-                $"Trade URL update rejected because the submitted URL is invalid. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
-                nameof(InventoryModel),
-                cancellationToken: cancellationToken);
-
-            return new JsonResult(new
-            {
-                success = false,
-                message = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be a valid Steam trade offer link.")
-            });
-        }
-
-        if (!SteamTradeUrlUtility.BelongsToSteamId(tradeUrl, appUser.SteamId))
-        {
-            await _appLogService.WriteAsync(
-                "Warning",
-                $"Trade URL update rejected because the partner does not match the current Steam account. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
-                nameof(InventoryModel),
-                cancellationToken: cancellationToken);
-
-            return new JsonResult(new
-            {
-                success = false,
-                message = "Trade URL belongs to another Steam account."
-            });
-        }
-
-        appUser.TradeUrl = tradeUrl;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-
-        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL saved.");
-        await _appLogService.WriteAsync(
-            "Info",
-            $"Trade URL updated from inventory page. AppUserId={appUser.Id}; SteamId={appUser.SteamId}",
-            nameof(InventoryModel),
-            cancellationToken: cancellationToken);
-
-        return new JsonResult(new
-        {
-            success = true,
-            message = SuccessMessage
-        });
     }
 
     public async Task<IActionResult> OnPostCreateTradeAsync(CancellationToken cancellationToken)
@@ -533,7 +458,6 @@ public class InventoryModel : PageModel
         var currentGame = _gameCatalog.Get(_gameCatalog.DefaultGameType);
         CurrentGameType = currentGame.Type;
         CurrentGameDisplayName = currentGame.DisplayName;
-        CanUpdateTradeUrl = true;
         await _appLogService.WriteAsync(
             "Info",
             $"Inventory page request started. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; GameKey={currentGame.Key}; TradeUrlConfigured={!string.IsNullOrWhiteSpace(appUser.TradeUrl)}",
@@ -1099,11 +1023,5 @@ public class InventoryModel : PageModel
         public string? MarketHashName { get; set; }
         public string? IconUrl { get; set; }
         public string? TradeOperationId { get; set; }
-    }
-
-    public class TradeUrlUpdateInputModel
-    {
-        [StringLength(500)]
-        public string? TradeUrl { get; set; }
     }
 }

@@ -5,6 +5,7 @@
     var profileName = string.IsNullOrWhiteSpace(Model.SteamPersonaName) ? Model.AppUser?.DisplayName : Model.SteamPersonaName;
     profileName ??= L["Profile_SteamUserFallback"].Value;
     var avatarAlt = string.Format(L["Profile_AvatarAlt"].Value, profileName ?? L["Profile_SteamUserFallback"].Value);
+    var isTradeUrlConfigured = !string.IsNullOrWhiteSpace(Model.AppUser?.TradeUrl);
 }
 
 <div class="py-4">
@@ -66,7 +67,7 @@
                         <dt>@L["Profile_Balance"]</dt>
                         <dd><span class="balance-pill">@Model.Balance</span></dd>
                     </div>
-                    <div class="detail-row">
+                    <div class="detail-row @(isTradeUrlConfigured ? string.Empty : "trade-url-critical-row")">
                         <dt>@L["Profile_TradeUrl"]</dt>
                         <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.AppUser?.TradeUrl) ? L["Profile_TradeUrl_NotSet"] : Model.AppUser?.TradeUrl)</dd>
                     </div>
@@ -81,17 +82,30 @@
                 </dl>
             </section>
 
-            <section class="content-card">
+            <section class="content-card @(isTradeUrlConfigured ? string.Empty : "trade-url-critical-card")">
                 <div class="card-heading">
                     <h2>@L["Profile_TradeSettings"]</h2>
+                    @if (!isTradeUrlConfigured)
+                    {
+                        <span class="status-badge" data-status="Pending">Required</span>
+                    }
                 </div>
                 <form method="post" class="stack-form">
+                    @if (!isTradeUrlConfigured)
+                    {
+                        <div class="trade-url-critical-message" role="alert">
+                            Trade URL is required before selling. Open the Steam page, copy the full Trade URL, paste it here, then save.
+                        </div>
+                    }
                     <div>
                         <label asp-for="Input.TradeUrl" class="form-label">@L["Profile_SteamTradeUrl"]</label>
                         <input asp-for="Input.TradeUrl" class="form-control app-input" placeholder="@L["Profile_TradeUrl_Placeholder"]" />
                         <span asp-validation-for="Input.TradeUrl" class="text-danger small"></span>
                     </div>
-                    <button type="submit" class="btn app-button-primary">@L["Profile_SaveTradeUrl"]</button>
+                    <div class="trade-url-form-actions">
+                        <button type="submit" class="btn app-button-primary">@L["Profile_SaveTradeUrl"]</button>
+                        <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/privacy#trade_offer_access_url" target="_blank" rel="noopener">Open Steam page</a>
+                    </div>
                 </form>
             </section>
         </div>

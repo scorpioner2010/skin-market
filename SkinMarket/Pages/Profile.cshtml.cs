@@ -72,11 +72,18 @@ public class ProfileModel : PageModel
             return RedirectToPage();
         }
 
-        if (!string.IsNullOrWhiteSpace(Input.TradeUrl) && !IsValidTradeUrl(Input.TradeUrl))
+        var tradeUrl = Input.TradeUrl?.Trim();
+        if (!string.IsNullOrWhiteSpace(tradeUrl) && !IsValidTradeUrl(tradeUrl))
         {
             ModelState.AddModelError(
                 $"{nameof(Input)}.{nameof(Input.TradeUrl)}",
                 UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be a valid Steam trade offer link."));
+        }
+        else if (!string.IsNullOrWhiteSpace(tradeUrl) && !SteamTradeUrlUtility.BelongsToSteamId(tradeUrl, appUser.SteamId))
+        {
+            ModelState.AddModelError(
+                $"{nameof(Input)}.{nameof(Input.TradeUrl)}",
+                "Trade URL belongs to another Steam account.");
         }
 
         if (!ModelState.IsValid)
@@ -88,7 +95,7 @@ public class ProfileModel : PageModel
             return Page();
         }
 
-        appUser.TradeUrl = string.IsNullOrWhiteSpace(Input.TradeUrl) ? null : Input.TradeUrl.Trim();
+        appUser.TradeUrl = string.IsNullOrWhiteSpace(tradeUrl) ? null : tradeUrl;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL saved.");

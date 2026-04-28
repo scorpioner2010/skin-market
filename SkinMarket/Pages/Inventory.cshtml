@@ -72,21 +72,16 @@
             <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.WarningMessage)</div>
         }
 
-        @if (Model.CanUpdateTradeUrl && !Model.IsTradeUrlConfigured)
+        @if (!Model.IsTradeUrlConfigured)
         {
-            <div class="trade-url-setup" data-trade-url-setup>
+            <div class="trade-url-setup trade-url-setup-critical">
                 <div class="trade-url-setup-copy">
                     <strong>Trade URL is required before selling.</strong>
-                    <span>Open Steam trade settings, copy your Trade URL, then click Update Trade URL here. The page will save it automatically if it matches your Steam account.</span>
+                    <span>Set your Steam Trade URL in profile before creating sale requests.</span>
                 </div>
                 <div class="trade-url-setup-actions">
-                    <a class="btn app-button-secondary" href="@Model.SteamTradeSettingsUrl" target="_blank" rel="noopener">Open Steam Trade URL page</a>
-                    <form method="post" asp-page-handler="UpdateTradeUrl" class="trade-url-update-form" data-trade-url-form>
-                        <input type="hidden" asp-for="TradeUrlUpdate.TradeUrl" data-trade-url-input />
-                        <button type="button" class="btn app-button-primary" data-trade-url-update-button>Update Trade URL</button>
-                    </form>
+                    <a class="btn app-button-primary" asp-page="/Profile">Open profile</a>
                 </div>
-                <div class="trade-url-status" data-trade-url-status role="status" aria-live="polite" hidden></div>
             </div>
         }
 
@@ -226,7 +221,7 @@
                                         }
                                         else if (item.HasSellableItem)
                                         {
-                                            <button type="button" class="btn app-button-secondary" data-trade-url-update-button>Update Trade URL</button>
+                                            <span class="compact-badge compact-badge-neutral">Trade URL required</span>
                                         }
                                         else if (!string.IsNullOrWhiteSpace(item.AwaitingUserTradeOfferId))
                                         {
@@ -359,92 +354,5 @@
                 });
         })();
 
-        (() => {
-            const form = document.querySelector('[data-trade-url-form]');
-            if (!form) {
-                return;
-            }
-
-            const input = form.querySelector('[data-trade-url-input]');
-            const status = document.querySelector('[data-trade-url-status]');
-            const buttons = document.querySelectorAll('[data-trade-url-update-button]');
-            const tradeUrlExpression = /https:\/\/steamcommunity\.com\/tradeoffer\/new\/\?[^\s<>"']+/i;
-            if (!input) {
-                return;
-            }
-
-            const setStatus = (state, message) => {
-                if (!status) {
-                    return;
-                }
-
-                status.hidden = false;
-                status.dataset.state = state;
-                status.textContent = message;
-                if (state !== 'waiting') {
-                    status.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            };
-
-            const setBusy = (busy) => {
-                buttons.forEach((button) => {
-                    if (!button.dataset.originalText) {
-                        button.dataset.originalText = button.textContent || 'Update Trade URL';
-                    }
-
-                    button.disabled = busy;
-                    button.textContent = busy ? 'Updating...' : button.dataset.originalText;
-                });
-            };
-
-            const readTradeUrlFromClipboard = async () => {
-                if (!navigator.clipboard?.readText) {
-                    throw new Error('Clipboard access is not available in this browser.');
-                }
-
-                const clipboardText = (await navigator.clipboard.readText()).trim();
-                const match = clipboardText.match(tradeUrlExpression);
-                if (!match) {
-                    throw new Error('Clipboard does not contain a Steam Trade URL.');
-                }
-
-                return match[0];
-            };
-
-            const updateTradeUrl = async () => {
-                setBusy(true);
-                setStatus('waiting', 'Waiting for Trade URL...');
-
-                try {
-                    const tradeUrl = await readTradeUrlFromClipboard();
-                    input.value = tradeUrl;
-
-                    const response = await fetch(form.action, {
-                        method: 'POST',
-                        body: new FormData(form),
-                        credentials: 'same-origin',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    });
-                    const payload = await response.json().catch(() => null);
-                    if (!response.ok || payload?.success !== true) {
-                        throw new Error(payload?.message || 'Could not update Trade URL.');
-                    }
-
-                    setStatus('success', payload.message || 'Trade URL saved.');
-                    window.setTimeout(() => window.location.reload(), 900);
-                } catch (error) {
-                    const message = error instanceof Error ? error.message : 'Could not update Trade URL.';
-                    setStatus('failed', `${message} Copy your Steam Trade URL first, then click Update Trade URL again.`);
-                } finally {
-                    setBusy(false);
-                }
-            };
-
-            buttons.forEach((button) => {
-                button.addEventListener('click', updateTradeUrl);
-            });
-        })();
     </script>
 }
