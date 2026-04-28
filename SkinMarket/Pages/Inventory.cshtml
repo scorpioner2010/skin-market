@@ -39,7 +39,22 @@
             </div>
         </div>
         <div class="status-group">
-            <span class="compact-badge compact-badge-neutral">@Model.CurrentGameDisplayName</span>
+            <form method="get" class="game-switcher" aria-label="Game selector">
+                <label class="game-switcher-label" for="inventory-game">Game</label>
+                <select id="inventory-game" name="game" class="form-select app-input game-switcher-select" onchange="this.form.submit()">
+                    @foreach (var game in Model.SupportedGames.Where(item => item.SupportsInventory))
+                    {
+                        if (game.Type == Model.CurrentGameType)
+                        {
+                            <option value="@game.Type" selected>@game.DisplayName</option>
+                        }
+                        else
+                        {
+                            <option value="@game.Type">@game.DisplayName</option>
+                        }
+                    }
+                </select>
+            </form>
         </div>
     </div>
 
@@ -210,6 +225,7 @@
                                         @if (item.HasSellableItem && Model.IsTradeUrlConfigured)
                                         {
                                             <form method="post" asp-page-handler="Sell" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before selling another item.">
+                                                <input type="hidden" name="Input.GameType" value="@Model.CurrentGameType" />
                                                 <input type="hidden" name="Input.AssetId" value="@item.SellAssetId" />
                                                 <input type="hidden" name="Input.ClassId" value="@item.SellClassId" />
                                                 <input type="hidden" name="Input.InstanceId" value="@item.SellInstanceId" />
@@ -231,6 +247,7 @@
                                                  string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal))
                                         {
                                             <form method="post" asp-page-handler="CreateTrade">
+                                                <input type="hidden" name="Input.GameType" value="@Model.CurrentGameType" />
                                                 <input type="hidden" name="Input.TradeOperationId" value="@item.CreateTradeOperationId" />
                                                 <button type="submit" class="btn app-button-secondary">@L["Inventory_CreateTrade"]</button>
                                             </form>

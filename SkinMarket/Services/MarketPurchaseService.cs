@@ -199,12 +199,17 @@ public class MarketPurchaseService : IMarketPurchaseService
 
     public Task<List<MarketPurchaseRecord>> GetRecentPurchasesAsync(
         Guid buyerAppUserId,
+        GameType gameType,
         int count,
         CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(gameType);
         return _dbContext.MarketPurchaseRecords
             .AsNoTracking()
-            .Where(item => item.BuyerAppUserId == buyerAppUserId)
+            .Where(item =>
+                item.BuyerAppUserId == buyerAppUserId &&
+                item.AppId == game.SteamAppId &&
+                item.ContextId == game.SteamContextId.ToString())
             .OrderByDescending(item => item.PurchasedAtUtc)
             .Take(count)
             .ToListAsync(cancellationToken);

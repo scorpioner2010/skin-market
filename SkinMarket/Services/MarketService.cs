@@ -39,7 +39,7 @@ public class MarketService : IMarketService
         _logger = logger;
     }
 
-    public async Task<List<MarketListingItem>> GetAvailableItemsAsync(CancellationToken cancellationToken = default)
+    public async Task<List<MarketListingItem>> GetAvailableItemsAsync(GameType gameType, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(_steamBotOptions.BotSteamId))
         {
@@ -47,7 +47,7 @@ public class MarketService : IMarketService
             return [];
         }
 
-        var game = _gameCatalog.Get(_gameCatalog.DefaultGameType);
+        var game = _gameCatalog.Get(gameType);
         var inventory = await LoadBotInventoryAsync(game, cancellationToken);
         if (!inventory.IsSuccess)
         {
@@ -60,7 +60,9 @@ public class MarketService : IMarketService
 
         var reservedAssets = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
-            .Where(item => item.AppId == game.SteamAppId)
+            .Where(item =>
+                item.AppId == game.SteamAppId &&
+                item.ContextId == game.SteamContextId.ToString())
             .Select(item => new { item.AppId, item.ContextId, item.AssetId })
             .ToListAsync(cancellationToken);
         var reservedAssetSet = new HashSet<string>(

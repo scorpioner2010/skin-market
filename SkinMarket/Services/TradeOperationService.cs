@@ -18,19 +18,25 @@ public class TradeOperationService : ITradeOperationService
         _appLogService = appLogService;
     }
 
-    public Task<bool> HasExistingSaleAsync(Guid appUserId, string assetId, CancellationToken cancellationToken = default)
+    public Task<bool> HasExistingSaleAsync(Guid appUserId, GameType gameType, string assetId, CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(gameType);
         return _dbContext.TradeOperations.AnyAsync(
             operation => operation.AppUserId == appUserId &&
+                         operation.AppId == game.SteamAppId &&
+                         operation.ContextId == game.SteamContextId.ToString() &&
                          operation.AssetId == assetId &&
                          operation.Status != "Failed",
             cancellationToken);
     }
 
-    public Task<bool> HasPendingSaleAsync(Guid appUserId, string assetId, CancellationToken cancellationToken = default)
+    public Task<bool> HasPendingSaleAsync(Guid appUserId, GameType gameType, string assetId, CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(gameType);
         return _dbContext.TradeOperations.AnyAsync(
             operation => operation.AppUserId == appUserId &&
+                         operation.AppId == game.SteamAppId &&
+                         operation.ContextId == game.SteamContextId.ToString() &&
                          operation.AssetId == assetId &&
                          operation.Status == "Pending",
             cancellationToken);
@@ -38,7 +44,7 @@ public class TradeOperationService : ITradeOperationService
 
     public async Task CreatePendingSaleAsync(AppUser appUser, SteamInventoryItemDto item, CancellationToken cancellationToken = default)
     {
-        var game = _gameCatalog.Get(_gameCatalog.DefaultGameType);
+        var game = _gameCatalog.Get(item.GameType);
         var operation = new TradeOperation
         {
             Id = Guid.NewGuid(),
@@ -61,16 +67,20 @@ public class TradeOperationService : ITradeOperationService
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _appLogService.WriteAsync(
             "Info",
-            $"Pending sale request created. TradeOperationId={operation.Id}; AppUserId={appUser.Id}; SteamId={appUser.SteamId}; AssetId={item.AssetId}; ItemName={operation.ItemName}",
+            $"Pending sale request created. TradeOperationId={operation.Id}; AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={game.Key}; AppId={operation.AppId}; ContextId={operation.ContextId}; AssetId={item.AssetId}; ItemName={operation.ItemName}",
             nameof(TradeOperationService),
             cancellationToken: cancellationToken);
     }
 
-    public async Task<Dictionary<string, TradeOperation>> GetLatestOperationsByAssetIdAsync(Guid appUserId, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<string, TradeOperation>> GetLatestOperationsByAssetIdAsync(Guid appUserId, GameType gameType, CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(gameType);
         var operations = await _dbContext.TradeOperations
             .AsNoTracking()
-            .Where(operation => operation.AppUserId == appUserId)
+            .Where(operation =>
+                operation.AppUserId == appUserId &&
+                operation.AppId == game.SteamAppId &&
+                operation.ContextId == game.SteamContextId.ToString())
             .OrderByDescending(operation => operation.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
@@ -79,11 +89,15 @@ public class TradeOperationService : ITradeOperationService
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
     }
 
-    public Task<List<TradeOperation>> GetRecentOperationsAsync(Guid appUserId, int count, CancellationToken cancellationToken = default)
+    public Task<List<TradeOperation>> GetRecentOperationsAsync(Guid appUserId, GameType gameType, int count, CancellationToken cancellationToken = default)
     {
+        var game = _gameCatalog.Get(gameType);
         return _dbContext.TradeOperations
             .AsNoTracking()
-            .Where(operation => operation.AppUserId == appUserId)
+            .Where(operation =>
+                operation.AppUserId == appUserId &&
+                operation.AppId == game.SteamAppId &&
+                operation.ContextId == game.SteamContextId.ToString())
             .OrderByDescending(operation => operation.CreatedAtUtc)
             .Take(count)
             .ToListAsync(cancellationToken);

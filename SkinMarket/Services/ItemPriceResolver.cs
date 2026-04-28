@@ -51,7 +51,12 @@ public class ItemPriceResolver : IItemPriceResolver
     public async Task<ItemPriceResolutionResult> ResolveAsync(TradeOperation operation, CancellationToken cancellationToken = default)
     {
         var marketHashName = MarketHashNameUtility.ResolvePrimary(operation);
-        return await ResolveInternalAsync(marketHashName, _gameCatalog.DefaultGameType, cancellationToken);
+        var gameType = _gameCatalog.SupportedGames
+            .FirstOrDefault(game =>
+                game.SteamAppId == operation.AppId &&
+                game.SteamContextId.ToString() == operation.ContextId)
+            ?.Type ?? _gameCatalog.DefaultGameType;
+        return await ResolveInternalAsync(marketHashName, gameType, cancellationToken);
     }
 
     public async Task<ItemPriceResolutionResult> ResolveAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)

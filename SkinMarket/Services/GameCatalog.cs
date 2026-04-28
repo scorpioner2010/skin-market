@@ -28,7 +28,7 @@ public class GameCatalog : IGameCatalog
             SteamAppId = 570,
             SteamContextId = 2,
             SupportsInventory = true,
-            SupportsSteamMarketPricing = false,
+            SupportsSteamMarketPricing = true,
             SupportsSkinportPricing = false
         }
     ];

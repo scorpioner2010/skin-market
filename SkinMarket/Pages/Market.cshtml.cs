@@ -19,6 +19,7 @@ public class MarketModel : PageModel
     private readonly AppDbContext _dbContext;
     private readonly IBalanceService _balanceService;
     private readonly IStringLocalizer<SharedResource> _localizer;
+    private readonly IGameCatalog _gameCatalog;
     private readonly AppRuntimeState _runtimeState;
 
     public MarketModel(
@@ -28,6 +29,7 @@ public class MarketModel : PageModel
         AppDbContext dbContext,
         IBalanceService balanceService,
         IStringLocalizer<SharedResource> localizer,
+        IGameCatalog gameCatalog,
         AppRuntimeState runtimeState)
     {
         _marketService = marketService;
@@ -36,6 +38,7 @@ public class MarketModel : PageModel
         _dbContext = dbContext;
         _balanceService = balanceService;
         _localizer = localizer;
+        _gameCatalog = gameCatalog;
         _runtimeState = runtimeState;
     }
 
@@ -45,6 +48,11 @@ public class MarketModel : PageModel
     public Guid? CurrentUserId { get; private set; }
     public decimal CurrentBalance { get; private set; }
     public int TotalAvailableItemCount { get; private set; }
+    public GameType CurrentGameType { get; private set; } = GameType.CS2;
+    public string CurrentGameDisplayName { get; private set; } = string.Empty;
+    public IReadOnlyList<GameDefinition> SupportedGames => _gameCatalog.SupportedGames;
+    [BindProperty(SupportsGet = true)]
+    public GameType Game { get; set; } = GameType.CS2;
     [TempData]
     public string? SuccessMessage { get; set; }
     [TempData]
@@ -63,12 +71,16 @@ public class MarketModel : PageModel
         }
 
         await LoadCurrentUserAsync(cancellationToken);
-        Items = await _marketService.GetAvailableItemsAsync(cancellationToken);
+        var currentGame = _gameCatalog.Get(Game);
+        Game = currentGame.Type;
+        CurrentGameType = currentGame.Type;
+        CurrentGameDisplayName = currentGame.DisplayName;
+        Items = await _marketService.GetAvailableItemsAsync(CurrentGameType, cancellationToken);
         TotalAvailableItemCount = Items.Count;
         GroupedItems = BuildGroupedItems(Items, CurrentUserId);
         if (CurrentUserId.HasValue)
         {
-            Purchases = await _marketPurchaseService.GetRecentPurchasesAsync(CurrentUserId.Value, 10, cancellationToken);
+            Purchases = await _marketPurchaseService.GetRecentPurchasesAsync(CurrentUserId.Value, CurrentGameType, 10, cancellationToken);
         }
     }
 
@@ -77,20 +89,20 @@ public class MarketModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(PurchaseRequest.GameType);
         }
 
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to buy market items.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(PurchaseRequest.GameType);
         }
 
         if (await HasActiveTradeFlowAsync(CurrentUserId.Value, cancellationToken))
         {
             ErrorMessage = "Finish or cancel the active trade offer before buying another item.";
-            return RedirectToPage();
+            return RedirectToCurrentGame(PurchaseRequest.GameType);
         }
 
         var result = await _marketPurchaseService.PurchaseAsync(PurchaseRequest, CurrentUserId.Value, cancellationToken);
@@ -103,7 +115,7 @@ public class MarketModel : PageModel
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(PurchaseRequest.GameType);
     }
 
     public async Task<IActionResult> OnPostCreateDeliveryTradeAsync(CancellationToken cancellationToken)
@@ -111,14 +123,14 @@ public class MarketModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Game);
         }
 
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create delivery trade.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Game);
         }
 
         var result = await _marketDeliveryService.CreateDeliveryTradeAsync(MarketPurchaseId, CurrentUserId.Value, cancellationToken);
@@ -131,7 +143,7 @@ public class MarketModel : PageModel
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(Game);
     }
 
     public async Task<IActionResult> OnPostConfirmDeliveredAsync(CancellationToken cancellationToken)
@@ -139,14 +151,14 @@ public class MarketModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Game);
         }
 
         await LoadCurrentUserAsync(cancellationToken);
         if (!CurrentUserId.HasValue)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to confirm delivery.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Game);
         }
 
         var result = await _marketDeliveryService.ConfirmDeliveredAsync(MarketPurchaseId, CurrentUserId.Value, cancellationToken);
@@ -159,7 +171,13 @@ public class MarketModel : PageModel
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(Game);
+    }
+
+    private IActionResult RedirectToCurrentGame(GameType? gameType = null)
+    {
+        var game = _gameCatalog.Get(gameType ?? Game);
+        return RedirectToPage(new { game = game.Type });
     }
 
     private async Task LoadCurrentUserAsync(CancellationToken cancellationToken)

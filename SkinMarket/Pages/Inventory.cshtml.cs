@@ -69,6 +69,9 @@ public class InventoryModel : PageModel
     public string? TradeStatusMessage { get; set; }
     public GameType CurrentGameType { get; private set; } = GameType.CS2;
     public string CurrentGameDisplayName { get; private set; } = string.Empty;
+    public IReadOnlyList<GameDefinition> SupportedGames => _gameCatalog.SupportedGames;
+    [BindProperty(SupportsGet = true)]
+    public GameType Game { get; set; } = GameType.CS2;
     [BindProperty]
     public SellInputModel Input { get; set; } = new();
 
@@ -104,42 +107,44 @@ public class InventoryModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (string.IsNullOrWhiteSpace(appUser.TradeUrl))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be set before creating a sale request.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (await HasActiveTradeFlowAsync(appUser.Id, cancellationToken))
         {
             SellErrorMessage = "Finish or cancel the active trade offer before selling another item.";
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (string.IsNullOrWhiteSpace(Input.AssetId))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Selected inventory item is invalid.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
-        if (await _tradeOperationService.HasExistingSaleAsync(appUser.Id, Input.AssetId, cancellationToken))
+        var selectedGame = _gameCatalog.Get(Input.GameType);
+        if (await _tradeOperationService.HasExistingSaleAsync(appUser.Id, selectedGame.Type, Input.AssetId, cancellationToken))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "This item already has a sale operation.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(selectedGame.Type);
         }
 
         var item = new SteamInventoryItemDto
         {
+            GameType = selectedGame.Type,
             AssetId = Input.AssetId?.Trim() ?? string.Empty,
             ClassId = Input.ClassId?.Trim() ?? string.Empty,
             InstanceId = Input.InstanceId?.Trim() ?? string.Empty,
@@ -150,7 +155,7 @@ public class InventoryModel : PageModel
 
         await _tradeOperationService.CreatePendingSaleAsync(appUser, item, cancellationToken);
         SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request created. Intake trade will start automatically.");
-        return RedirectToPage();
+        return RedirectToCurrentGame(selectedGame.Type);
     }
 
     public async Task<IActionResult> OnPostCreateTradeAsync(CancellationToken cancellationToken)
@@ -158,20 +163,20 @@ public class InventoryModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create bot intake.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (!Guid.TryParse(Input.TradeOperationId, out var tradeOperationId))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request is invalid.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var result = await _steamBotIntakeService.CreateIntakeRequestAsync(tradeOperationId, appUser.Id, cancellationToken);
@@ -184,7 +189,7 @@ public class InventoryModel : PageModel
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(Input.GameType);
     }
 
     public async Task<IActionResult> OnPostCreditAsync(CancellationToken cancellationToken)
@@ -192,20 +197,20 @@ public class InventoryModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to credit balance.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (!Guid.TryParse(Input.TradeOperationId, out var tradeOperationId))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request is invalid.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var result = await _creditService.ConfirmReceivedAndCreditAsync(tradeOperationId, appUser.Id, cancellationToken);
@@ -218,7 +223,7 @@ public class InventoryModel : PageModel
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.Message);
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(Input.GameType);
     }
 
     public async Task<IActionResult> OnPostRefreshTradeStatusAsync(CancellationToken cancellationToken)
@@ -226,20 +231,20 @@ public class InventoryModel : PageModel
         if (_runtimeState.IsDegradedMode)
         {
             SellErrorMessage = _runtimeState.ServiceUnavailableMessage;
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create a sale request.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (!Guid.TryParse(Input.TradeOperationId, out var tradeOperationId))
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request is invalid.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var operation = await _dbContext.TradeOperations
@@ -247,13 +252,13 @@ public class InventoryModel : PageModel
         if (operation is null)
         {
             SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request was not found.");
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         if (string.IsNullOrWhiteSpace(operation.TradeOfferId))
         {
             SellErrorMessage = "This sale request does not have a Steam trade offer yet.";
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var results = await _steamTradeClient.GetOfferStatusesAsync(
@@ -270,7 +275,7 @@ public class InventoryModel : PageModel
         if (status is null)
         {
             SellErrorMessage = "Could not check Steam offer status. Bot service did not return a status.";
-            return RedirectToPage();
+            return RedirectToCurrentGame(Input.GameType);
         }
 
         var transitionLogs = new List<(string Level, string Message, string Source)>();
@@ -297,12 +302,12 @@ public class InventoryModel : PageModel
             if (creditResult.Success)
             {
                 SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, creditResult.Message);
-                return RedirectToPage();
+                return RedirectToCurrentGame(Input.GameType);
             }
         }
 
         TradeStatusMessage = BuildManualStatusMessage(operation, status);
-        return RedirectToPage();
+        return RedirectToCurrentGame(Input.GameType);
     }
 
     public async Task<IActionResult> OnPostCancelIntakeAsync(CancellationToken cancellationToken)
@@ -444,7 +449,13 @@ public class InventoryModel : PageModel
             SellErrorMessage = message;
         }
 
-        return RedirectToPage();
+        return RedirectToCurrentGame(Input.GameType);
+    }
+
+    private IActionResult RedirectToCurrentGame(GameType? gameType = null)
+    {
+        var game = _gameCatalog.Get(gameType ?? Game);
+        return RedirectToPage(new { game = game.Type });
     }
 
     private async Task LoadPageAsync(CancellationToken cancellationToken)
@@ -455,7 +466,8 @@ public class InventoryModel : PageModel
             return;
         }
 
-        var currentGame = _gameCatalog.Get(_gameCatalog.DefaultGameType);
+        var currentGame = _gameCatalog.Get(Game);
+        Game = currentGame.Type;
         CurrentGameType = currentGame.Type;
         CurrentGameDisplayName = currentGame.DisplayName;
         await _appLogService.WriteAsync(
@@ -470,8 +482,8 @@ public class InventoryModel : PageModel
             WarningMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL is not set yet. Inventory still loads by SteamID.");
         }
 
-        RecentOperations = await _tradeOperationService.GetRecentOperationsAsync(appUser.Id, 10, cancellationToken);
-        LatestOperationsByAssetId = await _tradeOperationService.GetLatestOperationsByAssetIdAsync(appUser.Id, cancellationToken);
+        RecentOperations = await _tradeOperationService.GetRecentOperationsAsync(appUser.Id, CurrentGameType, 10, cancellationToken);
+        LatestOperationsByAssetId = await _tradeOperationService.GetLatestOperationsByAssetIdAsync(appUser.Id, CurrentGameType, cancellationToken);
         await RefreshBuyerDeliveryStatusesAsync(appUser.Id, cancellationToken);
         await _appLogService.WriteAsync(
             "Info",
@@ -492,7 +504,7 @@ public class InventoryModel : PageModel
         }
 
         Items = result.Items;
-        await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, Items, cancellationToken);
+        await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
         var marketHashNames = Items
             .Select(MarketHashNameUtility.ResolvePrimary)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -688,6 +700,7 @@ public class InventoryModel : PageModel
 
     private async Task AppendDeliveredPurchaseFallbackItemsAsync(
         Guid appUserId,
+        GameDefinition game,
         List<SteamInventoryItemDto> items,
         CancellationToken cancellationToken)
     {
@@ -697,6 +710,8 @@ public class InventoryModel : PageModel
         var deliveredPurchases = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
             .Where(item => item.BuyerAppUserId == appUserId &&
+                           item.AppId == game.SteamAppId &&
+                           item.ContextId == game.SteamContextId.ToString() &&
                            item.DeliveryStatus == "Delivered" &&
                            item.DeliveredAtUtc != null &&
                            item.DeliveredAtUtc >= DateTime.UtcNow.AddDays(-14))
@@ -726,39 +741,6 @@ public class InventoryModel : PageModel
                 Marketable = false
             });
         }
-    }
-
-    private async Task<AppUser?> GetCurrentTrackedUserAsync(CancellationToken cancellationToken)
-    {
-        if (!(User.Identity?.IsAuthenticated ?? false))
-        {
-            return null;
-        }
-
-        var steamId = User.FindFirst("SteamId")?.Value;
-        if (string.IsNullOrWhiteSpace(steamId))
-        {
-            await _appLogService.WriteAsync(
-                "Warning",
-                "Inventory page could not resolve SteamId from the authenticated session while updating Trade URL.",
-                nameof(InventoryModel),
-                cancellationToken: cancellationToken);
-            return null;
-        }
-
-        var appUser = await _dbContext.AppUsers
-            .SingleOrDefaultAsync(user => user.SteamId == steamId, cancellationToken);
-
-        if (appUser is null)
-        {
-            await _appLogService.WriteAsync(
-                "Warning",
-                $"Inventory page could not find a local user profile while updating Trade URL. SteamId={steamId}",
-                nameof(InventoryModel),
-                cancellationToken: cancellationToken);
-        }
-
-        return appUser;
     }
 
     private async Task<bool> HasActiveTradeFlowAsync(Guid appUserId, CancellationToken cancellationToken)
@@ -1015,6 +997,7 @@ public class InventoryModel : PageModel
 
     public class SellInputModel
     {
+        public GameType GameType { get; set; } = GameType.CS2;
         [Required]
         public string? AssetId { get; set; }
         public string? ClassId { get; set; }

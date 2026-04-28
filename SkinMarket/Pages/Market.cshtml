@@ -9,6 +9,24 @@
         <div>
             <h1>@L["Page_Market_Title"]</h1>
         </div>
+        <div class="status-group">
+            <form method="get" class="game-switcher" aria-label="Game selector">
+                <label class="game-switcher-label" for="market-game">Game</label>
+                <select id="market-game" name="game" class="form-select app-input game-switcher-select" onchange="this.form.submit()">
+                    @foreach (var game in Model.SupportedGames.Where(item => item.SupportsInventory))
+                    {
+                        if (game.Type == Model.CurrentGameType)
+                        {
+                            <option value="@game.Type" selected>@game.DisplayName</option>
+                        }
+                        else
+                        {
+                            <option value="@game.Type">@game.DisplayName</option>
+                        }
+                    }
+                </select>
+            </form>
+        </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
@@ -41,7 +59,7 @@
             <div class="section-heading">
                 <div>
                     <h2>@L["Market_AvailableItems_Title"]</h2>
-                    <p class="section-description">@Model.GroupedItems.Count grouped listing(s), @Model.TotalAvailableItemCount total item(s) currently visible from the bot inventory.</p>
+                    <p class="section-description">@Model.CurrentGameDisplayName: @Model.GroupedItems.Count grouped listing(s), @Model.TotalAvailableItemCount total item(s) currently visible from the bot inventory.</p>
                 </div>
                 <div class="market-view-toggle" role="group" aria-label="Market view">
                     <button type="button" class="market-view-button active" data-market-view-button="cards">Cards</button>

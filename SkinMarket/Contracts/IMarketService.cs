@@ -4,5 +4,5 @@ namespace SkinMarket.Contracts;
 
 public interface IMarketService
 {
-    Task<List<MarketListingItem>> GetAvailableItemsAsync(CancellationToken cancellationToken = default);
+    Task<List<MarketListingItem>> GetAvailableItemsAsync(GameType gameType, CancellationToken cancellationToken = default);
 }
