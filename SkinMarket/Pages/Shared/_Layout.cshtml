@@ -101,6 +101,7 @@
                 <nav class="app-side-nav">
                     <a class="app-side-link @IsActivePage("/Profile")" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
                     <a class="app-side-link @IsActivePage("/Items")" asp-page="/Items">@L["Layout_Nav_Items"]</a>
+                    <a class="app-side-link @IsActivePage("/Games")" asp-page="/Games">@L["Layout_Nav_Games"]</a>
                     <a class="app-side-link chat-unread-link @IsActivePage("/Chats")" asp-page="/Chats" data-chat-unread-target="user">
                         <span>@L["Layout_Nav_Chats"]</span>
                         @if (userUnreadChatCount > 0)

@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
     public DbSet<ItemChatThread> ItemChatThreads => Set<ItemChatThread>();
     public DbSet<ItemChatMessage> ItemChatMessages => Set<ItemChatMessage>();
+    public DbSet<MinefieldGameSession> MinefieldGameSessions => Set<MinefieldGameSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -168,6 +169,23 @@ public class AppDbContext : DbContext
                 .WithMany(user => user.ItemChatMessages)
                 .HasForeignKey(message => message.AuthorAppUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MinefieldGameSession>(entity =>
+        {
+            entity.ToTable("MinefieldGameSessions");
+            entity.HasKey(session => session.Id);
+            entity.Property(session => session.BetAmount).HasPrecision(18, 2);
+            entity.Property(session => session.Status).IsRequired().HasMaxLength(32);
+            entity.Property(session => session.ResultSteps).IsRequired().HasMaxLength(64);
+            entity.Property(session => session.MultipliersJson).IsRequired().HasMaxLength(1000);
+            entity.Property(session => session.PayoutAmount).HasPrecision(18, 2);
+            entity.HasIndex(session => new { session.AppUserId, session.Status });
+            entity.HasIndex(session => session.CreatedAtUtc);
+            entity.HasOne(session => session.AppUser)
+                .WithMany()
+                .HasForeignKey(session => session.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

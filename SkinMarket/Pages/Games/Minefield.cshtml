@@ -1,0 +1,104 @@
+@page
+@model SkinMarket.Pages.Games.MinefieldModel
+@{
+    ViewData["Title"] = "Minefield";
+}
+
+<div class="games-page py-4">
+    <div class="page-header">
+        <div>
+            <h1>Minefield</h1>
+            <p class="text-muted mb-0">Unity WebGL game connected to the x-mania virtual balance API.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Games">All games</a>
+        </div>
+    </div>
+
+    @if (!(User.Identity?.IsAuthenticated ?? false))
+    {
+        <div class="empty-state">
+            <h2>Login required</h2>
+            <p class="text-muted">Minefield uses your x-mania virtual balance.</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+        </div>
+    }
+    else
+    {
+        <div class="content-card game-embed-card">
+            <div class="game-unity-shell">
+                <canvas id="unity-canvas" class="game-unity-canvas" width="600" height="960" tabindex="-1"></canvas>
+                <div id="unity-loading-bar" class="game-unity-loading">
+                    <div class="game-unity-loading-title">Loading Minefield</div>
+                    <div class="game-unity-progress">
+                        <div id="unity-progress-bar-full" class="game-unity-progress-fill"></div>
+                    </div>
+                </div>
+                <div id="unity-warning" class="game-unity-warning"></div>
+            </div>
+            <div class="game-unity-actions">
+                <button type="button" class="btn app-button-secondary" id="unity-fullscreen-button">Fullscreen</button>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const canvas = document.querySelector("#unity-canvas");
+            const loadingBar = document.querySelector("#unity-loading-bar");
+            const progressBarFull = document.querySelector("#unity-progress-bar-full");
+            const fullscreenButton = document.querySelector("#unity-fullscreen-button");
+            const warningBanner = document.querySelector("#unity-warning");
+
+            function unityShowBanner(message, type) {
+                const item = document.createElement("div");
+                item.textContent = message;
+                item.className = type === "error" ? "game-unity-warning-error" : "game-unity-warning-info";
+                warningBanner.appendChild(item);
+                warningBanner.hidden = false;
+                if (type !== "error") {
+                    window.setTimeout(() => {
+                        item.remove();
+                        warningBanner.hidden = warningBanner.children.length === 0;
+                    }, 5000);
+                }
+            }
+
+            const buildUrl = "/games/minefield/Build";
+            const loaderUrl = `${buildUrl}/minefield.loader.js`;
+            const config = {
+                arguments: [],
+                dataUrl: `${buildUrl}/minefield.data`,
+                frameworkUrl: `${buildUrl}/minefield.framework.js`,
+                codeUrl: `${buildUrl}/minefield.wasm`,
+                streamingAssetsUrl: "/games/minefield/StreamingAssets",
+                companyName: "x-mania",
+                productName: "Minefield",
+                productVersion: "0.1",
+                showBanner: unityShowBanner
+            };
+
+            if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+                config.devicePixelRatio = 1;
+            }
+
+            loadingBar.hidden = false;
+
+            const script = document.createElement("script");
+            script.src = loaderUrl;
+            script.onload = () => {
+                createUnityInstance(canvas, config, (progress) => {
+                    progressBarFull.style.width = `${100 * progress}%`;
+                }).then((unityInstance) => {
+                    loadingBar.hidden = true;
+                    fullscreenButton.addEventListener("click", () => unityInstance.SetFullscreen(1));
+                }).catch((message) => {
+                    unityShowBanner(message, "error");
+                });
+            };
+            document.body.appendChild(script);
+        })();
+    </script>
+}

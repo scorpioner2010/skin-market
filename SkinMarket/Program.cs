@@ -13,6 +13,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.StaticFiles;
 
 LocalEnvFileLoader.TryLoad(Directory.GetCurrentDirectory());
 
@@ -134,6 +135,7 @@ builder.Services.AddScoped<IMarketPurchaseService, MarketPurchaseService>();
 builder.Services.AddScoped<IMarketDeliveryService, MarketDeliveryService>();
 builder.Services.AddScoped<IItemChatService, ItemChatService>();
 builder.Services.AddScoped<ICreditService, CreditService>();
+builder.Services.AddScoped<IMinefieldGameService, MinefieldGameService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
 builder.Services.AddScoped<ISteamBotIntakeService, SteamBotIntakeService>();
 builder.Services.AddHostedService<SteamTradeAutomationService>();
@@ -297,7 +299,14 @@ if (!app.Environment.IsDevelopment())
 
 app.UseForwardedHeaders();
 app.UseHttpsRedirection();
-app.UseStaticFiles();
+var staticFileContentTypes = new FileExtensionContentTypeProvider();
+staticFileContentTypes.Mappings[".data"] = "application/octet-stream";
+staticFileContentTypes.Mappings[".wasm"] = "application/wasm";
+staticFileContentTypes.Mappings[".symbols.json"] = "application/json";
+app.UseStaticFiles(new StaticFileOptions
+{
+    ContentTypeProvider = staticFileContentTypes
+});
 
 app.UseRouting();
 app.UseRequestLocalization();
@@ -696,6 +705,73 @@ app.MapGet("/api/chats/unread-counts", async (
     });
 });
 
+app.MapGet("/api/games/minefield/state", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    IMinefieldGameService minefieldGameService,
+    CancellationToken cancellationToken) =>
+{
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await minefieldGameService.GetStateAsync(appUser.Id, cancellationToken);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+});
+
+app.MapPost("/api/games/minefield/start", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    IMinefieldGameService minefieldGameService,
+    MinefieldStartRequest request,
+    CancellationToken cancellationToken) =>
+{
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await minefieldGameService.StartAsync(appUser.Id, request.Bet, cancellationToken);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+});
+
+app.MapPost("/api/games/minefield/step", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    IMinefieldGameService minefieldGameService,
+    MinefieldStepRequest request,
+    CancellationToken cancellationToken) =>
+{
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await minefieldGameService.StepAsync(appUser.Id, request, cancellationToken);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+});
+
+app.MapPost("/api/games/minefield/claim", async (
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    IMinefieldGameService minefieldGameService,
+    MinefieldClaimRequest request,
+    CancellationToken cancellationToken) =>
+{
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var result = await minefieldGameService.ClaimAsync(appUser.Id, request, cancellationToken);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+});
+
 app.MapPost("/api/sales/cancel", async (
     HttpContext httpContext,
     AppDbContext dbContext,
@@ -801,6 +877,33 @@ app.MapPost("/api/sales/cancel", async (
 app.MapRazorPages();
 
 app.Run();
+
+static async Task<AppUser?> ResolveCurrentAppUserAsync(
+    HttpContext httpContext,
+    AppDbContext dbContext,
+    CancellationToken cancellationToken)
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return null;
+    }
+
+    var appUserIdClaim = httpContext.User.FindFirst("AppUserId")?.Value;
+    if (Guid.TryParse(appUserIdClaim, out var appUserId))
+    {
+        var user = await dbContext.AppUsers
+            .SingleOrDefaultAsync(item => item.Id == appUserId, cancellationToken);
+        if (user is not null)
+        {
+            return user;
+        }
+    }
+
+    var steamId = httpContext.User.FindFirst("SteamId")?.Value;
+    return string.IsNullOrWhiteSpace(steamId)
+        ? null
+        : await dbContext.AppUsers.SingleOrDefaultAsync(item => item.SteamId == steamId, cancellationToken);
+}
 
 internal static class SaleStatusApiText
 {

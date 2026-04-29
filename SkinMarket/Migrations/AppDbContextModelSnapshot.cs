@@ -324,6 +324,59 @@ namespace SkinMarket.Migrations
                     b.ToTable("MarketPurchaseRecords", (string)null);
                 });
 
+            modelBuilder.Entity("SkinMarket.Models.MinefieldGameSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AppUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("BetAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentStep")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MultipliersJson")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("PayoutAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ResultSteps")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAtUtc");
+
+                    b.HasIndex("AppUserId", "Status");
+
+                    b.ToTable("MinefieldGameSessions", (string)null);
+                });
+
             modelBuilder.Entity("SkinMarket.Models.PriceSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -592,6 +645,17 @@ namespace SkinMarket.Migrations
                     b.Navigation("BuyerAppUser");
 
                     b.Navigation("SourceTradeOperation");
+                });
+
+            modelBuilder.Entity("SkinMarket.Models.MinefieldGameSession", b =>
+                {
+                    b.HasOne("SkinMarket.Models.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
                 });
 
             modelBuilder.Entity("SkinMarket.Models.TradeOperation", b =>

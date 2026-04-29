@@ -1,0 +1,87 @@
+@page
+@model SkinMarket.Pages.Admin.GamesModel
+@{
+    ViewData["Title"] = "Admin Games";
+}
+
+<div class="admin-games-page py-4">
+    <div class="page-header">
+        <div>
+            <h1>Games</h1>
+            <p class="text-muted mb-0">Prepare and manage Unity WebGL game integrations.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Games">Games</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Chats">Chats</a>
+        </div>
+    </div>
+
+    <section class="page-section admin-games-shell">
+        <div class="content-card">
+            <div class="card-heading">
+                <div>
+                    <h2>Game list</h2>
+                    <p class="card-subtitle">@Model.Games.Count game(s) configured.</p>
+                </div>
+            </div>
+
+            @if (Model.Games.Count == 0)
+            {
+                <div class="empty-state compact">
+                    <h3>No games configured yet.</h3>
+                    <p class="text-muted mb-0">Future Unity WebGL games will be selectable from this list.</p>
+                </div>
+            }
+            else
+            {
+                <div class="history-table-shell admin-games-table-shell">
+                    <div class="history-table admin-games-table">
+                        <div class="history-table-row history-table-header">
+                            <span>Game</span>
+                            <span>Status</span>
+                            <span>Actions</span>
+                        </div>
+                        @foreach (var game in Model.Games)
+                        {
+                            <article class="history-table-row">
+                                <div class="admin-game-main">
+                                    <strong>@game.Name</strong>
+                                    <div class="inventory-meta break-value">@game.Key</div>
+                                </div>
+                                <span class="compact-badge">@game.Status</span>
+                                <a class="btn app-button-secondary" asp-page="/Admin/Games" asp-route-gameKey="@game.Key">Settings</a>
+                            </article>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="content-card">
+            <div class="card-heading">
+                <div>
+                    <h2>Game settings</h2>
+                    <p class="card-subtitle">Select a game to edit its admin settings.</p>
+                </div>
+            </div>
+
+            <div class="empty-state compact">
+                @if (Model.SelectedGame is null)
+                {
+                    <h3>No game selected.</h3>
+                    <p class="text-muted mb-0">Settings controls will be shown here when games are added.</p>
+                }
+                else
+                {
+                    <h3>@Model.SelectedGame.Name</h3>
+                    <p class="text-muted mb-0">Server API is ready. Runtime settings controls can be added here when Minefield needs configurable odds, limits, or WebGL build metadata.</p>
+                }
+            </div>
+        </div>
+    </section>
+</div>

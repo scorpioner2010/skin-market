@@ -10,6 +10,7 @@
   <data name="Layout_Nav_Home" xml:space="preserve"><value>Главная</value></data>
   <data name="Layout_Nav_Profile" xml:space="preserve"><value>Профиль</value></data>
   <data name="Layout_Nav_Items" xml:space="preserve"><value>Айтемы</value></data>
+  <data name="Layout_Nav_Games" xml:space="preserve"><value>Игры</value></data>
   <data name="Layout_Nav_Chats" xml:space="preserve"><value>Чаты</value></data>
   <data name="Layout_Nav_Market" xml:space="preserve"><value>Маркет</value></data>
   <data name="Layout_Nav_Inventory" xml:space="preserve"><value>Инвентарь</value></data>
@@ -157,6 +158,8 @@
   <data name="Status_DeliveryFailed" xml:space="preserve"><value>Ошибка доставки</value></data>
   <data name="BalanceType_CreditFromSale" xml:space="preserve"><value>Зачисление от продажи</value></data>
   <data name="BalanceType_PurchaseFromMarket" xml:space="preserve"><value>Покупка на маркете</value></data>
+  <data name="BalanceType_MinefieldBet" xml:space="preserve"><value>Ставка Minefield</value></data>
+  <data name="BalanceType_MinefieldPayout" xml:space="preserve"><value>Выигрыш Minefield</value></data>
   <data name="PriceSource_Skinport" xml:space="preserve"><value>Skinport</value></data>
   <data name="PriceSource_Steam" xml:space="preserve"><value>Steam</value></data>
   <data name="PriceSource_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
