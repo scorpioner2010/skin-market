@@ -107,10 +107,11 @@ public class SteamInventoryService : ISteamInventoryService
             var requestUrl = $"https://steamcommunity.com/inventory/{steamId}/{game.SteamAppId}/{game.SteamContextId}?l=english&count=2000";
             var stopwatch = Stopwatch.StartNew();
             string? rawContent = null;
+            var hostingContext = BuildHostingContext();
 
             await WriteInventoryLogAsync(
                 "Info",
-                $"Request started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; Url={requestUrl}",
+                $"Request started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; Url={requestUrl}; HostContext={hostingContext}",
                 cancellationToken: cancellationToken);
 
             try
@@ -121,7 +122,7 @@ public class SteamInventoryService : ISteamInventoryService
                 using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
             await WriteInventoryLogAsync(
                 "Info",
-                $"Headers received. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ContentLength={response.Content.Headers.ContentLength?.ToString() ?? "<null>"}; ContentType={response.Content.Headers.ContentType?.ToString() ?? "<null>"}; RetryAfter={GetRetryAfterValue(response)}",
+                $"Headers received. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ContentLength={response.Content.Headers.ContentLength?.ToString() ?? "<null>"}; ContentType={response.Content.Headers.ContentType?.ToString() ?? "<null>"}; RetryAfter={GetRetryAfterValue(response)}; HostContext={hostingContext}",
                 cancellationToken: cancellationToken);
 
             if ((int)response.StatusCode == 429)
@@ -131,7 +132,7 @@ public class SteamInventoryService : ISteamInventoryService
                 var bodySnippet = await ReadBodySnippetAsync(response, cancellationToken);
                 await WriteInventoryLogAsync(
                     "Warning",
-                    $"Rate limited. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http=429; RetryAfter={retryAfter}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; Body={bodySnippet}",
+                    $"Rate limited. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http=429; RetryAfter={retryAfter}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; HostContext={hostingContext}; Body={bodySnippet}",
                     cancellationToken: cancellationToken);
 
                 _memoryCache.Set(cooldownKey, DateTimeOffset.UtcNow.Add(RateLimitCooldown), RateLimitCooldown);
@@ -224,13 +225,52 @@ public class SteamInventoryService : ISteamInventoryService
                 };
             }
 
+            var totalInventoryCount = GetInt32(root, "total_inventory_count");
             if (!root.TryGetProperty("assets", out var assetsElement) || assetsElement.ValueKind != JsonValueKind.Array)
             {
                 _logger.LogWarning("Steam inventory response does not contain a valid assets array for SteamId {SteamId}.", steamId);
                 await WriteInventoryLogAsync(
                     "Warning",
-                    $"Assets array missing. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; TotalInventoryCount={FormatInt(GetInt32(root, "total_inventory_count"))}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
+                    $"Assets array missing. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; TotalInventoryCount={FormatInt(totalInventoryCount)}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; HostContext={hostingContext}; Body={BuildBodySnippet(rawContent)}",
                     cancellationToken: cancellationToken);
+
+                if (totalInventoryCount == 0)
+                {
+                    var emptyResult = new SteamInventoryResultDto
+                    {
+                        IsSuccess = true
+                    };
+                    CacheInventory(freshCacheKey, staleCacheKey, emptyResult);
+                    await WriteInventoryLogAsync(
+                        "Info",
+                        $"Assets array omitted for empty Steam inventory. Returning empty result. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; FreshCacheSeconds={(int)FreshCacheDuration.TotalSeconds}; StaleCacheHours={(int)StaleCacheDuration.TotalHours}",
+                        cancellationToken: cancellationToken);
+                    return emptyResult;
+                }
+
+                var botResult = await TryGetBotFallbackAsync(
+                    steamId,
+                    gameType,
+                    requestId,
+                    game.Key,
+                    $"Steam response omitted assets. TotalInventoryCount={FormatInt(totalInventoryCount)}",
+                    cancellationToken);
+                if (botResult is { IsSuccess: true })
+                {
+                    CacheInventory(freshCacheKey, staleCacheKey, botResult);
+                    return botResult;
+                }
+
+                if (_memoryCache.TryGetValue<SteamInventoryResultDto>(staleCacheKey, out var staleInventory) &&
+                    staleInventory is not null)
+                {
+                    await WriteInventoryLogAsync(
+                        "Warning",
+                        $"Stale cache returned after incomplete Steam payload. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={staleInventory.Items.Count}",
+                        cancellationToken: cancellationToken);
+                    return staleInventory;
+                }
+
                 return new SteamInventoryResultDto
                 {
                     ErrorMessage = "Steam inventory response is incomplete: assets were not returned."
@@ -522,6 +562,45 @@ public class SteamInventoryService : ISteamInventoryService
         }
 
         return value;
+    }
+
+    private static string BuildHostingContext()
+    {
+        var renderService = FirstConfiguredEnvironmentValue("RENDER_SERVICE_NAME", "RENDER_SERVICE_ID");
+        var renderRegion = FirstConfiguredEnvironmentValue("RENDER_REGION");
+        var renderCommit = FirstConfiguredEnvironmentValue("RENDER_GIT_COMMIT");
+        var isRender = HasEnvironmentValue("RENDER") ||
+                       !string.IsNullOrWhiteSpace(renderService) ||
+                       !string.IsNullOrWhiteSpace(renderRegion);
+
+        return string.Join("; ", new[]
+        {
+            $"Render={(isRender ? "Yes" : "No")}",
+            $"Service={renderService ?? "<null>"}",
+            $"Region={renderRegion ?? "<null>"}",
+            $"Commit={Truncate(renderCommit ?? "<null>", 12)}",
+            $"Environment={FirstConfiguredEnvironmentValue("ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT") ?? "<null>"}",
+            $"Machine={Environment.MachineName}"
+        });
+    }
+
+    private static bool HasEnvironmentValue(string key)
+    {
+        return !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key));
+    }
+
+    private static string? FirstConfiguredEnvironmentValue(params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            var value = Environment.GetEnvironmentVariable(key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
+        return null;
     }
 
     private static string FormatInt(int? value)

@@ -200,7 +200,7 @@
   <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam тимчасово обмежує запити до інвентарю. Спробуйте ще раз через кілька хвилин.</value></data>
   <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Відповідь інвентарю Steam порожня або некоректна.</value></data>
   <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Інвентар Steam недоступний або приватний.</value></data>
-  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Відповідь інвентарю Steam неповна: assets не повернуто.</value></data>
+  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam повернув неповну відповідь інвентарю. Спробуйте ще раз через кілька хвилин.</value></data>
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Створено stub bot trade. Реальна інтеграція зі Steam-ботом ще не підключена.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Створено stub delivery trade. Реальна Steam-інтеграція доставки ще не підключена.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>

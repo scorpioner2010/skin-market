@@ -8,12 +8,21 @@ public static class BotDiagnosticsCatalog
 {
     public static readonly string[] AppLogSources =
     [
+        nameof(SteamInventoryService),
         nameof(BotServiceSteamTradeClient),
         nameof(BotServiceSteamInventoryClient),
         nameof(SteamTradeAutomationService),
         nameof(SteamTradeSyncService),
         nameof(LocalSteamBotHostService)
     ];
+
+    public static readonly string[] InventoryLogSources =
+    [
+        nameof(SteamInventoryService),
+        nameof(BotServiceSteamInventoryClient),
+        nameof(InventoryModel)
+    ];
+
     public static readonly string[] WorkflowLogSources =
     [
         nameof(BotStatusModel),
@@ -25,6 +34,7 @@ public static class BotDiagnosticsCatalog
         nameof(CreditService),
         nameof(MarketPurchaseService),
         nameof(MarketDeliveryService),
+        nameof(SteamInventoryService),
         nameof(BotServiceSteamInventoryClient),
         nameof(LocalSteamBotHostService),
         nameof(InventoryModel),

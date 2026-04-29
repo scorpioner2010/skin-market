@@ -208,7 +208,7 @@
   <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes.</value></data>
   <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Steam inventory response was empty or invalid.</value></data>
   <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Steam inventory is unavailable or private.</value></data>
-  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam inventory response is incomplete: assets were not returned.</value></data>
+  <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam returned an incomplete inventory response. Please try again in a few minutes.</value></data>
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Stub bot trade created. Real Steam bot integration is not connected yet.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Stub delivery trade created. Real Steam delivery integration is not connected yet.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
