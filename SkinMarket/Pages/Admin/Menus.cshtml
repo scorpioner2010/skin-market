@@ -1,0 +1,76 @@
+@page
+@model SkinMarket.Pages.Admin.MenusModel
+@{
+    ViewData["Title"] = "Admin Menus";
+}
+
+<div class="admin-menus-page py-4">
+    <div class="page-header">
+        <div>
+            <h1>Menus</h1>
+            <p class="text-muted mb-0">Control which sidebar menu items are visible to users.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Games">Games</a>
+            <a class="btn app-button-primary" asp-page="/Admin/Menus">Menus</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Chats">Chats</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
+    <section class="content-card">
+        <div class="card-heading">
+            <div>
+                <h2>Sidebar visibility</h2>
+                <p class="card-subtitle">Profile and Admin are protected system menu items and cannot be disabled.</p>
+            </div>
+        </div>
+
+        <form method="post" asp-page-handler="Save" class="stack-form">
+            <div class="market-table-shell admin-table-shell">
+                <div class="market-table-list admin-menus-table">
+                    <div class="market-table-row market-table-header admin-menus-row">
+                        <div class="market-table-cell">Menu</div>
+                        <div class="market-table-cell">Key</div>
+                        <div class="market-table-cell">Visible</div>
+                    </div>
+                    @for (var i = 0; i < Model.Menus.Count; i++)
+                    {
+                        <article class="market-table-row admin-menus-row">
+                            <div class="market-table-cell" data-label="Menu">
+                                <strong>@Model.Menus[i].DisplayName</strong>
+                                <input type="hidden" asp-for="Menus[i].DisplayName" />
+                            </div>
+                            <div class="market-table-cell" data-label="Key">
+                                <span class="inventory-meta">@Model.Menus[i].Key</span>
+                                <input type="hidden" asp-for="Menus[i].Key" />
+                            </div>
+                            <div class="market-table-cell" data-label="Visible">
+                                <label class="form-check admin-menu-toggle">
+                                    <input class="form-check-input" asp-for="Menus[i].IsEnabled" />
+                                    <span class="form-check-label">Enabled</span>
+                                </label>
+                            </div>
+                        </article>
+                    }
+                </div>
+            </div>
+
+            <button type="submit" class="btn app-button-primary">Save menu settings</button>
+        </form>
+    </section>
+</div>

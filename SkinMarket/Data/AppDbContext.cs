@@ -20,6 +20,7 @@ public class AppDbContext : DbContext
     public DbSet<ItemChatMessage> ItemChatMessages => Set<ItemChatMessage>();
     public DbSet<MinefieldGameSession> MinefieldGameSessions => Set<MinefieldGameSession>();
     public DbSet<MinefieldGameSettings> MinefieldGameSettings => Set<MinefieldGameSettings>();
+    public DbSet<NavigationMenuSetting> NavigationMenuSettings => Set<NavigationMenuSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -201,6 +202,16 @@ public class AppDbContext : DbContext
             entity.Property(settings => settings.StepSafeChancesJson).HasMaxLength(1000);
             entity.Property(settings => settings.StepMultipliersJson).HasMaxLength(1000);
             entity.HasIndex(settings => settings.GameKey).IsUnique();
+        });
+
+        modelBuilder.Entity<NavigationMenuSetting>(entity =>
+        {
+            entity.ToTable("NavigationMenuSettings");
+            entity.HasKey(settings => settings.Id);
+            entity.Property(settings => settings.Key).IsRequired().HasMaxLength(64);
+            entity.Property(settings => settings.DisplayName).IsRequired().HasMaxLength(100);
+            entity.Property(settings => settings.IsEnabled).HasDefaultValue(true);
+            entity.HasIndex(settings => settings.Key).IsUnique();
         });
     }
 }

@@ -841,6 +841,18 @@ a:hover {
   grid-template-columns: minmax(220px, 1fr) minmax(90px, 0.4fr) minmax(110px, 0.45fr);
 }
 
+.admin-menus-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.5fr) minmax(120px, 0.45fr);
+}
+
+.admin-menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin: 0;
+}
+
 .admin-minefield-step-row {
   grid-template-columns: minmax(48px, 0.3fr) minmax(0, 1fr) minmax(82px, 0.5fr) minmax(0, 1fr) minmax(92px, 0.6fr);
 }
@@ -997,6 +1009,7 @@ a:hover {
   .admin-accounts-row,
   .admin-items-row,
   .admin-games-row,
+  .admin-menus-row,
   .admin-minefield-step-row,
   .admin-log-row,
   .admin-activity-row,
@@ -1008,6 +1021,7 @@ a:hover {
   .market-table-header.admin-accounts-row,
   .market-table-header.admin-items-row,
   .market-table-header.admin-games-row,
+  .market-table-header.admin-menus-row,
   .market-table-header.admin-minefield-step-row,
   .market-table-header.admin-log-row,
   .market-table-header.admin-activity-row,
@@ -1602,6 +1616,10 @@ a:hover {
   grid-template-columns: minmax(220px, 1fr) minmax(90px, 0.4fr) minmax(110px, 0.45fr);
 }
 
+.admin-menus-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.5fr) minmax(120px, 0.45fr);
+}
+
 .admin-minefield-step-row {
   grid-template-columns: minmax(48px, 0.3fr) minmax(0, 1fr) minmax(82px, 0.5fr) minmax(0, 1fr) minmax(92px, 0.6fr);
 }
@@ -1643,6 +1661,7 @@ a:hover {
   .admin-accounts-row,
   .admin-items-row,
   .admin-games-row,
+  .admin-menus-row,
   .admin-minefield-step-row,
   .admin-log-row,
   .admin-activity-row,
@@ -1655,6 +1674,7 @@ a:hover {
   .market-table-header.admin-accounts-row,
   .market-table-header.admin-items-row,
   .market-table-header.admin-games-row,
+  .market-table-header.admin-menus-row,
   .market-table-header.admin-minefield-step-row,
   .market-table-header.admin-log-row,
   .market-table-header.admin-activity-row,
@@ -2596,7 +2616,7 @@ a:hover {
 
 .profile-balance-value {
   display: block;
-  font-size: 48px;
+  font-size: 24px;
   line-height: 1;
   font-weight: 900;
   letter-spacing: 0;
@@ -2606,16 +2626,7 @@ a:hover {
 
 .profile-balance-note {
   font-size: 12px;
-}
-
-.profile-balance-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.profile-balance-action {
-  min-width: 92px;
+  max-width: 520px;
 }
 
 @keyframes profile-balance-shine {
@@ -2631,7 +2642,7 @@ a:hover {
 
 @media (max-width: 575.98px) {
   .profile-balance-value {
-    font-size: 36px;
+    font-size: 20px;
   }
 }
 
