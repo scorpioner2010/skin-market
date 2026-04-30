@@ -34,7 +34,7 @@
                     <article class="content-card item-card market-item-card game-card">
                         <div class="market-item-top game-card-top">
                             <div class="market-item-visual game-card-visual">
-                                <div class="market-item-icon-fallback game-card-mark" aria-hidden="true">@game.ShortName</div>
+                                <img class="game-card-icon" src="@game.IconUrl" alt="@game.Name icon" />
                             </div>
                             <div class="market-item-copy">
                                 <div class="market-item-head">
@@ -47,7 +47,7 @@
                             </div>
                         </div>
                         <div class="action-row market-item-actions">
-                            <a class="btn app-button-primary market-action-button" asp-page="/Games/Minefield">Open</a>
+                            <a class="btn app-button-primary market-action-button" asp-page="@game.PagePath">Open</a>
                         </div>
                     </article>
                 }
@@ -64,7 +64,7 @@
                         <article class="market-table-row games-table-row">
                             <div class="market-table-cell market-table-item-cell" data-label="Game">
                                 <div class="market-table-main">
-                                    <div class="inventory-icon inventory-icon-fallback game-table-mark" aria-hidden="true">@game.ShortName</div>
+                                    <img class="inventory-icon game-table-icon" src="@game.IconUrl" alt="@game.Name icon" />
                                     <div class="market-table-copy">
                                         <h2 class="inventory-item-name">@game.Name</h2>
                                         <div class="inventory-meta market-table-subtitle">@game.Description</div>
@@ -75,7 +75,7 @@
                                 <span class="compact-badge">@game.Status</span>
                             </div>
                             <div class="market-table-cell market-table-actions-cell" data-label="Action">
-                                <a class="btn app-button-primary market-table-action-button" asp-page="/Games/Minefield">Open</a>
+                                <a class="btn app-button-primary market-table-action-button" asp-page="@game.PagePath">Open</a>
                             </div>
                         </article>
                     }

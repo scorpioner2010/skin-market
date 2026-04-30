@@ -313,6 +313,8 @@ public class MinefieldGameService : IMinefieldGameService
             ReturnToPlayer = MinefieldGameSettingsDefaults.ReturnToPlayer,
             UseCustomStepSafeChances = false,
             StepSafeChancesJson = string.Empty,
+            UseCustomStepMultipliers = false,
+            StepMultipliersJson = string.Empty,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -335,12 +337,15 @@ public class MinefieldGameService : IMinefieldGameService
     {
         List<decimal> multipliers = new(settings.Rows);
         var customSafeChances = ReadStepSafeChances(settings);
+        var customMultipliers = ReadStepMultipliers(settings);
         var cumulativeSafeChance = 1m;
         for (var step = 0; step < settings.Rows; step++)
         {
             var safeChance = GetStepSafeChance(settings, step, customSafeChances);
             cumulativeSafeChance *= safeChance;
-            var multiplier = decimal.Round(settings.ReturnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero);
+            var multiplier = settings.UseCustomStepMultipliers && step < customMultipliers.Count
+                ? decimal.Round(ClampMultiplier(customMultipliers[step]), 4, MidpointRounding.AwayFromZero)
+                : decimal.Round(settings.ReturnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero);
             multipliers.Add(multiplier);
         }
 
@@ -396,6 +401,14 @@ public class MinefieldGameService : IMinefieldGameService
             MinefieldGameSettingsDefaults.MaximumSafeChance);
     }
 
+    private static decimal ClampMultiplier(decimal multiplier)
+    {
+        return Math.Clamp(
+            multiplier,
+            MinefieldGameSettingsDefaults.MinimumMultiplier,
+            MinefieldGameSettingsDefaults.MaximumMultiplier);
+    }
+
     private static List<decimal> ReadStepSafeChances(MinefieldGameSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.StepSafeChancesJson))
@@ -406,6 +419,24 @@ public class MinefieldGameService : IMinefieldGameService
         try
         {
             return JsonSerializer.Deserialize<List<decimal>>(settings.StepSafeChancesJson, JsonOptions)
+                   ?? new List<decimal>();
+        }
+        catch (JsonException)
+        {
+            return new List<decimal>();
+        }
+    }
+
+    private static List<decimal> ReadStepMultipliers(MinefieldGameSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.StepMultipliersJson))
+        {
+            return new List<decimal>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<decimal>>(settings.StepMultipliersJson, JsonOptions)
                    ?? new List<decimal>();
         }
         catch (JsonException)

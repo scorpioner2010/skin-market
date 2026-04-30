@@ -690,6 +690,14 @@ a:hover {
   min-height: 104px;
 }
 
+.game-card-icon {
+  width: 100%;
+  max-width: 104px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  display: block;
+}
+
 .game-card-mark {
   display: inline-flex;
   align-items: center;
@@ -712,6 +720,10 @@ a:hover {
   background: linear-gradient(180deg, #24adbd 0%, #08727f 100%);
   border: 0;
   font-weight: 800;
+}
+
+.game-table-icon {
+  object-fit: cover;
 }
 
 .game-embed-placeholder,
@@ -830,7 +842,7 @@ a:hover {
 }
 
 .admin-minefield-step-row {
-  grid-template-columns: minmax(48px, 0.35fr) minmax(0, 1fr) minmax(82px, 0.55fr) minmax(82px, 0.55fr);
+  grid-template-columns: minmax(48px, 0.3fr) minmax(0, 1fr) minmax(82px, 0.5fr) minmax(0, 1fr) minmax(92px, 0.6fr);
 }
 
 .admin-game-main {
@@ -1591,7 +1603,7 @@ a:hover {
 }
 
 .admin-minefield-step-row {
-  grid-template-columns: minmax(48px, 0.35fr) minmax(0, 1fr) minmax(82px, 0.55fr) minmax(82px, 0.55fr);
+  grid-template-columns: minmax(48px, 0.3fr) minmax(0, 1fr) minmax(82px, 0.5fr) minmax(0, 1fr) minmax(92px, 0.6fr);
 }
 
 .admin-log-row,
@@ -2508,13 +2520,15 @@ a:hover {
   min-height: 100%;
 }
 
+.profile-card .card-heading {
+  margin-bottom: 14px;
+}
+
 .profile-identity {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eef2f6;
+  margin-bottom: 12px;
 }
 
 .profile-avatar {
@@ -2532,6 +2546,93 @@ a:hover {
 
 .profile-name {
   margin: 0;
+}
+
+.profile-balance-panel {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 14px;
+  margin: 0 0 16px;
+  padding: 18px;
+  border: 1px solid rgba(7, 114, 127, 0.2);
+  border-radius: var(--vk-radius);
+  color: #ffffff;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 42%, rgba(255, 255, 255, 0.08)),
+    linear-gradient(135deg, rgba(8, 114, 127, 0.98) 0%, rgba(18, 151, 136, 0.95) 52%, rgba(24, 168, 120, 0.98) 100%);
+  box-shadow: 0 14px 32px rgba(8, 114, 127, 0.18);
+  isolation: isolate;
+}
+
+.profile-balance-panel::before {
+  content: "";
+  position: absolute;
+  inset: -30% auto -30% -45%;
+  width: 45%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  animation: profile-balance-shine 7s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.profile-balance-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-balance-label,
+.profile-balance-note {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.profile-balance-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.profile-balance-value {
+  display: block;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+}
+
+.profile-balance-note {
+  font-size: 12px;
+}
+
+.profile-balance-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profile-balance-action {
+  min-width: 92px;
+}
+
+@keyframes profile-balance-shine {
+  0%,
+  58% {
+    transform: translateX(0) rotate(18deg);
+  }
+
+  100% {
+    transform: translateX(360%) rotate(18deg);
+  }
+}
+
+@media (max-width: 575.98px) {
+  .profile-balance-value {
+    font-size: 36px;
+  }
 }
 
 .app-footer {

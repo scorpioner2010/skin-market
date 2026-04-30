@@ -42,6 +42,7 @@ public class GamesModel : PageModel
     {
         LoadGames(MinefieldGameSettingsDefaults.GameKey);
         NormalizeStepChanceInputs();
+        NormalizeStepMultiplierInputs();
         ValidateMinefieldInput();
         MinefieldStepPreview = CreateMinefieldStepPreview(MinefieldInput);
 
@@ -66,12 +67,19 @@ public class GamesModel : PageModel
                 .Select(chance => decimal.Round(chance / 100m, 4, MidpointRounding.AwayFromZero))
                 .ToList(),
             JsonOptions);
+        settings.UseCustomStepMultipliers = MinefieldInput.UseCustomStepMultipliers;
+        settings.StepMultipliersJson = JsonSerializer.Serialize(
+            MinefieldInput.StepMultipliers
+                .Take(MinefieldGameSettingsDefaults.Rows)
+                .Select(multiplier => decimal.Round(multiplier, 4, MidpointRounding.AwayFromZero))
+                .ToList(),
+            JsonOptions);
         settings.UpdatedAtUtc = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await _appLogService.WriteAsync(
             "Warning",
-            $"Admin updated Minefield settings. Enabled={settings.IsEnabled}; MinBet={settings.MinimumBet:0.00}; MaxBet={settings.MaximumBet:0.00}; MinesPerLine={settings.MinesPerLine}; RTP={settings.ReturnToPlayer:0.####}; CustomChances={settings.UseCustomStepSafeChances}",
+            $"Admin updated Minefield settings. Enabled={settings.IsEnabled}; MinBet={settings.MinimumBet:0.00}; MaxBet={settings.MaximumBet:0.00}; MinesPerLine={settings.MinesPerLine}; RTP={settings.ReturnToPlayer:0.####}; CustomChances={settings.UseCustomStepSafeChances}; CustomMultipliers={settings.UseCustomStepMultipliers}",
             nameof(GamesModel),
             cancellationToken: cancellationToken);
 
@@ -131,6 +139,10 @@ public class GamesModel : PageModel
             Columns = MinefieldGameSettingsDefaults.Columns,
             MinesPerLine = MinefieldGameSettingsDefaults.MinesPerLine,
             ReturnToPlayer = MinefieldGameSettingsDefaults.ReturnToPlayer,
+            UseCustomStepSafeChances = false,
+            StepSafeChancesJson = string.Empty,
+            UseCustomStepMultipliers = false,
+            StepMultipliersJson = string.Empty,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
         };
@@ -159,7 +171,7 @@ public class GamesModel : PageModel
                 .ToList();
         }
 
-        return new MinefieldSettingsInputModel
+        var input = new MinefieldSettingsInputModel
         {
             IsEnabled = settings.IsEnabled,
             MinimumBet = settings.MinimumBet,
@@ -167,8 +179,15 @@ public class GamesModel : PageModel
             MinesPerLine = settings.MinesPerLine,
             ReturnToPlayerPercent = decimal.Round(settings.ReturnToPlayer * 100m, 2, MidpointRounding.AwayFromZero),
             UseCustomStepSafeChances = settings.UseCustomStepSafeChances,
-            StepSafeChancePercents = customSafeChances
+            StepSafeChancePercents = customSafeChances,
+            UseCustomStepMultipliers = settings.UseCustomStepMultipliers,
+            StepMultipliers = ReadStepMultipliers(settings)
+                .Select(multiplier => decimal.Round(ClampMultiplier(multiplier), 4, MidpointRounding.AwayFromZero))
+                .ToList()
         };
+
+        NormalizeStepMultiplierList(input);
+        return input;
     }
 
     private void NormalizeStepChanceInputs()
@@ -192,6 +211,32 @@ public class GamesModel : PageModel
         }
     }
 
+    private void NormalizeStepMultiplierInputs()
+    {
+        NormalizeStepMultiplierList(MinefieldInput);
+    }
+
+    private static void NormalizeStepMultiplierList(MinefieldSettingsInputModel input)
+    {
+        if (input.StepMultipliers is null)
+        {
+            input.StepMultipliers = new List<decimal>();
+        }
+
+        var defaultMultipliers = CreateAutomaticStepMultipliers(input);
+        while (input.StepMultipliers.Count < MinefieldGameSettingsDefaults.Rows)
+        {
+            input.StepMultipliers.Add(defaultMultipliers[input.StepMultipliers.Count]);
+        }
+
+        if (input.StepMultipliers.Count > MinefieldGameSettingsDefaults.Rows)
+        {
+            input.StepMultipliers = input.StepMultipliers
+                .Take(MinefieldGameSettingsDefaults.Rows)
+                .ToList();
+        }
+    }
+
     private void ValidateMinefieldInput()
     {
         if (MinefieldInput.MaximumBet < MinefieldInput.MinimumBet)
@@ -209,30 +254,62 @@ public class GamesModel : PageModel
                     "Safe chance must be between 1 and 100 percent.");
             }
         }
+
+        for (var i = 0; i < MinefieldInput.StepMultipliers.Count; i++)
+        {
+            var multiplier = MinefieldInput.StepMultipliers[i];
+            if (multiplier < MinefieldGameSettingsDefaults.MinimumMultiplier ||
+                multiplier > MinefieldGameSettingsDefaults.MaximumMultiplier)
+            {
+                ModelState.AddModelError(
+                    $"MinefieldInput.StepMultipliers[{i}]",
+                    $"Multiplier must be between {MinefieldGameSettingsDefaults.MinimumMultiplier:0.0} and {MinefieldGameSettingsDefaults.MaximumMultiplier:0.##}.");
+            }
+        }
     }
 
     private static List<MinefieldStepPreviewItem> CreateMinefieldStepPreview(MinefieldSettingsInputModel input)
     {
         var preview = new List<MinefieldStepPreviewItem>(MinefieldGameSettingsDefaults.Rows);
-        var defaultSafeChance = GetDefaultSafeChancePercent(input.MinesPerLine) / 100m;
+        var automaticMultipliers = CreateAutomaticStepMultipliers(input);
+
+        for (var i = 0; i < MinefieldGameSettingsDefaults.Rows; i++)
+        {
+            var safeChance = GetInputStepSafeChance(input, i);
+            var multiplier = input.UseCustomStepMultipliers && i < input.StepMultipliers.Count
+                ? ClampMultiplier(input.StepMultipliers[i])
+                : automaticMultipliers[i];
+            preview.Add(new MinefieldStepPreviewItem(
+                i + 1,
+                decimal.Round(safeChance * 100m, 2, MidpointRounding.AwayFromZero),
+                decimal.Round((1m - safeChance) * 100m, 2, MidpointRounding.AwayFromZero),
+                decimal.Round(multiplier, 4, MidpointRounding.AwayFromZero)));
+        }
+
+        return preview;
+    }
+
+    private static List<decimal> CreateAutomaticStepMultipliers(MinefieldSettingsInputModel input)
+    {
+        var multipliers = new List<decimal>(MinefieldGameSettingsDefaults.Rows);
         var returnToPlayer = Math.Clamp(input.ReturnToPlayerPercent / 100m, 0.01m, 1m);
         var cumulativeSafeChance = 1m;
 
         for (var i = 0; i < MinefieldGameSettingsDefaults.Rows; i++)
         {
-            var safeChance = input.UseCustomStepSafeChances && i < input.StepSafeChancePercents.Count
-                ? Math.Clamp(input.StepSafeChancePercents[i] / 100m, 0.01m, 1m)
-                : defaultSafeChance;
-            cumulativeSafeChance *= safeChance;
-            var multiplier = decimal.Round(returnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero);
-            preview.Add(new MinefieldStepPreviewItem(
-                i + 1,
-                decimal.Round(safeChance * 100m, 2, MidpointRounding.AwayFromZero),
-                decimal.Round((1m - safeChance) * 100m, 2, MidpointRounding.AwayFromZero),
-                multiplier));
+            cumulativeSafeChance *= GetInputStepSafeChance(input, i);
+            multipliers.Add(decimal.Round(returnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero));
         }
 
-        return preview;
+        return multipliers;
+    }
+
+    private static decimal GetInputStepSafeChance(MinefieldSettingsInputModel input, int step)
+    {
+        var defaultSafeChance = GetDefaultSafeChancePercent(input.MinesPerLine) / 100m;
+        return input.UseCustomStepSafeChances && step >= 0 && step < input.StepSafeChancePercents.Count
+            ? Math.Clamp(input.StepSafeChancePercents[step] / 100m, 0.01m, 1m)
+            : defaultSafeChance;
     }
 
     private static void NormalizeSettings(MinefieldGameSettings settings)
@@ -262,6 +339,14 @@ public class GamesModel : PageModel
             MinefieldGameSettingsDefaults.MaximumSafeChance);
     }
 
+    private static decimal ClampMultiplier(decimal multiplier)
+    {
+        return Math.Clamp(
+            multiplier,
+            MinefieldGameSettingsDefaults.MinimumMultiplier,
+            MinefieldGameSettingsDefaults.MaximumMultiplier);
+    }
+
     private static List<decimal> ReadStepSafeChances(MinefieldGameSettings settings)
     {
         if (string.IsNullOrWhiteSpace(settings.StepSafeChancesJson))
@@ -272,6 +357,24 @@ public class GamesModel : PageModel
         try
         {
             return JsonSerializer.Deserialize<List<decimal>>(settings.StepSafeChancesJson, JsonOptions)
+                   ?? new List<decimal>();
+        }
+        catch (JsonException)
+        {
+            return new List<decimal>();
+        }
+    }
+
+    private static List<decimal> ReadStepMultipliers(MinefieldGameSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.StepMultipliersJson))
+        {
+            return new List<decimal>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<decimal>>(settings.StepMultipliersJson, JsonOptions)
                    ?? new List<decimal>();
         }
         catch (JsonException)
@@ -306,5 +409,7 @@ public class GamesModel : PageModel
 
         public bool UseCustomStepSafeChances { get; set; }
         public List<decimal> StepSafeChancePercents { get; set; } = new();
+        public bool UseCustomStepMultipliers { get; set; }
+        public List<decimal> StepMultipliers { get; set; } = new();
     }
 }

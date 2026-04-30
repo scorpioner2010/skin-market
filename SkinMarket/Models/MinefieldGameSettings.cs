@@ -13,6 +13,8 @@ public class MinefieldGameSettings
     public decimal ReturnToPlayer { get; set; } = MinefieldGameSettingsDefaults.ReturnToPlayer;
     public bool UseCustomStepSafeChances { get; set; }
     public string StepSafeChancesJson { get; set; } = string.Empty;
+    public bool UseCustomStepMultipliers { get; set; }
+    public string StepMultipliersJson { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
 }
@@ -28,4 +30,6 @@ public static class MinefieldGameSettingsDefaults
     public const decimal MaximumBet = 1000000m;
     public const decimal MinimumSafeChance = 0.01m;
     public const decimal MaximumSafeChance = 1m;
+    public const decimal MinimumMultiplier = 0.1m;
+    public const decimal MaximumMultiplier = 1000000m;
 }

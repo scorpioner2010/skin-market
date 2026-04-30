@@ -46,6 +46,19 @@
                         <h3 class="profile-name">@profileName</h3>
                     </div>
                 </div>
+
+                <section class="profile-balance-panel" aria-labelledby="profile-balance-title">
+                    <div class="profile-balance-copy">
+                        <span class="profile-balance-label" id="profile-balance-title">@L["Profile_Balance"]</span>
+                        <strong class="profile-balance-value">$@Model.Balance.ToString("0.00")</strong>
+                        <span class="profile-balance-note">Available for market purchases and games</span>
+                    </div>
+                    <div class="profile-balance-actions">
+                        <a class="btn app-button-primary profile-balance-action" asp-page="/Market">Market</a>
+                        <a class="btn app-button-secondary profile-balance-action" asp-page="/History">History</a>
+                    </div>
+                </section>
+
                 <dl class="detail-list">
                     <div class="detail-row">
                         <dt>SteamID</dt>
@@ -62,10 +75,6 @@
                     <div class="detail-row">
                         <dt>@L["Profile_AvatarUrl"]</dt>
                         <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.SteamAvatarUrl) ? L["Profile_AvatarUnavailable"] : Model.SteamAvatarUrl)</dd>
-                    </div>
-                    <div class="detail-row">
-                        <dt>@L["Profile_Balance"]</dt>
-                        <dd><span class="balance-pill">@Model.Balance</span></dd>
                     </div>
                     <div class="detail-row @(isTradeUrlConfigured ? string.Empty : "trade-url-critical-row")">
                         <dt>@L["Profile_TradeUrl"]</dt>

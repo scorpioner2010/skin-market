@@ -199,6 +199,7 @@ public class AppDbContext : DbContext
             entity.Property(settings => settings.MaximumBet).HasPrecision(18, 2);
             entity.Property(settings => settings.ReturnToPlayer).HasPrecision(6, 4);
             entity.Property(settings => settings.StepSafeChancesJson).HasMaxLength(1000);
+            entity.Property(settings => settings.StepMultipliersJson).HasMaxLength(1000);
             entity.HasIndex(settings => settings.GameKey).IsUnique();
         });
     }
