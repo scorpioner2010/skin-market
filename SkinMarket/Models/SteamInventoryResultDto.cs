@@ -4,5 +4,7 @@ public class SteamInventoryResultDto
 {
     public bool IsSuccess { get; set; }
     public string? ErrorMessage { get; set; }
+    public bool IsStale { get; set; }
+    public DateTime? CachedAtUtc { get; set; }
     public List<SteamInventoryItemDto> Items { get; set; } = new();
 }

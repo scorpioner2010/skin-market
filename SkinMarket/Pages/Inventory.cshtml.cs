@@ -504,6 +504,12 @@ public class InventoryModel : PageModel
         }
 
         Items = result.Items;
+        if (result.IsStale)
+        {
+            var cachedAt = result.CachedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "recently";
+            WarningMessage = $"Steam is rate-limiting live inventory requests, so cached inventory from {cachedAt} is shown.";
+        }
+
         await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
         var marketHashNames = Items
             .Select(MarketHashNameUtility.ResolvePrimary)

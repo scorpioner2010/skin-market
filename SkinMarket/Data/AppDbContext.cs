@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<MinefieldGameSession> MinefieldGameSessions => Set<MinefieldGameSession>();
     public DbSet<MinefieldGameSettings> MinefieldGameSettings => Set<MinefieldGameSettings>();
     public DbSet<NavigationMenuSetting> NavigationMenuSettings => Set<NavigationMenuSetting>();
+    public DbSet<SteamInventoryCacheEntry> SteamInventoryCacheEntries => Set<SteamInventoryCacheEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -212,6 +213,17 @@ public class AppDbContext : DbContext
             entity.Property(settings => settings.DisplayName).IsRequired().HasMaxLength(100);
             entity.Property(settings => settings.IsEnabled).HasDefaultValue(true);
             entity.HasIndex(settings => settings.Key).IsUnique();
+        });
+
+        modelBuilder.Entity<SteamInventoryCacheEntry>(entity =>
+        {
+            entity.ToTable("SteamInventoryCacheEntries");
+            entity.HasKey(entry => entry.Id);
+            entity.Property(entry => entry.SteamId).IsRequired().HasMaxLength(32);
+            entity.Property(entry => entry.ContextId).IsRequired().HasMaxLength(20);
+            entity.Property(entry => entry.ItemsJson).IsRequired();
+            entity.HasIndex(entry => new { entry.SteamId, entry.AppId, entry.ContextId }).IsUnique();
+            entity.HasIndex(entry => entry.ExpiresAtUtc);
         });
     }
 }
