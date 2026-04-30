@@ -205,10 +205,48 @@ builder.Services.AddHttpClient<ISteamMarketPriceService, SteamMarketPriceService
 
 var app = builder.Build();
 
-app.Lifetime.ApplicationStarted.Register(() =>
+using (var scope = app.Services.CreateScope())
 {
-    _ = Task.Run(() => InitializeDatabaseAsync(app, usedDevelopmentDatabaseFallback));
-});
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+    var runtimeState = scope.ServiceProvider.GetRequiredService<AppRuntimeState>();
+    if (!runtimeState.IsDatabaseAvailable)
+    {
+        if (usedDevelopmentDatabaseFallback)
+        {
+            logger.LogWarning(
+                "No PostgreSQL connection string was configured in Development. Starting application in degraded mode. Set DATABASE_URL or ConnectionStrings__DefaultConnection to enable PostgreSQL locally.");
+        }
+
+        logger.LogWarning("Database mode: DISABLED. Starting application in degraded mode.");
+    }
+    else
+    {
+        try
+        {
+            logger.LogInformation("Database mode: ENABLED. Using PostgreSQL and applying migrations.");
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            dbContext.Database.Migrate();
+            var canConnect = dbContext.Database.CanConnect();
+            if (!canConnect)
+            {
+                throw new InvalidOperationException("Database migration completed, but connectivity check failed.");
+            }
+
+            logger.LogInformation("Database connection succeeded.");
+            logger.LogInformation("Database migrations applied successfully.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogCritical(exception, "Application startup failed while initializing PostgreSQL.");
+            var appLogService = scope.ServiceProvider.GetService<IAppLogService>();
+            if (appLogService is not null)
+            {
+                await appLogService.WriteAsync("Error", exception.Message, "Startup", exception);
+            }
+            throw;
+        }
+    }
+}
 
 // Configure the HTTP request pipeline.
 app.Use(async (context, next) =>
@@ -839,57 +877,6 @@ app.MapPost("/api/sales/cancel", async (
 app.MapRazorPages();
 
 app.Run();
-
-static async Task InitializeDatabaseAsync(WebApplication app, bool usedDevelopmentDatabaseFallback)
-{
-    await using var scope = app.Services.CreateAsyncScope();
-    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-    var runtimeState = scope.ServiceProvider.GetRequiredService<AppRuntimeState>();
-    if (!runtimeState.IsDatabaseAvailable)
-    {
-        if (usedDevelopmentDatabaseFallback)
-        {
-            logger.LogWarning(
-                "No PostgreSQL connection string was configured in Development. Starting application in degraded mode. Set DATABASE_URL or ConnectionStrings__DefaultConnection to enable PostgreSQL locally.");
-        }
-
-        logger.LogWarning("Database mode: DISABLED. Starting application in degraded mode.");
-        return;
-    }
-
-    try
-    {
-        logger.LogInformation("Database mode: ENABLED. Using PostgreSQL and applying migrations.");
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await dbContext.Database.MigrateAsync();
-        var canConnect = await dbContext.Database.CanConnectAsync();
-        if (!canConnect)
-        {
-            throw new InvalidOperationException("Database migration completed, but connectivity check failed.");
-        }
-
-        logger.LogInformation("Database connection succeeded.");
-        logger.LogInformation("Database migrations applied successfully.");
-    }
-    catch (Exception exception)
-    {
-        logger.LogCritical(exception, "Application startup failed while initializing PostgreSQL.");
-        var appLogService = scope.ServiceProvider.GetService<IAppLogService>();
-        if (appLogService is not null)
-        {
-            try
-            {
-                await appLogService.WriteAsync("Error", exception.Message, "Startup", exception);
-            }
-            catch (Exception logException)
-            {
-                logger.LogError(logException, "Failed to write startup failure to application log.");
-            }
-        }
-
-        app.Lifetime.StopApplication();
-    }
-}
 
 static async Task<AppUser?> ResolveCurrentAppUserAsync(
     HttpContext httpContext,

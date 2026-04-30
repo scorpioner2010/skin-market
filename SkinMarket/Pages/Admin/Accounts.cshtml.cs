@@ -1,7 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -131,16 +128,6 @@ public class AccountsModel : PageModel
         SuccessMessage = user.IsAdmin
             ? $"Admin access enabled for {ResolveAccountName(user)}."
             : $"Admin access disabled for {ResolveAccountName(user)}.";
-
-        if (IsCurrentUser(user))
-        {
-            await RefreshAuthCookieAsync(user);
-            if (!user.IsAdmin)
-            {
-                return RedirectToPage("/Profile");
-            }
-        }
-
         return RedirectToPage();
     }
 
@@ -227,45 +214,6 @@ public class AccountsModel : PageModel
         return string.IsNullOrWhiteSpace(user.PersonaName)
             ? user.DisplayName
             : user.PersonaName;
-    }
-
-    private bool IsCurrentUser(AppUser user)
-    {
-        if (Guid.TryParse(User.FindFirst("AppUserId")?.Value, out var appUserId) &&
-            appUserId == user.Id)
-        {
-            return true;
-        }
-
-        var steamId = User.FindFirst("SteamId")?.Value;
-        return !string.IsNullOrWhiteSpace(steamId) &&
-               string.Equals(steamId, user.SteamId, StringComparison.Ordinal);
-    }
-
-    private async Task RefreshAuthCookieAsync(AppUser user)
-    {
-        var displayName = string.IsNullOrWhiteSpace(user.PersonaName)
-            ? user.DisplayName
-            : user.PersonaName;
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.NameIdentifier, user.SteamId),
-            new(ClaimTypes.Name, displayName),
-            new("IsAdmin", user.IsAdmin ? "true" : "false"),
-            new("SteamId", user.SteamId),
-            new("AppUserId", user.Id.ToString())
-        };
-
-        if (!string.IsNullOrWhiteSpace(user.AvatarUrl))
-        {
-            claims.Add(new Claim("AvatarUrl", user.AvatarUrl));
-        }
-
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(identity),
-            new AuthenticationProperties { IsPersistent = true });
     }
 
     public sealed class AdminAccountItem

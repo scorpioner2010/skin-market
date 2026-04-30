@@ -51,7 +51,11 @@
                     <div class="profile-balance-copy">
                         <span class="profile-balance-label" id="profile-balance-title">@L["Profile_Balance"]</span>
                         <strong class="profile-balance-value">$@Model.Balance.ToString("0.00")</strong>
-                        <span class="profile-balance-note">Цей баланс можна витратити на сервіси сайту, ігри та покупки на маркеті. Вивести його в реальні кошти неможливо.</span>
+                        <span class="profile-balance-note">Available for market purchases and games</span>
+                    </div>
+                    <div class="profile-balance-actions">
+                        <a class="btn app-button-primary profile-balance-action" asp-page="/Market">Market</a>
+                        <a class="btn app-button-secondary profile-balance-action" asp-page="/History">History</a>
                     </div>
                 </section>
 
