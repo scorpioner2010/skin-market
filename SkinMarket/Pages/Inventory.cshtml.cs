@@ -492,6 +492,12 @@ public class InventoryModel : PageModel
             cancellationToken: cancellationToken);
 
         var result = await _steamInventoryService.GetInventoryAsync(appUser.SteamId, CurrentGameType, cancellationToken);
+        await _appLogService.WriteAsync(
+            result.IsSuccess ? "Info" : "Warning",
+            $"Inventory service result received. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; Success={result.IsSuccess}; IsStale={result.IsStale}; CachedAt={result.CachedAtUtc?.ToString("O") ?? "<null>"}; ItemCount={result.Items.Count}; Error={result.ErrorMessage ?? "<null>"}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
+
         if (!result.IsSuccess)
         {
             ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.ErrorMessage);

@@ -57,6 +57,11 @@ public class SteamInventoryService : ISteamInventoryService
         var botCooldownKey = $"steam-inventory-bot-cooldown::{game.Key}::{steamId}";
         var botGlobalCooldownKey = "steam-inventory-bot-cooldown::global";
         var requestId = Guid.NewGuid().ToString("N")[..8];
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Inventory load decision started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; AppId={game.SteamAppId}; ContextId={game.SteamContextId}; FreshCacheSeconds={(int)FreshCacheDuration.TotalSeconds}; StaleCacheHours={(int)StaleCacheDuration.TotalHours}; PersistentCacheHours={(int)PersistentStaleCacheDuration.TotalHours}; RateLimitCooldownMinutes={(int)RateLimitCooldown.TotalMinutes}; BotCooldownMinutes={(int)BotRateLimitCooldown.TotalMinutes}; HostContext={BuildHostingContext()}",
+            cancellationToken: cancellationToken);
+
         if (_memoryCache.TryGetValue<SteamInventoryResultDto>(freshCacheKey, out var cachedInventory) && cachedInventory is not null)
         {
             _logger.LogInformation("Steam inventory cache hit for SteamId {SteamId} and game {GameKey}.", steamId, game.Key);
@@ -67,8 +72,18 @@ public class SteamInventoryService : ISteamInventoryService
             return cachedInventory;
         }
 
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Fresh memory cache miss before lock. RequestId={requestId}; SteamId={steamId}; Game={game.Key}",
+            cancellationToken: cancellationToken);
+
         var requestLock = RequestLocks.GetOrAdd(freshCacheKey, _ => new SemaphoreSlim(1, 1));
+        var lockStopwatch = Stopwatch.StartNew();
         await requestLock.WaitAsync(cancellationToken);
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Inventory request lock acquired. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; WaitMs={lockStopwatch.ElapsedMilliseconds}",
+            cancellationToken: cancellationToken);
         try
         {
             if (_memoryCache.TryGetValue<SteamInventoryResultDto>(freshCacheKey, out cachedInventory) && cachedInventory is not null)
@@ -80,6 +95,25 @@ public class SteamInventoryService : ISteamInventoryService
                     cancellationToken: cancellationToken);
                 return cachedInventory;
             }
+
+            await LogMemoryCacheDiagnosticsAsync(
+                freshCacheKey,
+                staleCacheKey,
+                cooldownKey,
+                globalCooldownKey,
+                botCooldownKey,
+                botGlobalCooldownKey,
+                requestId,
+                steamId,
+                game.Key,
+                cancellationToken);
+
+            await LogPersistentCacheSnapshotAsync(
+                steamId,
+                game,
+                requestId,
+                "After lock and before live Steam request.",
+                cancellationToken);
 
             var cooldownUntil = GetActiveCooldownUntil(cooldownKey, globalCooldownKey);
             if (cooldownUntil is not null)
@@ -160,12 +194,12 @@ public class SteamInventoryService : ISteamInventoryService
                     }
 
                     if (await TryLoadPersistentStaleInventoryAsync(
-                        steamId,
-                        gameType,
-                        game,
-                        staleCacheKey,
-                        requestId,
-                        $"Steam returned HTTP 429. CooldownMinutes={(int)RateLimitCooldown.TotalMinutes}",
+                            steamId,
+                            gameType,
+                            game,
+                            staleCacheKey,
+                            requestId,
+                            $"Steam returned HTTP 429. CooldownMinutes={(int)RateLimitCooldown.TotalMinutes}",
                             cancellationToken) is { } persistentStaleInventory)
                     {
                         return persistentStaleInventory;
@@ -187,6 +221,10 @@ public class SteamInventoryService : ISteamInventoryService
                         return botResult;
                     }
 
+                    await WriteInventoryLogAsync(
+                        "Warning",
+                        $"No inventory fallback available after 429. Returning rate-limited result. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; MemoryStale=Miss; PersistentStale=Miss; BotFallback=FailedOrSkipped",
+                        cancellationToken: cancellationToken);
                     return BuildRateLimitedResult();
                 }
 
@@ -215,12 +253,12 @@ public class SteamInventoryService : ISteamInventoryService
                         $"HTTP failure. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; Body={await ReadBodySnippetAsync(response, cancellationToken)}",
                         cancellationToken: cancellationToken);
                     if (await TryLoadPersistentStaleInventoryAsync(
-                        steamId,
-                        gameType,
-                        game,
-                        staleCacheKey,
-                        requestId,
-                        $"Steam returned HTTP {(int)response.StatusCode}.",
+                            steamId,
+                            gameType,
+                            game,
+                            staleCacheKey,
+                            requestId,
+                            $"Steam returned HTTP {(int)response.StatusCode}.",
                             cancellationToken) is { } persistentStaleInventory)
                     {
                         return persistentStaleInventory;
@@ -244,12 +282,12 @@ public class SteamInventoryService : ISteamInventoryService
                         $"Invalid payload root. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Url={requestUrl}; Body={BuildBodySnippet(rawContent)}",
                         cancellationToken: cancellationToken);
                     if (await TryLoadPersistentStaleInventoryAsync(
-                        steamId,
-                        gameType,
-                        game,
-                        staleCacheKey,
-                        requestId,
-                        "Steam inventory payload root was invalid.",
+                            steamId,
+                            gameType,
+                            game,
+                            staleCacheKey,
+                            requestId,
+                            "Steam inventory payload root was invalid.",
                             cancellationToken) is { } persistentStaleInventory)
                     {
                         return persistentStaleInventory;
@@ -328,12 +366,12 @@ public class SteamInventoryService : ISteamInventoryService
                     }
 
                     if (await TryLoadPersistentStaleInventoryAsync(
-                        steamId,
-                        gameType,
-                        game,
-                        staleCacheKey,
-                        requestId,
-                        "Steam response omitted assets.",
+                            steamId,
+                            gameType,
+                            game,
+                            staleCacheKey,
+                            requestId,
+                            "Steam response omitted assets.",
                             cancellationToken) is { } persistentStaleInventory)
                     {
                         return persistentStaleInventory;
@@ -467,12 +505,12 @@ public class SteamInventoryService : ISteamInventoryService
                     exception,
                     CancellationToken.None);
                 if (await TryLoadPersistentStaleInventoryAsync(
-                    steamId,
-                    gameType,
-                    game,
-                    staleCacheKey,
-                    requestId,
-                    "Steam inventory request timed out.",
+                        steamId,
+                        gameType,
+                        game,
+                        staleCacheKey,
+                        requestId,
+                        "Steam inventory request timed out.",
                         CancellationToken.None) is { } persistentStaleInventory)
                 {
                     return persistentStaleInventory;
@@ -492,12 +530,12 @@ public class SteamInventoryService : ISteamInventoryService
                     exception,
                     cancellationToken);
                 if (await TryLoadPersistentStaleInventoryAsync(
-                    steamId,
-                    gameType,
-                    game,
-                    staleCacheKey,
-                    requestId,
-                    "Steam inventory HTTP request failed.",
+                        steamId,
+                        gameType,
+                        game,
+                        staleCacheKey,
+                        requestId,
+                        "Steam inventory HTTP request failed.",
                         CancellationToken.None) is { } persistentStaleInventory)
                 {
                     return persistentStaleInventory;
@@ -517,12 +555,12 @@ public class SteamInventoryService : ISteamInventoryService
                     exception,
                     cancellationToken);
                 if (await TryLoadPersistentStaleInventoryAsync(
-                    steamId,
-                    gameType,
-                    game,
-                    staleCacheKey,
-                    requestId,
-                    "Steam inventory JSON parsing failed.",
+                        steamId,
+                        gameType,
+                        game,
+                        staleCacheKey,
+                        requestId,
+                        "Steam inventory JSON parsing failed.",
                         CancellationToken.None) is { } persistentStaleInventory)
                 {
                     return persistentStaleInventory;
@@ -542,12 +580,12 @@ public class SteamInventoryService : ISteamInventoryService
                     exception,
                     cancellationToken);
                 if (await TryLoadPersistentStaleInventoryAsync(
-                    steamId,
-                    gameType,
-                    game,
-                    staleCacheKey,
-                    requestId,
-                    "Steam inventory failed unexpectedly.",
+                        steamId,
+                        gameType,
+                        game,
+                        staleCacheKey,
+                        requestId,
+                        "Steam inventory failed unexpectedly.",
                         CancellationToken.None) is { } persistentStaleInventory)
                 {
                     return persistentStaleInventory;
@@ -562,6 +600,10 @@ public class SteamInventoryService : ISteamInventoryService
         finally
         {
             requestLock.Release();
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Inventory request lock released. RequestId={requestId}; SteamId={steamId}; Game={game.Key}",
+                cancellationToken: CancellationToken.None);
         }
     }
 
@@ -593,6 +635,78 @@ public class SteamInventoryService : ISteamInventoryService
         return string.IsNullOrWhiteSpace(iconPath) ? null : $"{IconBaseUrl}{iconPath}";
     }
 
+    private async Task LogMemoryCacheDiagnosticsAsync(
+        string freshCacheKey,
+        string staleCacheKey,
+        string cooldownKey,
+        string globalCooldownKey,
+        string botCooldownKey,
+        string botGlobalCooldownKey,
+        string requestId,
+        string steamId,
+        string gameKey,
+        CancellationToken cancellationToken)
+    {
+        var freshHit = _memoryCache.TryGetValue<SteamInventoryResultDto>(freshCacheKey, out var freshInventory) &&
+                       freshInventory is not null;
+        var staleHit = _memoryCache.TryGetValue<SteamInventoryResultDto>(staleCacheKey, out var staleInventory) &&
+                       staleInventory is not null;
+        var scopedCooldown = GetCooldownUntil(cooldownKey);
+        var globalCooldown = GetCooldownUntil(globalCooldownKey);
+        var botScopedCooldown = GetCooldownUntil(botCooldownKey);
+        var botGlobalCooldown = GetCooldownUntil(botGlobalCooldownKey);
+
+        await WriteInventoryLogAsync(
+            "Info",
+            $"Memory cache diagnostics. RequestId={requestId}; SteamId={steamId}; Game={gameKey}; FreshHit={freshHit}; FreshItems={FormatItemCount(freshInventory)}; FreshCachedAt={FormatCachedAt(freshInventory)}; StaleHit={staleHit}; StaleItems={FormatItemCount(staleInventory)}; StaleCachedAt={FormatCachedAt(staleInventory)}; SteamCooldownScoped={FormatCooldown(scopedCooldown)}; SteamCooldownGlobal={FormatCooldown(globalCooldown)}; BotCooldownScoped={FormatCooldown(botScopedCooldown)}; BotCooldownGlobal={FormatCooldown(botGlobalCooldown)}",
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task LogPersistentCacheSnapshotAsync(
+        string steamId,
+        GameDefinition game,
+        string requestId,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var contextId = game.SteamContextId.ToString();
+            var now = DateTime.UtcNow;
+            var entry = await dbContext.SteamInventoryCacheEntries
+                .AsNoTracking()
+                .Where(item => item.SteamId == steamId &&
+                               item.AppId == game.SteamAppId &&
+                               item.ContextId == contextId)
+                .OrderByDescending(item => item.FetchedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (entry is null)
+            {
+                await WriteInventoryLogAsync(
+                    "Info",
+                    $"Persistent cache snapshot. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Exists=False; Reason={reason}",
+                    cancellationToken: cancellationToken);
+                return;
+            }
+
+            await WriteInventoryLogAsync(
+                entry.ExpiresAtUtc > now ? "Info" : "Warning",
+                $"Persistent cache snapshot. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Exists=True; Usable={entry.ExpiresAtUtc > now}; ItemCount={entry.ItemCount}; JsonLength={entry.ItemsJson.Length}; FetchedAt={entry.FetchedAtUtc:O}; ExpiresAt={entry.ExpiresAtUtc:O}; AgeMinutes={(int)(now - entry.FetchedAtUtc).TotalMinutes}; ExpiresInMinutes={(int)(entry.ExpiresAtUtc - now).TotalMinutes}; Reason={reason}",
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            await WriteInventoryLogAsync(
+                "Error",
+                $"Persistent cache snapshot failed. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Reason={reason}; ExceptionType={exception.GetType().Name}; Message={exception.Message}",
+                exception,
+                CancellationToken.None);
+        }
+    }
+
     private void CacheInventory(string freshCacheKey, string staleCacheKey, SteamInventoryResultDto result)
     {
         result.IsStale = false;
@@ -612,6 +726,10 @@ public class SteamInventoryService : ISteamInventoryService
         if (!_memoryCache.TryGetValue<SteamInventoryResultDto>(staleCacheKey, out var staleInventory) ||
             staleInventory is null)
         {
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Stale memory cache miss. RequestId={requestId}; SteamId={steamId}; Game={gameKey}; Reason={reason}",
+                cancellationToken: cancellationToken);
             return null;
         }
 
@@ -634,6 +752,11 @@ public class SteamInventoryService : ISteamInventoryService
     {
         try
         {
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Persistent stale lookup started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Reason={reason}",
+                cancellationToken: cancellationToken);
+
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var now = DateTime.UtcNow;
@@ -641,16 +764,42 @@ public class SteamInventoryService : ISteamInventoryService
                 .AsNoTracking()
                 .Where(item => item.SteamId == steamId &&
                                item.AppId == game.SteamAppId &&
-                               item.ContextId == game.SteamContextId.ToString() &&
-                               item.ExpiresAtUtc > now)
+                               item.ContextId == game.SteamContextId.ToString())
                 .OrderByDescending(item => item.FetchedAtUtc)
                 .FirstOrDefaultAsync(cancellationToken);
             if (entry is null)
             {
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Persistent stale lookup miss. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Exists=False; Reason={reason}",
+                    cancellationToken: cancellationToken);
                 return null;
             }
 
-            var items = JsonSerializer.Deserialize<List<SteamInventoryItemDto>>(entry.ItemsJson, SerializerOptions) ?? new List<SteamInventoryItemDto>();
+            if (entry.ExpiresAtUtc <= now)
+            {
+                await WriteInventoryLogAsync(
+                    "Warning",
+                    $"Persistent stale lookup miss. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Exists=True; Usable=False; ItemCount={entry.ItemCount}; JsonLength={entry.ItemsJson.Length}; FetchedAt={entry.FetchedAtUtc:O}; ExpiresAt={entry.ExpiresAtUtc:O}; ExpiredMinutes={(int)(now - entry.ExpiresAtUtc).TotalMinutes}; Reason={reason}",
+                    cancellationToken: cancellationToken);
+                return null;
+            }
+
+            List<SteamInventoryItemDto> items;
+            try
+            {
+                items = JsonSerializer.Deserialize<List<SteamInventoryItemDto>>(entry.ItemsJson, SerializerOptions) ?? new List<SteamInventoryItemDto>();
+            }
+            catch (JsonException exception)
+            {
+                await WriteInventoryLogAsync(
+                    "Error",
+                    $"Persistent stale lookup deserialize failed. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={entry.ItemCount}; JsonLength={entry.ItemsJson.Length}; FetchedAt={entry.FetchedAtUtc:O}; ExpiresAt={entry.ExpiresAtUtc:O}; Message={exception.Message}; Reason={reason}",
+                    exception,
+                    CancellationToken.None);
+                return null;
+            }
+
             foreach (var item in items)
             {
                 item.GameType = gameType;
@@ -697,6 +846,11 @@ public class SteamInventoryService : ISteamInventoryService
 
         try
         {
+            await WriteInventoryLogAsync(
+                "Info",
+                $"Persistent inventory cache save started. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={result.Items.Count}; IsStale={result.IsStale}; CachedAt={result.CachedAtUtc?.ToString("O") ?? "<null>"}",
+                cancellationToken: cancellationToken);
+
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var now = DateTime.UtcNow;
@@ -708,8 +862,10 @@ public class SteamInventoryService : ISteamInventoryService
                             item.ContextId == contextId,
                     cancellationToken);
 
+            var saveMode = "Update";
             if (entry is null)
             {
+                saveMode = "Create";
                 entry = new SteamInventoryCacheEntry
                 {
                     Id = Guid.NewGuid(),
@@ -729,7 +885,7 @@ public class SteamInventoryService : ISteamInventoryService
 
             await WriteInventoryLogAsync(
                 "Info",
-                $"Persistent inventory cache saved. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; ItemCount={result.Items.Count}; ExpiresAt={entry.ExpiresAtUtc:O}",
+                $"Persistent inventory cache saved. RequestId={requestId}; SteamId={steamId}; Game={game.Key}; Mode={saveMode}; ItemCount={result.Items.Count}; JsonLength={entry.ItemsJson.Length}; FetchedAt={entry.FetchedAtUtc:O}; ExpiresAt={entry.ExpiresAtUtc:O}",
                 cancellationToken: cancellationToken);
         }
         catch (Exception exception)
@@ -748,19 +904,26 @@ public class SteamInventoryService : ISteamInventoryService
         var now = DateTimeOffset.UtcNow;
         foreach (var key in keys)
         {
-            if (!_memoryCache.TryGetValue<DateTimeOffset>(key, out var cooldownUntil) ||
-                cooldownUntil <= now)
+            var cooldownUntil = GetCooldownUntil(key);
+            if (cooldownUntil is null || cooldownUntil <= now)
             {
                 continue;
             }
 
-            if (latest is null || cooldownUntil > latest.Value)
+            if (latest is null || cooldownUntil.Value > latest.Value)
             {
-                latest = cooldownUntil;
+                latest = cooldownUntil.Value;
             }
         }
 
         return latest;
+    }
+
+    private DateTimeOffset? GetCooldownUntil(string key)
+    {
+        return _memoryCache.TryGetValue<DateTimeOffset>(key, out var cooldownUntil)
+            ? cooldownUntil
+            : null;
     }
 
     private DateTimeOffset ActivateCooldown(string scopedCooldownKey, string globalCooldownKey, TimeSpan duration)
@@ -954,6 +1117,29 @@ public class SteamInventoryService : ISteamInventoryService
     private static string FormatInt(int? value)
     {
         return value?.ToString() ?? "<null>";
+    }
+
+    private static string FormatItemCount(SteamInventoryResultDto? result)
+    {
+        return result?.Items.Count.ToString() ?? "<null>";
+    }
+
+    private static string FormatCachedAt(SteamInventoryResultDto? result)
+    {
+        return result?.CachedAtUtc?.ToString("O") ?? "<null>";
+    }
+
+    private static string FormatCooldown(DateTimeOffset? cooldownUntil)
+    {
+        if (cooldownUntil is null)
+        {
+            return "<none>";
+        }
+
+        var remainingSeconds = (int)Math.Ceiling((cooldownUntil.Value - DateTimeOffset.UtcNow).TotalSeconds);
+        return remainingSeconds > 0
+            ? $"{cooldownUntil.Value.UtcDateTime:O} ({remainingSeconds}s remaining)"
+            : $"{cooldownUntil.Value.UtcDateTime:O} (expired)";
     }
 
     private static string FormatNullableBool(bool? value)

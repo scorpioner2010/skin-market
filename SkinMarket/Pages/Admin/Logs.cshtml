@@ -3,7 +3,7 @@
 @{
     ViewData["Title"] = "Bot Logs";
     var recentBotIssues = Model.BotStatus.Bot.RecentIssues ?? new List<SkinMarket.Models.BotServiceIssueSnapshot>();
-    var take = Model.Limit <= 0 ? 50 : Math.Min(Model.Limit, 200);
+    var take = Model.Limit <= 0 ? 100 : Math.Min(Model.Limit, 500);
 }
 
 <div class="py-4">
@@ -52,9 +52,9 @@
             </div>
             <form method="get" class="action-row">
                 <select name="Limit" class="form-select app-input" style="max-width: 120px;">
-                    <option value="25" selected="@(Model.Limit == 25)">25</option>
-                    <option value="50" selected="@(Model.Limit != 25 && Model.Limit != 100)">50</option>
-                    <option value="100" selected="@(Model.Limit == 100)">100</option>
+                    <option value="100" selected="@(Model.Limit != 250 && Model.Limit != 500)">100</option>
+                    <option value="250" selected="@(Model.Limit == 250)">250</option>
+                    <option value="500" selected="@(Model.Limit == 500)">500</option>
                 </select>
                 <button type="submit" class="btn app-button-secondary">Apply</button>
             </form>

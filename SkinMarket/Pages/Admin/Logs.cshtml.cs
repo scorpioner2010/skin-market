@@ -20,7 +20,7 @@ public class LogsModel : PageModel
     }
 
     [BindProperty(SupportsGet = true)]
-    public int Limit { get; set; } = 50;
+    public int Limit { get; set; } = 100;
 
     public BotServiceStatusSnapshot BotStatus { get; private set; } = new();
     public IReadOnlyList<AppLog> AppEntries { get; private set; } = Array.Empty<AppLog>();
@@ -30,7 +30,7 @@ public class LogsModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        var take = Limit <= 0 ? 50 : Math.Min(Limit, 200);
+        var take = Limit <= 0 ? 100 : Math.Min(Limit, 500);
         BotStatus = await _botServiceStatusClient.GetStatusAsync(cancellationToken);
         var recent = _appLogReader.GetRecent(take * 4, sources: BotDiagnosticsCatalog.AppLogSources);
         AppEntries = BotDiagnosticsCatalog.FilterImportantAppEntries(recent, take);

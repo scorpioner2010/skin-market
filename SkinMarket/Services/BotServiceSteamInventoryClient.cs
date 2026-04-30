@@ -1,5 +1,6 @@
-using System.Text.Json;
+using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
 using SkinMarket.Infrastructure;
@@ -54,13 +55,21 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
 
         try
         {
+            var stopwatch = Stopwatch.StartNew();
             using var response = await _httpClient.PostAsJsonAsync(
                 "/api/inventory/user",
                 request,
                 SerializerOptions,
                 cancellationToken);
             MarkServiceReachable();
-            var payload = await DeserializeAsync<GetInventoryResponse>(response, cancellationToken);
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            await _appLogService.WriteAsync(
+                response.IsSuccessStatusCode ? "Info" : "Warning",
+                $"Bot inventory response received. SteamId={steamId}; Game={game.Key}; Http={(int)response.StatusCode}; Reason={response.ReasonPhrase ?? "<null>"}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ContentLength={response.Content.Headers.ContentLength?.ToString() ?? "<null>"}; ContentType={response.Content.Headers.ContentType?.ToString() ?? "<null>"}; Body={BuildBodySnippet(content)}",
+                nameof(BotServiceSteamInventoryClient),
+                cancellationToken: cancellationToken);
+
+            var payload = Deserialize<GetInventoryResponse>(content);
             if (!response.IsSuccessStatusCode || payload is null)
             {
                 var message = payload?.Message ?? $"Bot inventory request failed with HTTP {(int)response.StatusCode}.";
@@ -82,7 +91,7 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
 
             await _appLogService.WriteAsync(
                 payload.Success ? "Info" : "Warning",
-                $"Bot inventory request finished. SteamId={steamId}; Game={game.Key}; Success={payload.Success}; ItemCount={payload.Items.Count}; TotalInventoryCount={payload.TotalInventoryCount?.ToString() ?? "<null>"}; Message={payload.Message ?? "<null>"}",
+                $"Bot inventory request finished. SteamId={steamId}; Game={game.Key}; Success={payload.Success}; ItemCount={payload.Items.Count}; TotalInventoryCount={payload.TotalInventoryCount?.ToString() ?? "<null>"}; Message={payload.Message ?? "<null>"}; ElapsedMs={stopwatch.ElapsedMilliseconds}",
                 nameof(BotServiceSteamInventoryClient),
                 cancellationToken: cancellationToken);
 
@@ -126,15 +135,39 @@ public class BotServiceSteamInventoryClient : ISteamBotInventoryClient
         }
     }
 
-    private static async Task<T?> DeserializeAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken)
+    private static T? Deserialize<T>(string content)
     {
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(content))
         {
             return default;
         }
 
         return JsonSerializer.Deserialize<T>(content, SerializerOptions);
+    }
+
+    private static string BuildBodySnippet(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "<empty>";
+        }
+
+        var compact = body
+            .Replace("\r", " ", StringComparison.Ordinal)
+            .Replace("\n", " ", StringComparison.Ordinal)
+            .Replace("\t", " ", StringComparison.Ordinal);
+
+        while (compact.Contains("  ", StringComparison.Ordinal))
+        {
+            compact = compact.Replace("  ", " ", StringComparison.Ordinal);
+        }
+
+        return Truncate(compact.Trim(), 400);
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        return value.Length <= maxLength ? value : value[..maxLength] + "...";
     }
 
     private void MarkServiceReachable()
