@@ -82,37 +82,41 @@
             }
             else
             {
-                <div class="history-table-shell admin-items-shell">
-                    <div class="history-table admin-items-table">
-                        <div class="history-table-row history-table-header">
-                            <span>Item</span>
-                            <span>Image</span>
-                            <span>Price</span>
-                            <span>Created</span>
-                            <span>Actions</span>
+                <div class="market-table-shell admin-table-shell admin-items-shell">
+                    <div class="market-table-list admin-items-table">
+                        <div class="market-table-row market-table-header admin-items-row">
+                            <div class="market-table-cell market-table-item-cell">Item</div>
+                            <div class="market-table-cell">Image</div>
+                            <div class="market-table-cell">Price</div>
+                            <div class="market-table-cell">Created</div>
+                            <div class="market-table-cell market-table-actions-cell">Actions</div>
                         </div>
                         @foreach (var item in Model.Items)
                         {
-                            <article class="history-table-row admin-item-row">
-                                <div class="admin-item-main">
-                                    <strong>@item.Name</strong>
-                                    @if (!string.IsNullOrWhiteSpace(item.Description))
-                                    {
-                                        <div class="inventory-meta">@item.Description</div>
-                                    }
-                                    <div class="inventory-meta break-value">@item.Id</div>
+                            <article class="market-table-row admin-items-row admin-item-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Item">
+                                    <div class="market-table-copy admin-item-main">
+                                        <strong>@item.Name</strong>
+                                        @if (!string.IsNullOrWhiteSpace(item.Description))
+                                        {
+                                            <div class="inventory-meta">@item.Description</div>
+                                        }
+                                        <div class="inventory-meta break-value">@item.Id</div>
+                                    </div>
                                 </div>
-                                <div>
+                                <div class="market-table-cell" data-label="Image">
                                     <img class="admin-item-thumbnail" src="@item.ImageUrl" alt="@item.Name" />
                                 </div>
-                                <div>
+                                <div class="market-table-cell" data-label="Price">
                                     <span class="price-value">$@item.Price.ToString("0.00")</span>
                                 </div>
-                                <div>
-                                    <div>@FormatLocalDateTime(item.CreatedAtUtc)</div>
-                                    <div class="inventory-meta break-value">@item.ImageFileName</div>
+                                <div class="market-table-cell" data-label="Created">
+                                    <div class="market-table-copy">
+                                        <div>@FormatLocalDateTime(item.CreatedAtUtc)</div>
+                                        <div class="inventory-meta break-value">@item.ImageFileName</div>
+                                    </div>
                                 </div>
-                                <div class="admin-item-actions">
+                                <div class="market-table-cell market-table-actions-cell admin-item-actions" data-label="Actions">
                                     <form method="post"
                                           asp-page-handler="Delete"
                                           onsubmit="return confirm('Delete this item from the database and remove its uploaded image?');">

@@ -21,6 +21,16 @@
         </div>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    {
+        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    {
+        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+    }
+
     <section class="page-section admin-games-shell">
         <div class="content-card">
             <div class="card-heading">
@@ -39,22 +49,28 @@
             }
             else
             {
-                <div class="history-table-shell admin-games-table-shell">
-                    <div class="history-table admin-games-table">
-                        <div class="history-table-row history-table-header">
-                            <span>Game</span>
-                            <span>Status</span>
-                            <span>Actions</span>
+                <div class="market-table-shell admin-table-shell admin-games-table-shell">
+                    <div class="market-table-list admin-games-table">
+                        <div class="market-table-row market-table-header admin-games-row">
+                            <div class="market-table-cell market-table-item-cell">Game</div>
+                            <div class="market-table-cell">Status</div>
+                            <div class="market-table-cell market-table-actions-cell">Actions</div>
                         </div>
                         @foreach (var game in Model.Games)
                         {
-                            <article class="history-table-row">
-                                <div class="admin-game-main">
-                                    <strong>@game.Name</strong>
-                                    <div class="inventory-meta break-value">@game.Key</div>
+                            <article class="market-table-row admin-games-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Game">
+                                    <div class="market-table-copy admin-game-main">
+                                        <strong>@game.Name</strong>
+                                        <div class="inventory-meta break-value">@game.Key</div>
+                                    </div>
                                 </div>
-                                <span class="compact-badge">@game.Status</span>
-                                <a class="btn app-button-secondary" asp-page="/Admin/Games" asp-route-gameKey="@game.Key">Settings</a>
+                                <div class="market-table-cell" data-label="Status">
+                                    <span class="compact-badge">@game.Status</span>
+                                </div>
+                                <div class="market-table-cell market-table-actions-cell" data-label="Actions">
+                                    <a class="btn app-button-secondary market-table-action-button" asp-page="/Admin/Games" asp-route-gameKey="@game.Key">Settings</a>
+                                </div>
                             </article>
                         }
                     </div>
@@ -70,18 +86,98 @@
                 </div>
             </div>
 
-            <div class="empty-state compact">
-                @if (Model.SelectedGame is null)
-                {
+            @if (Model.SelectedGame is null)
+            {
+                <div class="empty-state compact">
                     <h3>No game selected.</h3>
                     <p class="text-muted mb-0">Settings controls will be shown here when games are added.</p>
-                }
-                else
-                {
+                </div>
+            }
+            else if (Model.SelectedGame.Key != "minefield")
+            {
+                <div class="empty-state compact">
                     <h3>@Model.SelectedGame.Name</h3>
-                    <p class="text-muted mb-0">Server API is ready. Runtime settings controls can be added here when Minefield needs configurable odds, limits, or WebGL build metadata.</p>
-                }
-            </div>
+                    <p class="text-muted mb-0">This game does not have custom admin settings yet.</p>
+                </div>
+            }
+
+            @if (Model.SelectedGame?.Key == "minefield")
+            {
+                <form method="post" asp-page-handler="SaveMinefield" asp-route-gameKey="@Model.SelectedGame.Key" class="stack-form">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" asp-for="MinefieldInput.IsEnabled" />
+                        <label class="form-check-label" asp-for="MinefieldInput.IsEnabled">Game enabled</label>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" asp-for="MinefieldInput.MinimumBet">Minimum bet</label>
+                            <input class="form-control app-input" asp-for="MinefieldInput.MinimumBet" type="number" min="0.01" max="1000000" step="0.01" />
+                            <span class="text-danger" asp-validation-for="MinefieldInput.MinimumBet"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" asp-for="MinefieldInput.MaximumBet">Maximum bet</label>
+                            <input class="form-control app-input" asp-for="MinefieldInput.MaximumBet" type="number" min="0.01" max="1000000" step="0.01" />
+                            <span class="text-danger" asp-validation-for="MinefieldInput.MaximumBet"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" asp-for="MinefieldInput.MinesPerLine">Mines per line</label>
+                            <input class="form-control app-input" asp-for="MinefieldInput.MinesPerLine" type="number" min="1" max="4" step="1" />
+                            <span class="text-danger" asp-validation-for="MinefieldInput.MinesPerLine"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" asp-for="MinefieldInput.ReturnToPlayerPercent">RTP (%)</label>
+                            <input class="form-control app-input" asp-for="MinefieldInput.ReturnToPlayerPercent" type="number" min="1" max="100" step="0.01" />
+                            <span class="text-danger" asp-validation-for="MinefieldInput.ReturnToPlayerPercent"></span>
+                        </div>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" asp-for="MinefieldInput.UseCustomStepSafeChances" />
+                        <label class="form-check-label" asp-for="MinefieldInput.UseCustomStepSafeChances">Use custom safe chance per step</label>
+                    </div>
+
+                    <div class="meta-note">
+                        Field size is fixed at 10 rows x 5 columns for the current Unity build. Multipliers below are generated from RTP and the active safe chances.
+                    </div>
+
+                    <div class="market-table-shell admin-table-shell">
+                        <div class="market-table-list admin-minefield-steps-table">
+                            <div class="market-table-row market-table-header admin-minefield-step-row">
+                                <div class="market-table-cell">Step</div>
+                                <div class="market-table-cell">Safe chance (%)</div>
+                                <div class="market-table-cell">Mine chance</div>
+                                <div class="market-table-cell">Multiplier</div>
+                            </div>
+                            @for (var i = 0; i < Model.MinefieldInput.StepSafeChancePercents.Count; i++)
+                            {
+                                var preview = i < Model.MinefieldStepPreview.Count ? Model.MinefieldStepPreview[i] : null;
+                                <article class="market-table-row admin-minefield-step-row">
+                                    <div class="market-table-cell" data-label="Step">@(i + 1)</div>
+                                    <div class="market-table-cell" data-label="Safe chance (%)">
+                                        <input class="form-control app-input" asp-for="MinefieldInput.StepSafeChancePercents[i]" type="number" min="1" max="100" step="0.01" />
+                                        <span class="text-danger" asp-validation-for="MinefieldInput.StepSafeChancePercents[i]"></span>
+                                    </div>
+                                    <div class="market-table-cell" data-label="Mine chance">
+                                        @(preview?.MineChancePercent.ToString("0.##") ?? "0")%
+                                    </div>
+                                    <div class="market-table-cell" data-label="Multiplier">
+                                        x@(preview?.Multiplier.ToString("0.0") ?? "0.0")
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn app-button-primary">Save Minefield settings</button>
+                </form>
+            }
         </div>
     </section>
 </div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

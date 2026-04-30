@@ -602,14 +602,14 @@ a:hover {
 }
 
 .history-table-shell {
-  overflow-x: auto;
+  overflow: visible;
   border: 1px solid #d8e0ea;
   border-radius: var(--vk-radius);
   background: #fff;
 }
 
 .history-table {
-  min-width: 860px;
+  min-width: 0;
   display: grid;
 }
 
@@ -631,17 +631,18 @@ a:hover {
   width: 100%;
 }
 
-.admin-bot-purchases-table .history-table-row,
-.admin-bot-sales-table .history-table-row {
+.admin-bot-purchases-table .admin-bot-history-row,
+.admin-bot-sales-table .admin-bot-history-row {
   grid-template-columns: minmax(170px, 1.4fr) minmax(150px, 1fr) minmax(120px, 0.75fr) minmax(110px, 0.7fr) minmax(220px, 1.35fr);
+  align-items: start;
 }
 
 .admin-accounts-table {
-  min-width: 980px;
+  min-width: 0;
 }
 
-.admin-accounts-table .history-table-row {
-  grid-template-columns: minmax(260px, 1.35fr) minmax(110px, 0.5fr) minmax(90px, 0.4fr) minmax(230px, 0.95fr) minmax(320px, 1.25fr);
+.admin-accounts-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(84px, 0.42fr) minmax(120px, 0.58fr) minmax(0, 1.08fr) minmax(220px, 1.32fr);
 }
 
 .admin-items-grid {
@@ -657,11 +658,11 @@ a:hover {
 }
 
 .admin-items-table {
-  min-width: 820px;
+  min-width: 0;
 }
 
-.admin-items-table .history-table-row {
-  grid-template-columns: minmax(230px, 1.3fr) minmax(90px, 0.45fr) minmax(90px, 0.45fr) minmax(160px, 0.85fr) minmax(120px, 0.55fr);
+.admin-items-row {
+  grid-template-columns: minmax(0, 1.55fr) minmax(74px, 0.35fr) minmax(82px, 0.4fr) minmax(0, 0.9fr) minmax(120px, 0.55fr);
 }
 
 .games-empty-state {
@@ -669,26 +670,47 @@ a:hover {
 }
 
 .games-card-grid {
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.games-section-heading {
+  justify-content: flex-end;
 }
 
 .game-card {
-  display: grid;
-  gap: 12px;
-  align-content: start;
+  min-height: 100%;
+}
+
+.game-card-top {
+  flex: 1;
+}
+
+.game-card-visual {
+  min-height: 104px;
 }
 
 .game-card-mark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  color: var(--vk-accent-dark);
-  background: #eef9fb;
-  border: 1px solid var(--vk-accent-border);
-  border-radius: var(--vk-radius);
-  font-size: 13px;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.games-table-shell[hidden] {
+  display: none;
+}
+
+.games-table-row {
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.3fr) minmax(96px, 0.25fr);
+}
+
+.game-table-mark {
+  color: #fff;
+  background: linear-gradient(180deg, #24adbd 0%, #08727f 100%);
+  border: 0;
   font-weight: 800;
 }
 
@@ -703,15 +725,18 @@ a:hover {
   display: grid;
   place-items: center;
   overflow: hidden;
-  min-height: 640px;
+  min-height: 0;
+  height: min(960px, calc(100dvh - 280px));
+  max-height: calc(100dvh - 280px);
   background: #111820;
   border: 1px solid #d8e0ea;
   border-radius: var(--vk-radius);
 }
 
 .game-unity-canvas {
-  width: min(100%, 600px);
+  width: min(100%, 600px, calc((100dvh - 280px) * 0.625));
   height: auto;
+  max-height: min(100%, 960px, calc(100dvh - 280px));
   aspect-ratio: 600 / 960;
   background: #111820;
   outline: none;
@@ -797,11 +822,15 @@ a:hover {
 }
 
 .admin-games-table {
-  min-width: 620px;
+  min-width: 0;
 }
 
-.admin-games-table .history-table-row {
+.admin-games-row {
   grid-template-columns: minmax(220px, 1fr) minmax(90px, 0.4fr) minmax(110px, 0.45fr);
+}
+
+.admin-minefield-step-row {
+  grid-template-columns: minmax(48px, 0.35fr) minmax(0, 1fr) minmax(82px, 0.55fr) minmax(82px, 0.55fr);
 }
 
 .admin-game-main {
@@ -894,6 +923,45 @@ a:hover {
   color: #536579;
 }
 
+.market-table-cell.admin-bot-history-meta {
+  align-items: start;
+}
+
+.market-table-cell.admin-bot-history-meta::before {
+  display: none;
+}
+
+.admin-log-row,
+.admin-activity-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(82px, 0.35fr) minmax(150px, 0.72fr) minmax(0, 1.05fr);
+  align-items: start;
+}
+
+.admin-log-details {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+  color: var(--vk-muted);
+  font-size: 12px;
+}
+
+.admin-log-stack {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-log-stack summary {
+  color: var(--vk-accent-dark);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-log-stack pre {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .admin-bot-history-actions {
   display: flex;
   flex-wrap: wrap;
@@ -913,19 +981,25 @@ a:hover {
 }
 
 @media (max-width: 900px) {
-  .admin-bot-purchases-table .history-table-row,
-  .admin-bot-sales-table .history-table-row,
-  .admin-accounts-table .history-table-row,
-  .admin-items-table .history-table-row,
-  .admin-games-table .history-table-row {
+  .admin-bot-history-row,
+  .admin-accounts-row,
+  .admin-items-row,
+  .admin-games-row,
+  .admin-minefield-step-row,
+  .admin-log-row,
+  .admin-activity-row,
+  .games-table-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .admin-bot-purchases-table .history-table-header,
-  .admin-bot-sales-table .history-table-header,
-  .admin-accounts-table .history-table-header,
-  .admin-items-table .history-table-header,
-  .admin-games-table .history-table-header {
+  .market-table-header.admin-bot-history-row,
+  .market-table-header.admin-accounts-row,
+  .market-table-header.admin-items-row,
+  .market-table-header.admin-games-row,
+  .market-table-header.admin-minefield-step-row,
+  .market-table-header.admin-log-row,
+  .market-table-header.admin-activity-row,
+  .market-table-header.games-table-row {
     display: none;
   }
 
@@ -1499,6 +1573,85 @@ a:hover {
   font-size: 11px;
 }
 
+.admin-table-shell {
+  width: 100%;
+  overflow: visible;
+}
+
+.admin-accounts-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(84px, 0.42fr) minmax(120px, 0.58fr) minmax(0, 1.08fr) minmax(220px, 1.32fr);
+}
+
+.admin-items-row {
+  grid-template-columns: minmax(0, 1.55fr) minmax(74px, 0.35fr) minmax(82px, 0.4fr) minmax(0, 0.9fr) minmax(120px, 0.55fr);
+}
+
+.admin-games-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(90px, 0.4fr) minmax(110px, 0.45fr);
+}
+
+.admin-minefield-step-row {
+  grid-template-columns: minmax(48px, 0.35fr) minmax(0, 1fr) minmax(82px, 0.55fr) minmax(82px, 0.55fr);
+}
+
+.admin-log-row,
+.admin-activity-row {
+  grid-template-columns: minmax(0, 1.45fr) minmax(82px, 0.35fr) minmax(150px, 0.72fr) minmax(0, 1.05fr);
+  align-items: start;
+}
+
+.admin-chat-row {
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.45fr);
+}
+
+.games-table-row {
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.3fr) minmax(96px, 0.25fr);
+}
+
+.market-table-cell.admin-bot-history-meta,
+.market-table-cell.admin-log-details {
+  display: grid;
+  align-items: start;
+}
+
+.admin-account-actions,
+.admin-bot-history-actions,
+.admin-item-actions {
+  justify-content: flex-end;
+}
+
+.admin-account-actions .btn,
+.admin-bot-history-actions .btn,
+.admin-item-actions .btn {
+  white-space: normal;
+}
+
+@media (max-width: 900px) {
+  .admin-bot-history-row,
+  .admin-accounts-row,
+  .admin-items-row,
+  .admin-games-row,
+  .admin-minefield-step-row,
+  .admin-log-row,
+  .admin-activity-row,
+  .admin-chat-row,
+  .games-table-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .market-table-header.admin-bot-history-row,
+  .market-table-header.admin-accounts-row,
+  .market-table-header.admin-items-row,
+  .market-table-header.admin-games-row,
+  .market-table-header.admin-minefield-step-row,
+  .market-table-header.admin-log-row,
+  .market-table-header.admin-activity-row,
+  .market-table-header.admin-chat-row,
+  .market-table-header.games-table-row {
+    display: none;
+  }
+}
+
 .chat-shell {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -1512,6 +1665,31 @@ a:hover {
 
 .admin-chat-shell {
   min-height: 700px;
+  overflow: visible;
+}
+
+.admin-chat-list-shell {
+  min-width: 0;
+  align-self: start;
+}
+
+.admin-chat-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.admin-chat-link.active {
+  background: #f3fbfc;
+  border-color: #cfe9ef;
+}
+
+.admin-chat-shell .chat-contact-list,
+.admin-chat-shell .chat-message-list {
+  overflow-y: visible;
+}
+
+.admin-chat-shell .chat-thread {
+  grid-template-rows: auto auto auto;
 }
 
 .chat-contact-list {

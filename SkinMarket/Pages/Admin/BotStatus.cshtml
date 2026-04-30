@@ -227,19 +227,30 @@
             }
             else
             {
-                <div class="stack-grid">
+                <div class="market-table-shell admin-table-shell admin-activity-shell">
+                    <div class="market-table-list admin-activity-table">
+                        <div class="market-table-row market-table-header admin-activity-row">
+                            <div class="market-table-cell market-table-item-cell">Activity</div>
+                            <div class="market-table-cell">Status</div>
+                            <div class="market-table-cell">Started</div>
+                            <div class="market-table-cell">Details</div>
+                        </div>
                     @foreach (var activity in activeActivities)
                     {
-                        <article class="history-card">
-                            <div class="card-heading">
-                                <div>
-                                    <h3>@activity.Description</h3>
-                                    <p class="card-subtitle">@activity.Type</p>
+                        <article class="market-table-row admin-activity-row">
+                            <div class="market-table-cell market-table-item-cell" data-label="Activity">
+                                <div class="market-table-copy">
+                                    <strong>@activity.Description</strong>
+                                    <div class="card-subtitle">@activity.Type</div>
                                 </div>
+                            </div>
+                            <div class="market-table-cell" data-label="Status">
                                 <span class="status-badge" data-status="Pending">Running</span>
                             </div>
-                            <div class="history-metrics">
-                                <span><strong>Started:</strong> @FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
+                            <div class="market-table-cell" data-label="Started">
+                                <span>@FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
+                            </div>
+                            <div class="market-table-cell admin-log-details" data-label="Details">
                                 @foreach (var detail in activity.Meta)
                                 {
                                     <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
@@ -247,6 +258,7 @@
                             </div>
                         </article>
                     }
+                    </div>
                 </div>
             }
         </section>
@@ -262,23 +274,39 @@
                 else
                 {
                     var activity = Model.ServiceStatus.Bot.LastCompletedActivity;
-                    <article class="history-card">
-                        <div class="card-heading">
-                            <div>
-                                <h3>@activity.Description</h3>
-                                <p class="card-subtitle">@activity.Type</p>
+                    <div class="market-table-shell admin-table-shell admin-activity-shell">
+                        <div class="market-table-list admin-activity-table">
+                            <div class="market-table-row market-table-header admin-activity-row">
+                                <div class="market-table-cell market-table-item-cell">Activity</div>
+                                <div class="market-table-cell">Result</div>
+                                <div class="market-table-cell">Timing</div>
+                                <div class="market-table-cell">Details</div>
                             </div>
-                            <span class="status-badge" data-status="@(string.Equals(activity.Result, "Succeeded", StringComparison.OrdinalIgnoreCase) ? "Credited" : "Failed")">@activity.Result</span>
+                            <article class="market-table-row admin-activity-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Activity">
+                                    <div class="market-table-copy">
+                                        <strong>@activity.Description</strong>
+                                        <div class="card-subtitle">@activity.Type</div>
+                                    </div>
+                                </div>
+                                <div class="market-table-cell" data-label="Result">
+                                    <span class="status-badge" data-status="@(string.Equals(activity.Result, "Succeeded", StringComparison.OrdinalIgnoreCase) ? "Credited" : "Failed")">@activity.Result</span>
+                                </div>
+                                <div class="market-table-cell" data-label="Timing">
+                                    <div class="market-table-copy">
+                                        <span><strong>Started:</strong> @FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
+                                        <span><strong>Finished:</strong> @FormatLocalDateTimeOffset(activity.CompletedAt, "Unknown")</span>
+                                    </div>
+                                </div>
+                                <div class="market-table-cell admin-log-details" data-label="Details">
+                                    @foreach (var detail in activity.Meta)
+                                    {
+                                        <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                                    }
+                                </div>
+                            </article>
                         </div>
-                        <div class="history-metrics">
-                            <span><strong>Started:</strong> @FormatLocalDateTimeOffset(activity.StartedAt, "Unknown")</span>
-                            <span><strong>Finished:</strong> @FormatLocalDateTimeOffset(activity.CompletedAt, "Unknown")</span>
-                            @foreach (var detail in activity.Meta)
-                            {
-                                <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
-                            }
-                        </div>
-                    </article>
+                    </div>
                 }
         </section>
             </div>

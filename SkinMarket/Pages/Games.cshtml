@@ -8,7 +8,6 @@
     <div class="page-header">
         <div>
             <h1>Games</h1>
-            <p class="text-muted mb-0">Unity WebGL games connected to the x-mania service will appear here.</p>
         </div>
     </div>
 
@@ -22,27 +21,101 @@
     else
     {
         <section class="page-section">
-            <div class="section-heading">
-                <div>
-                    <h2>Available games</h2>
-                    <p class="section-description">@Model.Games.Count game(s) connected.</p>
+            <div class="section-heading games-section-heading">
+                <div class="market-view-toggle" role="group" aria-label="Games view">
+                    <button type="button" class="market-view-button active" data-games-view-button="cards">Cards</button>
+                    <button type="button" class="market-view-button" data-games-view-button="table">Table</button>
                 </div>
             </div>
 
-            <div class="card-grid games-card-grid">
+            <div class="card-grid market-card-grid games-card-grid" data-games-view-panel="cards">
                 @foreach (var game in Model.Games)
                 {
-                    <article class="content-card game-card">
-                        <div class="game-card-mark" aria-hidden="true">@game.ShortName</div>
-                        <div>
-                            <h2 class="card-title">@game.Name</h2>
-                            <p class="card-subtitle">@game.Description</p>
+                    <article class="content-card item-card market-item-card game-card">
+                        <div class="market-item-top game-card-top">
+                            <div class="market-item-visual game-card-visual">
+                                <div class="market-item-icon-fallback game-card-mark" aria-hidden="true">@game.ShortName</div>
+                            </div>
+                            <div class="market-item-copy">
+                                <div class="market-item-head">
+                                    <div>
+                                        <h2 class="card-title market-item-title">@game.Name</h2>
+                                        <p class="card-subtitle market-item-subtitle">@game.Description</p>
+                                    </div>
+                                    <span class="compact-badge market-quantity-badge">@game.Status</span>
+                                </div>
+                            </div>
                         </div>
-                        <span class="compact-badge">@game.Status</span>
-                        <a class="btn app-button-secondary" asp-page="/Games/Minefield">Open</a>
+                        <div class="action-row market-item-actions">
+                            <a class="btn app-button-primary market-action-button" asp-page="/Games/Minefield">Open</a>
+                        </div>
                     </article>
                 }
+            </div>
+            <div class="market-table-shell games-table-shell" data-games-view-panel="table" hidden>
+                <div class="market-table-list games-table-list">
+                    <div class="market-table-row market-table-header games-table-row">
+                        <div class="market-table-cell market-table-item-cell">Game</div>
+                        <div class="market-table-cell">Status</div>
+                        <div class="market-table-cell market-table-actions-cell">Action</div>
+                    </div>
+                    @foreach (var game in Model.Games)
+                    {
+                        <article class="market-table-row games-table-row">
+                            <div class="market-table-cell market-table-item-cell" data-label="Game">
+                                <div class="market-table-main">
+                                    <div class="inventory-icon inventory-icon-fallback game-table-mark" aria-hidden="true">@game.ShortName</div>
+                                    <div class="market-table-copy">
+                                        <h2 class="inventory-item-name">@game.Name</h2>
+                                        <div class="inventory-meta market-table-subtitle">@game.Description</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="market-table-cell" data-label="Status">
+                                <span class="compact-badge">@game.Status</span>
+                            </div>
+                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
+                                <a class="btn app-button-primary market-table-action-button" asp-page="/Games/Minefield">Open</a>
+                            </div>
+                        </article>
+                    }
+                </div>
             </div>
         </section>
     }
 </div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const buttons = Array.from(document.querySelectorAll('[data-games-view-button]'));
+            const panels = Array.from(document.querySelectorAll('[data-games-view-panel]'));
+            if (buttons.length === 0 || panels.length === 0) {
+                return;
+            }
+
+            const storageKey = 'skinmarket-games-view';
+            const activate = (view) => {
+                const target = view === 'table' ? 'table' : 'cards';
+
+                buttons.forEach((button) => {
+                    button.classList.toggle('active', button.dataset.gamesViewButton === target);
+                });
+
+                panels.forEach((panel) => {
+                    panel.hidden = panel.dataset.gamesViewPanel !== target;
+                });
+            };
+
+            activate(localStorage.getItem(storageKey) || 'cards');
+
+            buttons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    const view = button.dataset.gamesViewButton || 'cards';
+                    localStorage.setItem(storageKey, view);
+                    activate(view);
+                });
+            });
+        })();
+    </script>
+}

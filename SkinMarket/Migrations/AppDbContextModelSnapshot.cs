@@ -377,6 +377,65 @@ namespace SkinMarket.Migrations
                     b.ToTable("MinefieldGameSessions", (string)null);
                 });
 
+            modelBuilder.Entity("SkinMarket.Models.MinefieldGameSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Columns")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GameKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasDefaultValue(true)
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("MaximumBet")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("MinesPerLine")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("MinimumBet")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ReturnToPlayer")
+                        .HasPrecision(6, 4)
+                        .HasColumnType("numeric(6,4)");
+
+                    b.Property<int>("Rows")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StepSafeChancesJson")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("UseCustomStepSafeChances")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameKey")
+                        .IsUnique();
+
+                    b.ToTable("MinefieldGameSettings", (string)null);
+                });
+
             modelBuilder.Entity("SkinMarket.Models.PriceSnapshot", b =>
                 {
                     b.Property<Guid>("Id")

@@ -52,6 +52,10 @@
             const fullscreenButton = document.querySelector("#unity-fullscreen-button");
             const warningBanner = document.querySelector("#unity-warning");
 
+            if (!canvas || !loadingBar || !progressBarFull || !fullscreenButton || !warningBanner) {
+                return;
+            }
+
             function unityShowBanner(message, type) {
                 const item = document.createElement("div");
                 item.textContent = message;

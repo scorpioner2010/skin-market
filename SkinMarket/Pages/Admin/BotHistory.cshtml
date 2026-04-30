@@ -53,32 +53,40 @@
             }
             else
             {
-                <div class="history-table-shell admin-bot-history-shell">
-                    <div class="history-table admin-bot-purchases-table">
-                        <div class="history-table-row history-table-header">
-                            <span>Item</span>
-                            <span>Seller</span>
-                            <span>Status</span>
-                            <span>Credit</span>
-                            <span>Links</span>
+                <div class="market-table-shell admin-table-shell admin-bot-history-shell">
+                    <div class="market-table-list admin-bot-purchases-table">
+                        <div class="market-table-row market-table-header admin-bot-history-row">
+                            <div class="market-table-cell market-table-item-cell">Item</div>
+                            <div class="market-table-cell">Seller</div>
+                            <div class="market-table-cell">Status</div>
+                            <div class="market-table-cell">Credit</div>
+                            <div class="market-table-cell market-table-actions-cell">Links</div>
                         </div>
                         @foreach (var item in Model.PurchaseHistory)
                         {
-                            <div class="history-table-row admin-bot-history-row">
-                                <div>
-                                    <div class="history-item-title">@item.ItemName</div>
-                                    <div class="card-subtitle break-value">@item.AssetId</div>
+                            <div class="market-table-row admin-bot-history-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Item">
+                                    <div class="market-table-copy">
+                                        <div class="history-item-title">@item.ItemName</div>
+                                        <div class="card-subtitle break-value">@item.AssetId</div>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div>@item.SellerDisplayName</div>
-                                    <div class="card-subtitle break-value">@item.SellerSteamId</div>
+                                <div class="market-table-cell" data-label="Seller">
+                                    <div class="market-table-copy">
+                                        <div>@item.SellerDisplayName</div>
+                                        <div class="card-subtitle break-value">@item.SellerSteamId</div>
+                                    </div>
                                 </div>
-                                <span class="status-badge" data-status="@item.Status">@item.Status</span>
-                                <div>
-                                    <div>@item.CreditAmount</div>
-                                    <div class="card-subtitle">Credited: @FormatLocalDateTime(item.CreditedAtUtc)</div>
+                                <div class="market-table-cell" data-label="Status">
+                                    <span class="status-badge" data-status="@item.Status">@item.Status</span>
                                 </div>
-                                <div class="admin-bot-history-actions">
+                                <div class="market-table-cell" data-label="Credit">
+                                    <div class="market-table-copy">
+                                        <div>@item.CreditAmount</div>
+                                        <div class="card-subtitle">Credited: @FormatLocalDateTime(item.CreditedAtUtc)</div>
+                                    </div>
+                                </div>
+                                <div class="market-table-cell market-table-actions-cell admin-bot-history-actions" data-label="Links">
                                     @if (Model.CanOpenSellerOffer(item))
                                     {
                                         <a class="btn app-button-primary" href="@BuildSteamOfferUrl(item.TradeOfferId)" target="_blank" rel="noopener">
@@ -94,7 +102,7 @@
                                         <span class="compact-badge compact-badge-neutral">No links</span>
                                     }
                                 </div>
-                                <div class="admin-bot-history-meta">
+                                <div class="market-table-cell admin-bot-history-meta" data-label="Details">
                                     <span><strong>Created:</strong> @FormatLocalDateTime(item.CreatedAtUtc, "Unknown")</span>
                                     <span><strong>Received:</strong> @FormatLocalDateTime(item.ReceivedByBotAtUtc)</span>
                                     <span><strong>Updated:</strong> @FormatLocalDateTime(item.UpdatedAtUtc, "Unknown")</span>
@@ -120,39 +128,45 @@
             }
             else
             {
-                <div class="history-table-shell admin-bot-history-shell">
-                    <div class="history-table admin-bot-sales-table">
-                        <div class="history-table-row history-table-header">
-                            <span>Item</span>
-                            <span>Buyer</span>
-                            <span>Status</span>
-                            <span>Price</span>
-                            <span>Links</span>
+                <div class="market-table-shell admin-table-shell admin-bot-history-shell">
+                    <div class="market-table-list admin-bot-sales-table">
+                        <div class="market-table-row market-table-header admin-bot-history-row">
+                            <div class="market-table-cell market-table-item-cell">Item</div>
+                            <div class="market-table-cell">Buyer</div>
+                            <div class="market-table-cell">Status</div>
+                            <div class="market-table-cell">Price</div>
+                            <div class="market-table-cell market-table-actions-cell">Links</div>
                         </div>
                         @foreach (var item in Model.SaleHistory)
                         {
-                            <div class="history-table-row admin-bot-history-row">
-                                <div>
-                                    <div class="history-item-title">@item.ItemName</div>
-                                    <div class="card-subtitle break-value">@item.AssetId</div>
-                                    @if (!string.IsNullOrWhiteSpace(item.SourceSellerDisplayName))
-                                    {
-                                        <div class="card-subtitle">Source: @item.SourceSellerDisplayName</div>
-                                    }
+                            <div class="market-table-row admin-bot-history-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Item">
+                                    <div class="market-table-copy">
+                                        <div class="history-item-title">@item.ItemName</div>
+                                        <div class="card-subtitle break-value">@item.AssetId</div>
+                                        @if (!string.IsNullOrWhiteSpace(item.SourceSellerDisplayName))
+                                        {
+                                            <div class="card-subtitle">Source: @item.SourceSellerDisplayName</div>
+                                        }
+                                    </div>
                                 </div>
-                                <div>
-                                    <div>@item.BuyerDisplayName</div>
-                                    <div class="card-subtitle break-value">@item.BuyerSteamId</div>
+                                <div class="market-table-cell" data-label="Buyer">
+                                    <div class="market-table-copy">
+                                        <div>@item.BuyerDisplayName</div>
+                                        <div class="card-subtitle break-value">@item.BuyerSteamId</div>
+                                    </div>
                                 </div>
-                                <div class="status-group">
+                                <div class="market-table-cell status-group" data-label="Status">
                                     <span class="status-badge" data-status="@item.Status">@item.Status</span>
                                     @if (!string.IsNullOrWhiteSpace(item.DeliveryStatus))
                                     {
                                         <span class="status-badge" data-status="@item.DeliveryStatus">@item.DeliveryStatus</span>
                                     }
                                 </div>
-                                <span>@item.Price</span>
-                                <div class="admin-bot-history-actions">
+                                <div class="market-table-cell" data-label="Price">
+                                    <span>@item.Price</span>
+                                </div>
+                                <div class="market-table-cell market-table-actions-cell admin-bot-history-actions" data-label="Links">
                                     @if (!string.IsNullOrWhiteSpace(item.BuyerSteamId))
                                     {
                                         <a class="btn app-button-secondary" href="@BuildSteamProfileUrl(item.BuyerSteamId)" target="_blank" rel="noopener">Buyer Steam</a>
@@ -170,7 +184,7 @@
                                         <span class="compact-badge compact-badge-neutral">No links</span>
                                     }
                                 </div>
-                                <div class="admin-bot-history-meta">
+                                <div class="market-table-cell admin-bot-history-meta" data-label="Details">
                                     <span><strong>Created:</strong> @FormatLocalDateTime(item.CreatedAtUtc, "Unknown")</span>
                                     <span><strong>Purchased:</strong> @FormatLocalDateTime(item.PurchasedAtUtc)</span>
                                     <span><strong>Updated:</strong> @FormatLocalDateTime(item.UpdatedAtUtc, "Unknown")</span>

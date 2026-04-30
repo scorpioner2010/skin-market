@@ -80,19 +80,30 @@
                 }
                 else
                 {
-                    <div class="stack-grid">
+                    <div class="market-table-shell admin-table-shell admin-log-shell">
+                        <div class="market-table-list admin-log-table">
+                            <div class="market-table-row market-table-header admin-log-row">
+                                <div class="market-table-cell market-table-item-cell">Issue</div>
+                                <div class="market-table-cell">Level</div>
+                                <div class="market-table-cell">Time</div>
+                                <div class="market-table-cell">Details</div>
+                            </div>
                         @foreach (var issue in recentBotIssues.Take(take))
                         {
-                            <article class="content-card history-card">
-                                <div class="card-heading">
-                                    <div>
-                                        <h3>@issue.Message</h3>
-                                        <p class="card-subtitle">bot-service</p>
+                            <article class="market-table-row admin-log-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Issue">
+                                    <div class="market-table-copy">
+                                        <strong>@issue.Message</strong>
+                                        <div class="card-subtitle">bot-service</div>
                                     </div>
+                                </div>
+                                <div class="market-table-cell" data-label="Level">
                                     <span class="status-badge" data-status="@(string.Equals(issue.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@issue.Level</span>
                                 </div>
-                                <div class="history-metrics">
-                                    <span><strong>At:</strong> @(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                                <div class="market-table-cell" data-label="Time">
+                                    <span>@(issue.Timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "Unknown")</span>
+                                </div>
+                                <div class="market-table-cell admin-log-details" data-label="Details">
                                     @foreach (var detail in issue.Details)
                                     {
                                         <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
@@ -100,6 +111,7 @@
                                 </div>
                             </article>
                         }
+                        </div>
                     </div>
                 }
             </div>
@@ -135,29 +147,45 @@
                 }
                 else
                 {
-                    <div class="stack-grid">
+                    <div class="market-table-shell admin-table-shell admin-log-shell">
+                        <div class="market-table-list admin-log-table">
+                            <div class="market-table-row market-table-header admin-log-row">
+                                <div class="market-table-cell market-table-item-cell">Entry</div>
+                                <div class="market-table-cell">Level</div>
+                                <div class="market-table-cell">Time</div>
+                                <div class="market-table-cell">Details</div>
+                            </div>
                         @foreach (var entry in Model.InventoryEntries)
                         {
-                            <article class="content-card history-card">
-                                <div class="card-heading">
-                                    <div>
-                                        <h3>@entry.Message</h3>
-                                        <p class="card-subtitle">@entry.Source</p>
+                            <article class="market-table-row admin-log-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Entry">
+                                    <div class="market-table-copy">
+                                        <strong>@entry.Message</strong>
+                                        <div class="card-subtitle">@entry.Source</div>
                                     </div>
+                                </div>
+                                <div class="market-table-cell" data-label="Level">
                                     <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited")">@entry.Level</span>
                                 </div>
-                                <div class="history-metrics">
-                                    <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                                <div class="market-table-cell" data-label="Time">
+                                    <span>@entry.TimestampUtc.ToLocalTime()</span>
                                 </div>
-                                @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
-                                {
-                                    <details class="mt-2">
-                                        <summary>Stack trace</summary>
-                                        <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                                    </details>
-                                }
+                                <div class="market-table-cell admin-log-details" data-label="Details">
+                                    @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                                    {
+                                        <details class="admin-log-stack">
+                                            <summary>Stack trace</summary>
+                                            <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                                        </details>
+                                    }
+                                    else
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">No stack trace</span>
+                                    }
+                                </div>
                             </article>
                         }
+                        </div>
                     </div>
                 }
             </div>
@@ -175,29 +203,45 @@
                 }
                 else
                 {
-                    <div class="stack-grid">
+                    <div class="market-table-shell admin-table-shell admin-log-shell">
+                        <div class="market-table-list admin-log-table">
+                            <div class="market-table-row market-table-header admin-log-row">
+                                <div class="market-table-cell market-table-item-cell">Issue</div>
+                                <div class="market-table-cell">Level</div>
+                                <div class="market-table-cell">Time</div>
+                                <div class="market-table-cell">Details</div>
+                            </div>
                         @foreach (var entry in Model.AppEntries)
                         {
-                            <article class="content-card history-card">
-                                <div class="card-heading">
-                                    <div>
-                                        <h3>@entry.Message</h3>
-                                        <p class="card-subtitle">@entry.Source</p>
+                            <article class="market-table-row admin-log-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Issue">
+                                    <div class="market-table-copy">
+                                        <strong>@entry.Message</strong>
+                                        <div class="card-subtitle">@entry.Source</div>
                                     </div>
+                                </div>
+                                <div class="market-table-cell" data-label="Level">
                                     <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : "Pending")">@entry.Level</span>
                                 </div>
-                                <div class="history-metrics">
-                                    <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                                <div class="market-table-cell" data-label="Time">
+                                    <span>@entry.TimestampUtc.ToLocalTime()</span>
                                 </div>
-                                @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
-                                {
-                                    <details class="mt-2">
-                                        <summary>Stack trace</summary>
-                                        <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                                    </details>
-                                }
+                                <div class="market-table-cell admin-log-details" data-label="Details">
+                                    @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                                    {
+                                        <details class="admin-log-stack">
+                                            <summary>Stack trace</summary>
+                                            <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                                        </details>
+                                    }
+                                    else
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">No stack trace</span>
+                                    }
+                                </div>
                             </article>
                         }
+                        </div>
                     </div>
                 }
             </div>
@@ -218,29 +262,45 @@
                 }
                 else
                 {
-                    <div class="stack-grid">
+                    <div class="market-table-shell admin-table-shell admin-log-shell">
+                        <div class="market-table-list admin-log-table">
+                            <div class="market-table-row market-table-header admin-log-row">
+                                <div class="market-table-cell market-table-item-cell">Entry</div>
+                                <div class="market-table-cell">Level</div>
+                                <div class="market-table-cell">Time</div>
+                                <div class="market-table-cell">Details</div>
+                            </div>
                         @foreach (var entry in Model.WorkflowEntries.Take(take))
                         {
-                            <article class="content-card history-card">
-                                <div class="card-heading">
-                                    <div>
-                                        <h3>@entry.Message</h3>
-                                        <p class="card-subtitle">@entry.Source</p>
+                            <article class="market-table-row admin-log-row">
+                                <div class="market-table-cell market-table-item-cell" data-label="Entry">
+                                    <div class="market-table-copy">
+                                        <strong>@entry.Message</strong>
+                                        <div class="card-subtitle">@entry.Source</div>
                                     </div>
+                                </div>
+                                <div class="market-table-cell" data-label="Level">
                                     <span class="status-badge" data-status="@(string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase) ? "Failed" : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited")">@entry.Level</span>
                                 </div>
-                                <div class="history-metrics">
-                                    <span><strong>At:</strong> @entry.TimestampUtc.ToLocalTime()</span>
+                                <div class="market-table-cell" data-label="Time">
+                                    <span>@entry.TimestampUtc.ToLocalTime()</span>
                                 </div>
-                                @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
-                                {
-                                    <details class="mt-2">
-                                        <summary>Stack trace</summary>
-                                        <pre class="meta-note mb-0">@entry.StackTrace</pre>
-                                    </details>
-                                }
+                                <div class="market-table-cell admin-log-details" data-label="Details">
+                                    @if (!string.IsNullOrWhiteSpace(entry.StackTrace))
+                                    {
+                                        <details class="admin-log-stack">
+                                            <summary>Stack trace</summary>
+                                            <pre class="meta-note mb-0">@entry.StackTrace</pre>
+                                        </details>
+                                    }
+                                    else
+                                    {
+                                        <span class="compact-badge compact-badge-neutral">No stack trace</span>
+                                    }
+                                </div>
                             </article>
                         }
+                        </div>
                     </div>
                 }
             </div>

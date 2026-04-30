@@ -9,13 +9,6 @@ namespace SkinMarket.Services;
 
 public class MinefieldGameService : IMinefieldGameService
 {
-    private const int Rows = 10;
-    private const int Columns = 5;
-    private const int MinesPerLine = 1;
-    private const decimal ReturnToPlayer = 0.95m;
-    private const decimal MinimumBet = 0.01m;
-    private const decimal MaximumBet = 1000000m;
-
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly AppDbContext _dbContext;
@@ -62,15 +55,21 @@ public class MinefieldGameService : IMinefieldGameService
 
     public async Task<MinefieldStartResult> StartAsync(Guid appUserId, decimal bet, CancellationToken cancellationToken = default)
     {
-        var roundedBet = decimal.Round(bet, 2, MidpointRounding.AwayFromZero);
-        if (roundedBet < MinimumBet)
+        var settings = await GetSettingsAsync(cancellationToken);
+        if (!settings.IsEnabled)
         {
-            return new MinefieldStartResult { Message = "Enter a bet greater than 0." };
+            return new MinefieldStartResult { Message = "Minefield is currently disabled." };
         }
 
-        if (roundedBet > MaximumBet)
+        var roundedBet = decimal.Round(bet, 2, MidpointRounding.AwayFromZero);
+        if (roundedBet < settings.MinimumBet)
         {
-            return new MinefieldStartResult { Message = "Bet is too large." };
+            return new MinefieldStartResult { Message = $"Minimum bet is {settings.MinimumBet:0.00}." };
+        }
+
+        if (roundedBet > settings.MaximumBet)
+        {
+            return new MinefieldStartResult { Message = $"Maximum bet is {settings.MaximumBet:0.00}." };
         }
 
         var user = await _dbContext.AppUsers
@@ -86,8 +85,8 @@ public class MinefieldGameService : IMinefieldGameService
         }
 
         var now = DateTime.UtcNow;
-        var multipliers = CreateMultipliers();
-        var resultSteps = CreateResultSteps();
+        var multipliers = CreateMultipliers(settings);
+        var resultSteps = CreateResultSteps(settings);
         user.Balance -= roundedBet;
 
         _dbContext.BalanceTransactions.Add(new BalanceTransaction
@@ -127,8 +126,8 @@ public class MinefieldGameService : IMinefieldGameService
             SessionId = session.Id,
             Balance = user.Balance,
             Bet = roundedBet,
-            Rows = Rows,
-            Columns = Columns,
+            Rows = settings.Rows,
+            Columns = settings.Columns,
             Result = ToBoolList(resultSteps),
             Multipliers = multipliers
         };
@@ -139,7 +138,10 @@ public class MinefieldGameService : IMinefieldGameService
         MinefieldStepRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (request.Row < 0 || request.Row >= Rows || request.Column < 0 || request.Column >= Columns)
+        if (request.Row < 0 ||
+            request.Row >= MinefieldGameSettingsDefaults.Rows ||
+            request.Column < 0 ||
+            request.Column >= MinefieldGameSettingsDefaults.Columns)
         {
             return new MinefieldStepResult { Message = "Selected cell is invalid." };
         }
@@ -197,7 +199,7 @@ public class MinefieldGameService : IMinefieldGameService
         {
             Success = true,
             IsMine = false,
-            IsComplete = session.CurrentStep >= Rows,
+            IsComplete = session.CurrentStep >= session.ResultSteps.Length,
             CurrentStep = session.CurrentStep,
             Balance = userBalance
         };
@@ -225,7 +227,7 @@ public class MinefieldGameService : IMinefieldGameService
             return new MinefieldClaimResult { Message = "Open at least one safe row before claiming." };
         }
 
-        if (requestedStep > Rows)
+        if (requestedStep > session.ResultSteps.Length)
         {
             return new MinefieldClaimResult { Message = "Claim step is invalid." };
         }
@@ -234,7 +236,7 @@ public class MinefieldGameService : IMinefieldGameService
         {
             var nowLost = DateTime.UtcNow;
             session.Status = MinefieldGameSessionStatus.Lost;
-            session.CurrentStep = Math.Min(requestedStep, Rows);
+            session.CurrentStep = Math.Min(requestedStep, session.ResultSteps.Length);
             session.EndedAtUtc = nowLost;
             session.UpdatedAtUtc = nowLost;
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -285,31 +287,131 @@ public class MinefieldGameService : IMinefieldGameService
         };
     }
 
-    private static List<decimal> CreateMultipliers()
+    private async Task<MinefieldGameSettings> GetSettingsAsync(CancellationToken cancellationToken)
     {
-        List<decimal> multipliers = new(Rows);
-        var safeChance = (Columns - MinesPerLine) / (decimal)Columns;
-        var cumulativeSafeChance = 1m;
-        for (var step = 0; step < Rows; step++)
+        var settings = await _dbContext.MinefieldGameSettings
+            .SingleOrDefaultAsync(
+                item => item.GameKey == MinefieldGameSettingsDefaults.GameKey,
+                cancellationToken);
+        if (settings is not null)
         {
+            NormalizeSettings(settings);
+            return settings;
+        }
+
+        var now = DateTime.UtcNow;
+        settings = new MinefieldGameSettings
+        {
+            Id = Guid.NewGuid(),
+            GameKey = MinefieldGameSettingsDefaults.GameKey,
+            IsEnabled = true,
+            MinimumBet = MinefieldGameSettingsDefaults.MinimumBet,
+            MaximumBet = MinefieldGameSettingsDefaults.MaximumBet,
+            Rows = MinefieldGameSettingsDefaults.Rows,
+            Columns = MinefieldGameSettingsDefaults.Columns,
+            MinesPerLine = MinefieldGameSettingsDefaults.MinesPerLine,
+            ReturnToPlayer = MinefieldGameSettingsDefaults.ReturnToPlayer,
+            UseCustomStepSafeChances = false,
+            StepSafeChancesJson = string.Empty,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        _dbContext.MinefieldGameSettings.Add(settings);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return settings;
+    }
+
+    private static void NormalizeSettings(MinefieldGameSettings settings)
+    {
+        settings.Rows = MinefieldGameSettingsDefaults.Rows;
+        settings.Columns = MinefieldGameSettingsDefaults.Columns;
+        settings.MinimumBet = Math.Max(MinefieldGameSettingsDefaults.MinimumBet, decimal.Round(settings.MinimumBet, 2, MidpointRounding.AwayFromZero));
+        settings.MaximumBet = Math.Max(settings.MinimumBet, decimal.Round(settings.MaximumBet, 2, MidpointRounding.AwayFromZero));
+        settings.MinesPerLine = Math.Clamp(settings.MinesPerLine, 1, settings.Columns - 1);
+        settings.ReturnToPlayer = Math.Clamp(settings.ReturnToPlayer, 0.01m, 1m);
+    }
+
+    private static List<decimal> CreateMultipliers(MinefieldGameSettings settings)
+    {
+        List<decimal> multipliers = new(settings.Rows);
+        var customSafeChances = ReadStepSafeChances(settings);
+        var cumulativeSafeChance = 1m;
+        for (var step = 0; step < settings.Rows; step++)
+        {
+            var safeChance = GetStepSafeChance(settings, step, customSafeChances);
             cumulativeSafeChance *= safeChance;
-            var multiplier = decimal.Round(ReturnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero);
+            var multiplier = decimal.Round(settings.ReturnToPlayer / cumulativeSafeChance, 1, MidpointRounding.AwayFromZero);
             multipliers.Add(multiplier);
         }
 
         return multipliers;
     }
 
-    private static string CreateResultSteps()
+    private static string CreateResultSteps(MinefieldGameSettings settings)
     {
-        Span<char> steps = stackalloc char[Rows];
-        var safeThreshold = Columns - MinesPerLine;
-        for (var i = 0; i < Rows; i++)
+        var steps = new char[settings.Rows];
+        var customSafeChances = ReadStepSafeChances(settings);
+        for (var i = 0; i < settings.Rows; i++)
         {
-            steps[i] = RandomNumberGenerator.GetInt32(Columns) < safeThreshold ? '1' : '0';
+            steps[i] = RollSafe(GetStepSafeChance(settings, i, customSafeChances)) ? '1' : '0';
         }
 
         return new string(steps);
+    }
+
+    private static bool RollSafe(decimal safeChance)
+    {
+        var threshold = (int)decimal.Round(
+            ClampSafeChance(safeChance) * 10000m,
+            0,
+            MidpointRounding.AwayFromZero);
+        return RandomNumberGenerator.GetInt32(10000) < threshold;
+    }
+
+    private static decimal GetStepSafeChance(
+        MinefieldGameSettings settings,
+        int step,
+        IReadOnlyList<decimal> customSafeChances)
+    {
+        if (settings.UseCustomStepSafeChances &&
+            step >= 0 &&
+            step < customSafeChances.Count)
+        {
+            return ClampSafeChance(customSafeChances[step]);
+        }
+
+        return GetDefaultSafeChance(settings);
+    }
+
+    private static decimal GetDefaultSafeChance(MinefieldGameSettings settings)
+    {
+        return ClampSafeChance((settings.Columns - settings.MinesPerLine) / (decimal)settings.Columns);
+    }
+
+    private static decimal ClampSafeChance(decimal safeChance)
+    {
+        return Math.Clamp(
+            safeChance,
+            MinefieldGameSettingsDefaults.MinimumSafeChance,
+            MinefieldGameSettingsDefaults.MaximumSafeChance);
+    }
+
+    private static List<decimal> ReadStepSafeChances(MinefieldGameSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.StepSafeChancesJson))
+        {
+            return new List<decimal>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<decimal>>(settings.StepSafeChancesJson, JsonOptions)
+                   ?? new List<decimal>();
+        }
+        catch (JsonException)
+        {
+            return new List<decimal>();
+        }
     }
 
     private static bool IsSafeStep(string resultSteps, int step)

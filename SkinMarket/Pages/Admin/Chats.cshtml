@@ -43,33 +43,41 @@
     else
     {
         <section class="chat-shell admin-chat-shell">
-            <aside class="chat-contact-list" aria-label="User chats">
-                <div class="chat-contact-list-header">
-                    <h2>Steam accounts</h2>
-                    <span class="compact-badge compact-badge-neutral">@Model.Threads.Count</span>
-                </div>
+            <aside class="market-table-shell admin-table-shell admin-chat-list-shell" aria-label="User chats">
+                <div class="market-table-list admin-chat-table">
+                    <div class="market-table-row market-table-header admin-chat-row">
+                        <div class="market-table-cell market-table-item-cell">Steam account</div>
+                        <div class="market-table-cell">Updated</div>
+                    </div>
                 @foreach (var thread in Model.Threads)
                 {
                     var isActive = activeThreadId == thread.Id;
-                    <a class="chat-contact @(isActive ? "active" : null)" asp-page="/Admin/Chats" asp-route-threadId="@thread.Id">
-                        @if (!string.IsNullOrWhiteSpace(thread.UserAvatarUrl))
-                        {
-                            <img class="chat-contact-avatar" src="@thread.UserAvatarUrl" alt="@thread.UserName" />
-                        }
-                        else
-                        {
-                            <span class="chat-contact-avatar chat-contact-avatar-fallback" aria-hidden="true">
-                                @((thread.UserName.FirstOrDefault()).ToString().ToUpperInvariant())
-                            </span>
-                        }
-                        <span class="chat-contact-copy">
-                            <strong>@thread.UserName</strong>
-                            <span>@thread.ItemName</span>
-                            <span class="break-value">@thread.UserSteamId</span>
-                        </span>
-                        <time>@FormatLocalDateTime(thread.LastMessageAtUtc)</time>
+                    <a class="market-table-row admin-chat-row admin-chat-link @(isActive ? "active" : null)" asp-page="/Admin/Chats" asp-route-threadId="@thread.Id">
+                        <div class="market-table-cell market-table-item-cell" data-label="Steam account">
+                            <div class="market-table-main">
+                                @if (!string.IsNullOrWhiteSpace(thread.UserAvatarUrl))
+                                {
+                                    <img class="chat-contact-avatar" src="@thread.UserAvatarUrl" alt="@thread.UserName" />
+                                }
+                                else
+                                {
+                                    <span class="chat-contact-avatar chat-contact-avatar-fallback" aria-hidden="true">
+                                        @((thread.UserName.FirstOrDefault()).ToString().ToUpperInvariant())
+                                    </span>
+                                }
+                                <span class="market-table-copy chat-contact-copy">
+                                    <strong>@thread.UserName</strong>
+                                    <span>@thread.ItemName</span>
+                                    <span class="break-value">@thread.UserSteamId</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="market-table-cell" data-label="Updated">
+                            <time>@FormatLocalDateTime(thread.LastMessageAtUtc)</time>
+                        </div>
                     </a>
                 }
+                </div>
             </aside>
 
             <div class="chat-thread">

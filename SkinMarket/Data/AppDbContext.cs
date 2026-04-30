@@ -19,6 +19,7 @@ public class AppDbContext : DbContext
     public DbSet<ItemChatThread> ItemChatThreads => Set<ItemChatThread>();
     public DbSet<ItemChatMessage> ItemChatMessages => Set<ItemChatMessage>();
     public DbSet<MinefieldGameSession> MinefieldGameSessions => Set<MinefieldGameSession>();
+    public DbSet<MinefieldGameSettings> MinefieldGameSettings => Set<MinefieldGameSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -186,6 +187,19 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(session => session.AppUserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MinefieldGameSettings>(entity =>
+        {
+            entity.ToTable("MinefieldGameSettings");
+            entity.HasKey(settings => settings.Id);
+            entity.Property(settings => settings.GameKey).IsRequired().HasMaxLength(64);
+            entity.Property(settings => settings.IsEnabled).HasDefaultValue(true);
+            entity.Property(settings => settings.MinimumBet).HasPrecision(18, 2);
+            entity.Property(settings => settings.MaximumBet).HasPrecision(18, 2);
+            entity.Property(settings => settings.ReturnToPlayer).HasPrecision(6, 4);
+            entity.Property(settings => settings.StepSafeChancesJson).HasMaxLength(1000);
+            entity.HasIndex(settings => settings.GameKey).IsUnique();
         });
     }
 }
