@@ -41,7 +41,7 @@ public class AdminAccessPageFilter : IAsyncPageFilter
             .AnyAsync(user => user.SteamId == steamId && user.IsAdmin, context.HttpContext.RequestAborted);
         if (!isAdmin)
         {
-            context.Result = new ForbidResult();
+            context.Result = new RedirectToPageResult("/Profile");
             return;
         }
 

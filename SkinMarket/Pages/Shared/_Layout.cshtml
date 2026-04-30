@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+@using Microsoft.EntityFrameworkCore
 <html lang="@System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName">
 <head>
     <meta charset="utf-8" />
@@ -14,6 +15,7 @@
 <body class="app-body">
     @inject SkinMarket.Infrastructure.AppRuntimeState RuntimeState
     @inject SkinMarket.Contracts.IItemChatService ItemChatService
+    @inject SkinMarket.Data.AppDbContext DbContext
     @{
         var userAvatarUrl = User.FindFirst("AvatarUrl")?.Value;
         var userDisplayName = User.Identity?.Name ?? User.FindFirst("SteamId")?.Value ?? L["Layout_UserFallback"];
@@ -26,15 +28,45 @@
         };
         var returnUrl = $"{Context.Request.PathBase}{Context.Request.Path}{Context.Request.QueryString}";
         var currentPath = Context.Request.Path.Value ?? string.Empty;
-        var isAdmin = string.Equals(User.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var isAdmin = false;
         var userUnreadChatCount = 0;
         var adminUnreadChatCount = 0;
+        var menuVisibility = NavigationMenuKeys.EditableMenus
+            .ToDictionary(menu => menu.Key, _ => true, StringComparer.OrdinalIgnoreCase);
+        if (!RuntimeState.IsDegradedMode)
+        {
+            try
+            {
+                var savedMenus = await DbContext.NavigationMenuSettings
+                    .AsNoTracking()
+                    .Select(menu => new { menu.Key, menu.IsEnabled })
+                    .ToListAsync(Context.RequestAborted);
+                foreach (var menu in savedMenus)
+                {
+                    if (menuVisibility.ContainsKey(menu.Key))
+                    {
+                        menuVisibility[menu.Key] = menu.IsEnabled;
+                    }
+                }
+            }
+            catch
+            {
+                menuVisibility = NavigationMenuKeys.EditableMenus
+                    .ToDictionary(menu => menu.Key, _ => true, StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
         if ((User.Identity?.IsAuthenticated ?? false) &&
             !RuntimeState.IsDegradedMode &&
             Guid.TryParse(User.FindFirst("AppUserId")?.Value, out var currentAppUserId))
         {
             try
             {
+                isAdmin = await DbContext.AppUsers
+                    .AsNoTracking()
+                    .Where(user => user.Id == currentAppUserId)
+                    .Select(user => user.IsAdmin)
+                    .SingleOrDefaultAsync(Context.RequestAborted);
                 userUnreadChatCount = await ItemChatService.CountUserUnreadThreadsAsync(currentAppUserId, Context.RequestAborted);
                 if (isAdmin)
                 {
@@ -50,6 +82,7 @@
 
         string IsActivePage(string path) => currentPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) ? "active" : string.Empty;
         string FormatUnreadCount(int count) => count > 99 ? "99+" : count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        bool IsMenuEnabled(string key) => menuVisibility.TryGetValue(key, out var enabled) && enabled;
     }
     <header class="app-header">
         <div class="app-shell">
@@ -100,18 +133,36 @@
             <aside class="app-sidebar">
                 <nav class="app-side-nav">
                     <a class="app-side-link @IsActivePage("/Profile")" asp-page="/Profile">@L["Layout_Nav_Profile"]</a>
-                    <a class="app-side-link @IsActivePage("/Items")" asp-page="/Items">@L["Layout_Nav_Items"]</a>
-                    <a class="app-side-link @IsActivePage("/Games")" asp-page="/Games">@L["Layout_Nav_Games"]</a>
-                    <a class="app-side-link chat-unread-link @IsActivePage("/Chats")" asp-page="/Chats" data-chat-unread-target="user">
-                        <span>@L["Layout_Nav_Chats"]</span>
-                        @if (userUnreadChatCount > 0)
-                        {
-                            <span class="chat-unread-badge" data-chat-unread-badge>@FormatUnreadCount(userUnreadChatCount)</span>
-                        }
-                    </a>
-                    <a class="app-side-link @IsActivePage("/Market")" asp-page="/Market">@L["Layout_Nav_Market"]</a>
-                    <a class="app-side-link @IsActivePage("/Inventory")" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
-                    <a class="app-side-link @IsActivePage("/History")" asp-page="/History">@L["Layout_Nav_History"]</a>
+                    @if (IsMenuEnabled(NavigationMenuKeys.Items))
+                    {
+                        <a class="app-side-link @IsActivePage("/Items")" asp-page="/Items">@L["Layout_Nav_Items"]</a>
+                    }
+                    @if (IsMenuEnabled(NavigationMenuKeys.Games))
+                    {
+                        <a class="app-side-link @IsActivePage("/Games")" asp-page="/Games">@L["Layout_Nav_Games"]</a>
+                    }
+                    @if (IsMenuEnabled(NavigationMenuKeys.Chats))
+                    {
+                        <a class="app-side-link chat-unread-link @IsActivePage("/Chats")" asp-page="/Chats" data-chat-unread-target="user">
+                            <span>@L["Layout_Nav_Chats"]</span>
+                            @if (userUnreadChatCount > 0)
+                            {
+                                <span class="chat-unread-badge" data-chat-unread-badge>@FormatUnreadCount(userUnreadChatCount)</span>
+                            }
+                        </a>
+                    }
+                    @if (IsMenuEnabled(NavigationMenuKeys.Market))
+                    {
+                        <a class="app-side-link @IsActivePage("/Market")" asp-page="/Market">@L["Layout_Nav_Market"]</a>
+                    }
+                    @if (IsMenuEnabled(NavigationMenuKeys.Inventory))
+                    {
+                        <a class="app-side-link @IsActivePage("/Inventory")" asp-page="/Inventory">@L["Layout_Nav_Inventory"]</a>
+                    }
+                    @if (IsMenuEnabled(NavigationMenuKeys.History))
+                    {
+                        <a class="app-side-link @IsActivePage("/History")" asp-page="/History">@L["Layout_Nav_History"]</a>
+                    }
                     @if (isAdmin)
                     {
                         <a class="app-side-link @IsActivePage("/Admin")" asp-page="/Admin/BotStatus">Admin</a>
