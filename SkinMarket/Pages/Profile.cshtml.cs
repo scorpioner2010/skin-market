@@ -89,7 +89,7 @@ public class ProfileModel : PageModel
         {
             ModelState.AddModelError(
                 $"{nameof(Input)}.{nameof(Input.TradeUrl)}",
-                "Trade URL belongs to another Steam account.");
+                UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL belongs to another Steam account."));
         }
 
         if (!ModelState.IsValid)
@@ -125,7 +125,7 @@ public class ProfileModel : PageModel
         if (!string.Equals(GiftCodeInput.Code?.Trim(), AdminGiftCode, StringComparison.Ordinal))
         {
             SuccessMessage = null;
-            ErrorMessage = "Gift code is invalid.";
+            ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Gift code is invalid.");
             await LoadProfileForUserAsync(appUser, cancellationToken);
             return Page();
         }
@@ -142,7 +142,7 @@ public class ProfileModel : PageModel
         }
 
         await RefreshAuthCookieAsync(appUser, cancellationToken);
-        SuccessMessage = "Gift code activated.";
+        SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Gift code activated.");
         return RedirectToPage();
     }
 

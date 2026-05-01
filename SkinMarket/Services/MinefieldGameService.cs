@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
+using SkinMarket.Localization;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
@@ -13,11 +15,16 @@ public class MinefieldGameService : IMinefieldGameService
 
     private readonly AppDbContext _dbContext;
     private readonly IAppLogService _appLogService;
+    private readonly IStringLocalizer<SharedResource> _localizer;
 
-    public MinefieldGameService(AppDbContext dbContext, IAppLogService appLogService)
+    public MinefieldGameService(
+        AppDbContext dbContext,
+        IAppLogService appLogService,
+        IStringLocalizer<SharedResource> localizer)
     {
         _dbContext = dbContext;
         _appLogService = appLogService;
+        _localizer = localizer;
     }
 
     public async Task<MinefieldGameState> GetStateAsync(Guid appUserId, CancellationToken cancellationToken = default)
@@ -27,7 +34,7 @@ public class MinefieldGameService : IMinefieldGameService
             .SingleOrDefaultAsync(item => item.Id == appUserId, cancellationToken);
         if (user is null)
         {
-            return new MinefieldGameState { Message = "Local user profile was not found." };
+            return new MinefieldGameState { Message = LocalizeMessage("Local user profile was not found.") };
         }
 
         var activeSession = await _dbContext.MinefieldGameSessions
@@ -58,30 +65,30 @@ public class MinefieldGameService : IMinefieldGameService
         var settings = await GetSettingsAsync(cancellationToken);
         if (!settings.IsEnabled)
         {
-            return new MinefieldStartResult { Message = "Minefield is currently disabled." };
+            return new MinefieldStartResult { Message = LocalizeMessage("Minefield is currently disabled.") };
         }
 
         var roundedBet = decimal.Round(bet, 2, MidpointRounding.AwayFromZero);
         if (roundedBet < settings.MinimumBet)
         {
-            return new MinefieldStartResult { Message = $"Minimum bet is {settings.MinimumBet:0.00}." };
+            return new MinefieldStartResult { Message = LocalizeMessage($"Minimum bet is {settings.MinimumBet:0.00}.") };
         }
 
         if (roundedBet > settings.MaximumBet)
         {
-            return new MinefieldStartResult { Message = $"Maximum bet is {settings.MaximumBet:0.00}." };
+            return new MinefieldStartResult { Message = LocalizeMessage($"Maximum bet is {settings.MaximumBet:0.00}.") };
         }
 
         var user = await _dbContext.AppUsers
             .SingleOrDefaultAsync(item => item.Id == appUserId, cancellationToken);
         if (user is null)
         {
-            return new MinefieldStartResult { Message = "Local user profile was not found." };
+            return new MinefieldStartResult { Message = LocalizeMessage("Local user profile was not found.") };
         }
 
         if (user.Balance < roundedBet)
         {
-            return new MinefieldStartResult { Message = "Not enough balance." };
+            return new MinefieldStartResult { Message = LocalizeMessage("Not enough balance.") };
         }
 
         var now = DateTime.UtcNow;
@@ -143,7 +150,7 @@ public class MinefieldGameService : IMinefieldGameService
             request.Column < 0 ||
             request.Column >= MinefieldGameSettingsDefaults.Columns)
         {
-            return new MinefieldStepResult { Message = "Selected cell is invalid." };
+            return new MinefieldStepResult { Message = LocalizeMessage("Selected cell is invalid.") };
         }
 
         var session = await _dbContext.MinefieldGameSessions
@@ -154,12 +161,12 @@ public class MinefieldGameService : IMinefieldGameService
                 cancellationToken);
         if (session is null)
         {
-            return new MinefieldStepResult { Message = "Active game was not found." };
+            return new MinefieldStepResult { Message = LocalizeMessage("Active game was not found.") };
         }
 
         if (request.Row != session.CurrentStep)
         {
-            return new MinefieldStepResult { Message = "Selected row is not active." };
+            return new MinefieldStepResult { Message = LocalizeMessage("Selected row is not active.") };
         }
 
         var userBalance = await _dbContext.AppUsers
@@ -218,18 +225,18 @@ public class MinefieldGameService : IMinefieldGameService
                 cancellationToken);
         if (session is null)
         {
-            return new MinefieldClaimResult { Message = "Active game was not found." };
+            return new MinefieldClaimResult { Message = LocalizeMessage("Active game was not found.") };
         }
 
         var requestedStep = request.CurrentStep > 0 ? request.CurrentStep : session.CurrentStep;
         if (requestedStep <= 0)
         {
-            return new MinefieldClaimResult { Message = "Open at least one safe row before claiming." };
+            return new MinefieldClaimResult { Message = LocalizeMessage("Open at least one safe row before claiming.") };
         }
 
         if (requestedStep > session.ResultSteps.Length)
         {
-            return new MinefieldClaimResult { Message = "Claim step is invalid." };
+            return new MinefieldClaimResult { Message = LocalizeMessage("Claim step is invalid.") };
         }
 
         if (!AreStepsSafe(session.ResultSteps, requestedStep))
@@ -240,14 +247,14 @@ public class MinefieldGameService : IMinefieldGameService
             session.EndedAtUtc = nowLost;
             session.UpdatedAtUtc = nowLost;
             await _dbContext.SaveChangesAsync(cancellationToken);
-            return new MinefieldClaimResult { Message = "Cannot claim after a mine step." };
+            return new MinefieldClaimResult { Message = LocalizeMessage("Cannot claim after a mine step.") };
         }
 
         var user = await _dbContext.AppUsers
             .SingleOrDefaultAsync(item => item.Id == appUserId, cancellationToken);
         if (user is null)
         {
-            return new MinefieldClaimResult { Message = "Local user profile was not found." };
+            return new MinefieldClaimResult { Message = LocalizeMessage("Local user profile was not found.") };
         }
 
         var multipliers = ReadMultipliers(session);
@@ -478,13 +485,18 @@ public class MinefieldGameService : IMinefieldGameService
         return JsonSerializer.Deserialize<List<decimal>>(session.MultipliersJson, JsonOptions) ?? new List<decimal>();
     }
 
-    private static string ResolveUserName(AppUser user)
+    private string ResolveUserName(AppUser user)
     {
         if (!string.IsNullOrWhiteSpace(user.PersonaName))
         {
             return user.PersonaName;
         }
 
-        return string.IsNullOrWhiteSpace(user.DisplayName) ? "Player" : user.DisplayName;
+        return string.IsNullOrWhiteSpace(user.DisplayName) ? _localizer["Common_Player"].Value : user.DisplayName;
+    }
+
+    private string LocalizeMessage(string message)
+    {
+        return UiTextLocalizer.LocalizeMessage(_localizer, message);
     }
 }

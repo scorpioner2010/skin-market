@@ -1,26 +1,26 @@
 @page
 @model SkinMarket.Pages.Games.MinefieldModel
 @{
-    ViewData["Title"] = "Minefield";
+    ViewData["Title"] = L["Page_Minefield_Title"];
 }
 
 <div class="games-page py-4">
     <div class="page-header">
         <div>
-            <h1>Minefield</h1>
-            <p class="text-muted mb-0">Unity WebGL game connected to the x-mania virtual balance API.</p>
+            <h1>@L["Page_Minefield_Title"]</h1>
+            <p class="text-muted mb-0">@L["Minefield_Description"]</p>
         </div>
         <div class="action-row">
-            <a class="btn app-button-secondary" asp-page="/Games">All games</a>
+            <a class="btn app-button-secondary" asp-page="/Games">@L["Games_AllGames"]</a>
         </div>
     </div>
 
     @if (!(User.Identity?.IsAuthenticated ?? false))
     {
         <div class="empty-state">
-            <h2>Login required</h2>
-            <p class="text-muted">Minefield uses your x-mania virtual balance.</p>
-            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <p class="text-muted">@L["Minefield_LoginRequired_Text"]</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
         </div>
     }
     else
@@ -29,7 +29,7 @@
             <div class="game-unity-shell">
                 <canvas id="unity-canvas" class="game-unity-canvas" width="600" height="960" tabindex="-1"></canvas>
                 <div id="unity-loading-bar" class="game-unity-loading">
-                    <div class="game-unity-loading-title">Loading Minefield</div>
+                    <div class="game-unity-loading-title">@L["Minefield_Loading"]</div>
                     <div class="game-unity-progress">
                         <div id="unity-progress-bar-full" class="game-unity-progress-fill"></div>
                     </div>
@@ -37,7 +37,7 @@
                 <div id="unity-warning" class="game-unity-warning"></div>
             </div>
             <div class="game-unity-actions">
-                <button type="button" class="btn app-button-secondary" id="unity-fullscreen-button">Fullscreen</button>
+                <button type="button" class="btn app-button-secondary" id="unity-fullscreen-button">@L["Minefield_Fullscreen"]</button>
             </div>
         </div>
     }

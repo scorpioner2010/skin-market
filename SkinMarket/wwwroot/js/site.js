@@ -2,6 +2,26 @@
 // for details on configuring this project to bundle and minify static web assets.
 
 // Write your JavaScript code.
+const appUiText = (() => {
+    const element = document.getElementById('app-ui-text');
+    if (!element) {
+        return {};
+    }
+
+    try {
+        return JSON.parse(element.textContent || '{}') || {};
+    } catch {
+        return {};
+    }
+})();
+
+const appText = (key, fallback, ...args) => {
+    const template = appUiText[key] || fallback;
+    return args.reduce(
+        (text, value, index) => text.replaceAll(`{${index}}`, String(value)),
+        template);
+};
+
 (() => {
     const source = document.querySelector('[data-chat-unread-source]');
     if (!source) {
@@ -39,7 +59,7 @@
         }
 
         badge.textContent = formatCount(count);
-        badge.setAttribute('aria-label', `${count} unread chats`);
+        badge.setAttribute('aria-label', appText('unreadChats', '{0} unread chats', count));
     };
 
     const applyCounts = (userUnreadChats, adminUnreadChats) => {
@@ -141,13 +161,13 @@
             }
 
             if (!button.dataset.originalText) {
-                button.dataset.originalText = button.textContent || 'Submit';
+                button.dataset.originalText = button.textContent || appText('submit', 'Submit');
             }
 
             button.disabled = blocked;
-            button.textContent = blocked ? 'Trade in progress' : button.dataset.originalText;
+            button.textContent = blocked ? appText('tradeInProgress', 'Trade in progress') : button.dataset.originalText;
             button.title = blocked
-                ? (form.dataset.tradeBlockMessage || 'Finish or cancel the active trade offer first.')
+                ? (form.dataset.tradeBlockMessage || appText('finishActiveTradeFirst', 'Finish or cancel the active trade offer first.'))
                 : '';
         }
     };
@@ -185,16 +205,16 @@
         const isActionRequired = activeTrade.status === 'AwaitingUserAction' || activeTrade.status === 'AwaitingBuyerAction';
         if (panelTitle) {
             panelTitle.textContent = isActionRequired
-                ? 'Steam offer needs action'
-                : 'Active trade in progress';
+                ? appText('steamOfferNeedsAction', 'Steam offer needs action')
+                : appText('activeTradeInProgress', 'Active trade in progress');
         }
 
         if (panelStatus) {
-            const flowText = isDelivery ? 'Purchase' : 'Sale';
+            const flowText = isDelivery ? appText('purchase', 'Purchase') : appText('sale', 'Sale');
             const actionText = isActionRequired
-                ? (isDelivery ? 'accept the delivery offer' : 'accept the intake offer')
-                : 'waiting for the next Steam step';
-            panelStatus.textContent = `${flowText}: ${activeTrade.itemName || 'Steam offer'} - ${activeTrade.statusText || activeTrade.status}. ${actionText}.`;
+                ? (isDelivery ? appText('acceptDeliveryOffer', 'accept the delivery offer') : appText('acceptIntakeOffer', 'accept the intake offer'))
+                : appText('waitingNextSteamStep', 'waiting for the next Steam step');
+            panelStatus.textContent = `${flowText}: ${activeTrade.itemName || appText('steamOffer', 'Steam offer')} - ${activeTrade.statusText || activeTrade.status}. ${actionText}.`;
         }
 
         if (cancelOperationId) {
@@ -205,7 +225,7 @@
             cancelButton.disabled = activeTrade.canCancel !== true;
             cancelButton.title = activeTrade.canCancel === true
                 ? ''
-                : 'Cancel is available only for sale intake offers.';
+                : appText('cancelOnlySaleIntake', 'Cancel is available only for sale intake offers.');
         }
     };
 
@@ -337,18 +357,18 @@
     cancelForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (!cancelOperationId?.value) {
-            setPanelMessage('Sale operation is not ready to cancel yet.', 'failed');
+            setPanelMessage(appText('saleOperationNotReadyCancel', 'Sale operation is not ready to cancel yet.'), 'failed');
             return;
         }
 
-        if (!window.confirm('Cancel this Steam offer and release the sale operation?')) {
+        if (!window.confirm(appText('cancelConfirm', 'Cancel this Steam offer and release the sale operation?'))) {
             return;
         }
 
         clearPanelMessage();
         if (cancelButton) {
             cancelButton.disabled = true;
-            cancelButton.textContent = 'Canceling...';
+            cancelButton.textContent = appText('canceling', 'Canceling...');
         }
 
         try {
@@ -362,18 +382,18 @@
             });
             const payload = await response.json().catch(() => null);
             if (!response.ok || payload?.success !== true) {
-                throw new Error(payload?.message || 'Could not cancel trade offer.');
+                throw new Error(payload?.message || appText('couldNotCancelTrade', 'Could not cancel trade offer.'));
             }
 
-            setPanelMessage(payload.message || 'Trade offer was canceled.', 'success');
+            setPanelMessage(payload.message || appText('tradeOfferCanceled', 'Trade offer was canceled.'), 'success');
             window.setTimeout(() => window.location.reload(), 700);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Could not cancel trade offer.';
+            const message = error instanceof Error ? error.message : appText('couldNotCancelTrade', 'Could not cancel trade offer.');
             setPanelMessage(message, 'failed');
         } finally {
             if (cancelButton) {
                 cancelButton.disabled = false;
-                cancelButton.textContent = 'Cancel offer';
+                cancelButton.textContent = appText('cancelOffer', 'Cancel offer');
             }
         }
     });
@@ -385,7 +405,7 @@
             }
 
             event.preventDefault();
-            setPanelMessage(form.dataset.tradeBlockMessage || 'Finish or cancel the active trade offer first.', 'failed');
+            setPanelMessage(form.dataset.tradeBlockMessage || appText('finishActiveTradeFirst', 'Finish or cancel the active trade offer first.'), 'failed');
         });
     });
 
@@ -396,7 +416,7 @@
         }
 
         event.preventDefault();
-        setPanelMessage('Steam offer is not created yet. The status will update automatically.', 'failed');
+        setPanelMessage(appText('steamOfferNotCreated', 'Steam offer is not created yet. The status will update automatically.'), 'failed');
     });
 
     window.setTimeout(poll, 500);

@@ -1,24 +1,24 @@
 @page
 @model SkinMarket.Pages.Auth.LoginModel
 @{
-    ViewData["Title"] = "Login";
+    ViewData["Title"] = L["Page_Login_Title"];
 }
 
 <div class="py-4">
     <section class="hero-card">
         <div>
             <span class="section-kicker">Steam</span>
-            <h1 class="hero-title">Redirecting to Steam...</h1>
-            <p class="hero-text">Authorization is in progress. If the redirect does not start automatically, reload the page and try again.</p>
+            <h1 class="hero-title">@L["Auth_Login_Redirecting"]</h1>
+            <p class="hero-text">@L["Auth_Login_Description"]</p>
         </div>
         <div class="hero-panel">
             <div class="hero-stat">
-                <span class="hero-stat-label">Status</span>
-                <strong>Waiting for Steam OpenID</strong>
+                <span class="hero-stat-label">@L["Auth_Login_Status"]</span>
+                <strong>@L["Auth_Login_WaitingForSteam"]</strong>
             </div>
             <div class="hero-stat">
-                <span class="hero-stat-label">Action</span>
-                <a class="btn app-button-primary" asp-page="/Profile">Open profile</a>
+                <span class="hero-stat-label">@L["Auth_Login_Action"]</span>
+                <a class="btn app-button-primary" asp-page="/Profile">@L["Common_OpenProfile"]</a>
             </div>
         </div>
     </section>

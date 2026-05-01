@@ -30,17 +30,17 @@
     <div class="page-header">
         <div>
             <h1>@L["Page_Inventory_Title"]</h1>
-            <p class="page-description inventory-page-description">Live Steam inventory with grouped duplicates, current price resolution, and trade flow status.</p>
+            <p class="page-description inventory-page-description">@L["Inventory_LiveDescription"]</p>
             <div class="status-group inventory-summary-strip">
-                <span class="compact-badge compact-badge-neutral">Grouped: @Model.GroupedItems.Count</span>
-                <span class="compact-badge compact-badge-neutral">Ready: @readyToSellCount</span>
-                <span class="compact-badge compact-badge-neutral">Pending: @pendingTradeCount</span>
-                <span class="compact-badge compact-badge-neutral">Credit wait: @waitingForCreditCount</span>
+                <span class="compact-badge compact-badge-neutral">@L["Inventory_Grouped"]: @Model.GroupedItems.Count</span>
+                <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryReady"]: @readyToSellCount</span>
+                <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryPending"]: @pendingTradeCount</span>
+                <span class="compact-badge compact-badge-neutral">@L["Inventory_CreditWait"]: @waitingForCreditCount</span>
             </div>
         </div>
         <div class="status-group">
-            <form method="get" class="game-switcher" aria-label="Game selector">
-                <label class="game-switcher-label" for="inventory-game">Game</label>
+            <form method="get" class="game-switcher" aria-label="@L["Inventory_GameSelector"]">
+                <label class="game-switcher-label" for="inventory-game">@L["Common_Game"]</label>
                 <select id="inventory-game" name="game" class="form-select app-input game-switcher-select" onchange="this.form.submit()">
                     @foreach (var game in Model.SupportedGames.Where(item => item.SupportsInventory))
                     {
@@ -79,7 +79,7 @@
 
         @if (!string.IsNullOrWhiteSpace(Model.TradeStatusMessage))
         {
-            <div class="app-alert alert-warning" role="alert">@Model.TradeStatusMessage</div>
+            <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.TradeStatusMessage)</div>
         }
 
         @if (!string.IsNullOrWhiteSpace(Model.WarningMessage))
@@ -91,11 +91,11 @@
         {
             <div class="trade-url-setup trade-url-setup-critical">
                 <div class="trade-url-setup-copy">
-                    <strong>Trade URL is required before selling.</strong>
-                    <span>Set your Steam Trade URL in profile before creating sale requests.</span>
+                    <strong>@L["Inventory_TradeUrlRequired_Title"]</strong>
+                    <span>@L["Inventory_TradeUrlRequired_Text"]</span>
                 </div>
                 <div class="trade-url-setup-actions">
-                    <a class="btn app-button-primary" asp-page="/Profile">Open profile</a>
+                    <a class="btn app-button-primary" asp-page="/Profile">@L["Common_OpenProfile"]</a>
                 </div>
             </div>
         }
@@ -117,7 +117,7 @@
                 <div class="section-heading">
                     <div>
                         <h2>@L["Inventory_YourItems_Title"]</h2>
-                        <p class="section-description">Sellable items, price, and trade status.</p>
+                        <p class="section-description">@L["Inventory_SellableDescription"]</p>
                     </div>
                 </div>
                 <div class="inventory-table-shell">
@@ -126,7 +126,7 @@
                             <div class="inventory-cell inventory-item-cell">@L["Inventory_Column_Item"]</div>
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Tradable"]</div>
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Marketable"]</div>
-                            <div class="inventory-cell">Qty</div>
+                            <div class="inventory-cell">@L["Common_QuantityShort"]</div>
                             <div class="inventory-cell">@L["Inventory_Column_RealPrice"]</div>
                             <div class="inventory-cell inventory-status-cell">@L["Inventory_Column_Status"]</div>
                             <div class="inventory-cell inventory-actions-cell">@L["Inventory_Column_Action"]</div>
@@ -157,7 +157,7 @@
                                                 }
                                                 else
                                                 {
-                                                    <span class="break-value">Instance ID: @item.InstanceId</span>
+                                                    <span class="break-value">@L["Inventory_InstanceId"]: @item.InstanceId</span>
                                                 }
                                             </div>
                                         </div>
@@ -173,7 +173,7 @@
                                         <span class="compact-badge">@((item.Marketable.HasValue ? L[item.Marketable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
                                     </div>
                                 </div>
-                                <div class="inventory-cell inventory-meta break-value" data-label="Qty">
+                                <div class="inventory-cell inventory-meta break-value" data-label="@L["Common_QuantityShort"]">
                                     <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                                 </div>
                                 <div class="inventory-cell inventory-meta inventory-price-cell" data-label="@L["Inventory_Column_RealPrice"]" data-asset-id="@item.RepresentativeAssetId" data-market-hash-name="@item.MarketHashName">
@@ -224,7 +224,7 @@
                                     <div class="inventory-actions" data-sale-action-cell>
                                         @if (item.HasSellableItem && Model.IsTradeUrlConfigured)
                                         {
-                                            <form method="post" asp-page-handler="Sell" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before selling another item.">
+                                            <form method="post" asp-page-handler="Sell" data-trade-blockable-form data-trade-block-message="@L["Inventory_TradeBlockMessageSell"]">
                                                 <input type="hidden" name="Input.GameType" value="@Model.CurrentGameType" />
                                                 <input type="hidden" name="Input.AssetId" value="@item.SellAssetId" />
                                                 <input type="hidden" name="Input.ClassId" value="@item.SellClassId" />
@@ -237,11 +237,11 @@
                                         }
                                         else if (item.HasSellableItem)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">Trade URL required</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_TradeUrlRequired"]</span>
                                         }
                                         else if (!string.IsNullOrWhiteSpace(item.AwaitingUserTradeOfferId))
                                         {
-                                            <span class="compact-badge compact-badge-neutral">Action required</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_ActionRequired"]</span>
                                         }
                                         else if (item.CreateTradeOperationId.HasValue &&
                                                  string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal))
@@ -254,15 +254,15 @@
                                         }
                                         else if (item.CreateTradeOperationId.HasValue)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">Auto trade pending</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_AutoTradePending"]</span>
                                         }
                                         else if (item.HasWaitingForCredit)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">Waiting for credit</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_WaitingForCredit"]</span>
                                         }
                                         else if (item.HasTradeProtected)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">Trade protected</span>
+                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "TradeProtected")</span>
                                         }
                                         else
                                         {

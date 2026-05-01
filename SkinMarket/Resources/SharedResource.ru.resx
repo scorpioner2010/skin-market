@@ -7,8 +7,7 @@
   <data name="Layout_UserFallback" xml:space="preserve"><value>Пользователь</value></data>
   <data name="Layout_Subtitle" xml:space="preserve"><value>Маркетплейс игровых предметов</value></data>
   <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Переключить навигацию</value></data>
-  <data name="Layout_Nav_Home" xml:space="preserve"><value>Главная</value></data>
-  <data name="Layout_Nav_Profile" xml:space="preserve"><value>Профиль</value></data>
+<data name="Layout_Nav_Profile" xml:space="preserve"><value>Профиль</value></data>
   <data name="Layout_Nav_Items" xml:space="preserve"><value>Айтемы</value></data>
   <data name="Layout_Nav_Games" xml:space="preserve"><value>Игры</value></data>
   <data name="Layout_Nav_Chats" xml:space="preserve"><value>Чаты</value></data>
@@ -30,30 +29,13 @@
   <data name="Common_No" xml:space="preserve"><value>Нет</value></data>
   <data name="Common_Unknown" xml:space="preserve"><value>Неизвестно</value></data>
   <data name="Common_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
-  <data name="Page_Home_Title" xml:space="preserve"><value>Главная</value></data>
-  <data name="Page_Profile_Title" xml:space="preserve"><value>Профиль</value></data>
+<data name="Page_Profile_Title" xml:space="preserve"><value>Профиль</value></data>
   <data name="Page_Inventory_Title" xml:space="preserve"><value>Инвентарь</value></data>
   <data name="Page_Items_Title" xml:space="preserve"><value>Айтемы</value></data>
   <data name="Page_Chats_Title" xml:space="preserve"><value>Чаты</value></data>
   <data name="Page_Market_Title" xml:space="preserve"><value>Маркет</value></data>
   <data name="Page_History_Title" xml:space="preserve"><value>История</value></data>
-  <data name="Home_Kicker" xml:space="preserve"><value>Маркетплейс с готовностью к нескольким играм</value></data>
-  <data name="Home_HeroText" xml:space="preserve"><value>Покупайте, продавайте и отслеживайте игровые предметы в понятном маркетплейсе с инвентарём, балансом и статусами доставки.</value></data>
-  <data name="Home_OpenMarket" xml:space="preserve"><value>Открыть маркет</value></data>
-  <data name="Home_ViewInventory" xml:space="preserve"><value>Открыть инвентарь</value></data>
-  <data name="Home_Workflow_Label" xml:space="preserve"><value>Сценарий</value></data>
-  <data name="Home_Workflow_Value" xml:space="preserve"><value>Вход через Steam, выставление предметов, зачисление баланса, покупка и отслеживание доставки</value></data>
-  <data name="Home_Focus_Label" xml:space="preserve"><value>Фокус</value></data>
-  <data name="Home_Focus_Value" xml:space="preserve"><value>Быстрый обзор предметов, предсказуемые действия и понятные состояния маркета</value></data>
-  <data name="Home_Overview_Title" xml:space="preserve"><value>Обзор платформы</value></data>
-  <data name="Home_Overview_Description" xml:space="preserve"><value>Ключевые возможности маркетплейса доступны сквозным сценарием для инвентаря, продаж и отслеживания покупок.</value></data>
-  <data name="Home_Feature_Profile_Title" xml:space="preserve"><value>Steam-авторизация и профиль</value></data>
-  <data name="Home_Feature_Profile_Text" xml:space="preserve"><value>Войдите через Steam, управляйте профилем и держите trade-данные готовыми для передачи предметов.</value></data>
-  <data name="Home_Feature_Inventory_Title" xml:space="preserve"><value>Инвентарь и продажи</value></data>
-  <data name="Home_Feature_Inventory_Text" xml:space="preserve"><value>Просматривайте инвентари поддерживаемых игр, создавайте запросы на продажу и следите за статусами каждого предмета.</value></data>
-  <data name="Home_Feature_Market_Title" xml:space="preserve"><value>Маркет и доставка</value></data>
-  <data name="Home_Feature_Market_Text" xml:space="preserve"><value>Доступные листинги можно покупать за баланс аккаунта и отслеживать доставку.</value></data>
-  <data name="Profile_SteamUserFallback" xml:space="preserve"><value>Пользователь Steam</value></data>
+<data name="Profile_SteamUserFallback" xml:space="preserve"><value>Пользователь Steam</value></data>
   <data name="Profile_AvatarAlt" xml:space="preserve"><value>Аватар {0}</value></data>
   <data name="Profile_Kicker" xml:space="preserve"><value>Профиль пользователя</value></data>
   <data name="Profile_Description" xml:space="preserve"><value>Управляйте данными аккаунта, текущим балансом и Steam Trade URL в одном месте.</value></data>
@@ -147,7 +129,7 @@
   <data name="Status_TradeCreated" xml:space="preserve"><value>Трейд создан</value></data>
   <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade создан</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Доступно</value></data>
-  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protected</value></data>
+  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protection</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Ожидается действие пользователя</value></data>
   <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Ожидается действие покупателя</value></data>
   <data name="Status_ReceivedByBot" xml:space="preserve"><value>Получено ботом</value></data>
@@ -207,9 +189,190 @@
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Создан stub bot trade. Реальная интеграция со Steam-ботом ещё не подключена.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Создан stub delivery trade. Реальная Steam-интеграция доставки ещё не подключена.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
-  <data name="PriceStatus_Cached" xml:space="preserve"><value>Cached</value></data>
-  <data name="PriceStatus_Estimated" xml:space="preserve"><value>Estimated</value></data>
-  <data name="PriceStatus_Loading" xml:space="preserve"><value>Loading price...</value></data>
-  <data name="PriceStatus_NoPrice" xml:space="preserve"><value>No price</value></data>
-  <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Refreshing</value></data>
+  <data name="PriceStatus_Cached" xml:space="preserve"><value>Из кеша</value></data>
+  <data name="PriceStatus_Estimated" xml:space="preserve"><value>Оценочная</value></data>
+  <data name="PriceStatus_Loading" xml:space="preserve"><value>Загрузка цены...</value></data>
+  <data name="PriceStatus_NoPrice" xml:space="preserve"><value>Цены нет</value></data>
+  <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Обновление</value></data>
+  <data name="Chats_Description" xml:space="preserve"><value>Чаты по предметам с командой сервиса.</value></data>
+  <data name="Message_FinishActiveTradeBuy" xml:space="preserve"><value>Завершите или отмените активный трейд-офер перед покупкой другого предмета.</value></data>
+  <data name="Message_CheckSteamOfferStatusFailed" xml:space="preserve"><value>Не удалось проверить статус Steam-офера. Bot service не вернул статус.</value></data>
+  <data name="Layout_GlobalTrade_Status_Waiting" xml:space="preserve"><value>Ожидание статуса</value></data>
+  <data name="Common_Actions" xml:space="preserve"><value>Действия</value></data>
+  <data name="Message_AdminAccountNotFound" xml:space="preserve"><value>Админ-аккаунт не найден.</value></data>
+  <data name="Auth_Login_Description" xml:space="preserve"><value>Авторизация выполняется. Если перенаправление не началось автоматически, обновите страницу и попробуйте снова.</value></data>
+  <data name="Common_Type" xml:space="preserve"><value>Тип</value></data>
+  <data name="Message_ClaimStepInvalid" xml:space="preserve"><value>Шаг выплаты некорректен.</value></data>
+  <data name="Inventory_SummaryPending" xml:space="preserve"><value>Ожидает</value></data>
+  <data name="Market_TradeBlockMessageBuy" xml:space="preserve"><value>Завершите или отмените активный трейд-офер перед покупкой другого предмета.</value></data>
+  <data name="Chats_NoMessages" xml:space="preserve"><value>Сообщений нет</value></data>
+  <data name="Inventory_WaitingForCredit" xml:space="preserve"><value>Ожидает кредита</value></data>
+  <data name="Js_Sale" xml:space="preserve"><value>Продажа</value></data>
+  <data name="Profile_BalanceNote" xml:space="preserve"><value>Этот баланс можно потратить на сервисы сайта, игры и покупки на маркете. Вывести его в реальные деньги невозможно.</value></data>
+  <data name="Common_Player" xml:space="preserve"><value>Игрок</value></data>
+  <data name="Common_Tradable" xml:space="preserve"><value>Можно передать</value></data>
+  <data name="Common_Items" xml:space="preserve"><value>Предметы</value></data>
+  <data name="Common_Status" xml:space="preserve"><value>Статус</value></data>
+  <data name="Inventory_SellableDescription" xml:space="preserve"><value>Предметы для продажи, цена и статус трейда.</value></data>
+  <data name="Js_TradeInProgress" xml:space="preserve"><value>Трейд в процессе</value></data>
+  <data name="Layout_GlobalTrade_CancelOffer" xml:space="preserve"><value>Отменить офер</value></data>
+  <data name="Inventory_TradeUrlRequired" xml:space="preserve"><value>Нужен Trade URL</value></data>
+  <data name="Js_FinishActiveTradeFirst" xml:space="preserve"><value>Завершите или отмените активный трейд-офер.</value></data>
+  <data name="History_Asset" xml:space="preserve"><value>Asset</value></data>
+  <data name="Message_OpenSafeRowBeforeClaim" xml:space="preserve"><value>Откройте хотя бы один безопасный ряд перед выплатой.</value></data>
+  <data name="Common_Amount" xml:space="preserve"><value>Сумма</value></data>
+  <data name="Common_Game" xml:space="preserve"><value>Игра</value></data>
+  <data name="Common_Details" xml:space="preserve"><value>Детали</value></data>
+  <data name="Auth_Login_Action" xml:space="preserve"><value>Действие</value></data>
+  <data name="Common_Chat" xml:space="preserve"><value>Чат</value></data>
+  <data name="Message_MinefieldDisabled" xml:space="preserve"><value>Minefield сейчас выключен.</value></data>
+  <data name="Error_DevelopmentMode" xml:space="preserve"><value>Режим разработки</value></data>
+  <data name="Common_Asset" xml:space="preserve"><value>Asset</value></data>
+  <data name="Message_TradeOfferCanceled" xml:space="preserve"><value>Трейд-офер отменён.</value></data>
+  <data name="Minefield_LoginRequired_Text" xml:space="preserve"><value>Minefield использует ваш виртуальный баланс x-mania.</value></data>
+  <data name="Minefield_Loading" xml:space="preserve"><value>Загрузка Minefield</value></data>
+  <data name="Message_TradeUrlBelongsAnotherSteam" xml:space="preserve"><value>Trade URL принадлежит другому Steam-аккаунту.</value></data>
+  <data name="Error_DevelopmentMode_Text" xml:space="preserve"><value>Включайте среду Development только для локальной отладки, чтобы видеть полные детали исключений.</value></data>
+  <data name="Message_ActiveGameNotFound" xml:space="preserve"><value>Активная игра не найдена.</value></data>
+  <data name="Market_AvailableItems_Summary" xml:space="preserve"><value>{0}: сгруппированных листингов: {1}, предметов сейчас видно в инвентаре бота: {2}.</value></data>
+  <data name="Message_TradeOfferCanceledBySeller" xml:space="preserve"><value>Трейд-офер отменён продавцом. {0}</value></data>
+  <data name="Message_MessageEmpty" xml:space="preserve"><value>Сообщение не может быть пустым.</value></data>
+  <data name="Chats_NoChats_Title" xml:space="preserve"><value>Чатов пока нет</value></data>
+  <data name="Message_FinishActiveTradeSell" xml:space="preserve"><value>Завершите или отмените активный трейд-офер перед продажей другого предмета.</value></data>
+  <data name="Message_TradeOfferNoSteamYet" xml:space="preserve"><value>У этого запроса на продажу ещё нет Steam trade offer.</value></data>
+  <data name="Js_CancelOnlySaleIntake" xml:space="preserve"><value>Отмена доступна только для intake-оферов продажи.</value></data>
+  <data name="Message_GiftCodeInvalid" xml:space="preserve"><value>Подарочный код некорректен.</value></data>
+  <data name="Items_AvailableSummary" xml:space="preserve"><value>Сейчас доступно предметов: {0}.</value></data>
+  <data name="Auth_Callback_Title" xml:space="preserve"><value>Steam Callback</value></data>
+  <data name="Auth_Login_Status" xml:space="preserve"><value>Статус</value></data>
+  <data name="Js_SaleOperationNotReadyCancel" xml:space="preserve"><value>Операция продажи ещё не готова к отмене.</value></data>
+  <data name="Error_Description" xml:space="preserve"><value>При обработке запроса произошла ошибка.</value></data>
+  <data name="History_Amount" xml:space="preserve"><value>Сумма</value></data>
+  <data name="Status_InEscrow" xml:space="preserve"><value>В escrow</value></data>
+  <data name="Market_TradeProtection_Text" xml:space="preserve"><value>Активен trade protection. Предмет станет доступен для покупки после разблокировки Steam.</value></data>
+  <data name="History_Type" xml:space="preserve"><value>Тип</value></data>
+  <data name="Common_Send" xml:space="preserve"><value>Отправить</value></data>
+  <data name="Profile_GiftCode_AdminActive" xml:space="preserve"><value>Админ активен</value></data>
+  <data name="Error_SecurityNote_Text" xml:space="preserve"><value>Не включайте Development в развёрнутых приложениях, потому что это может раскрыть чувствительные runtime-данные.</value></data>
+  <data name="Chats_You" xml:space="preserve"><value>Вы</value></data>
+  <data name="Js_Canceling" xml:space="preserve"><value>Отмена...</value></data>
+  <data name="Common_OpenProfile" xml:space="preserve"><value>Открыть профиль</value></data>
+  <data name="Chats_ItemChats" xml:space="preserve"><value>Чаты предметов</value></data>
+  <data name="Common_ItemId" xml:space="preserve"><value>ID предмета</value></data>
+  <data name="Message_TradeOfferCannotBeCanceledStatus" xml:space="preserve"><value>Трейд-офер нельзя отменить из статуса {0}.</value></data>
+  <data name="Js_UnreadChats" xml:space="preserve"><value>{0} непрочитанных чатов</value></data>
+  <data name="Auth_Logout_SigningOut" xml:space="preserve"><value>Выход...</value></data>
+  <data name="Message_ItemNotFound" xml:space="preserve"><value>Предмет не найден.</value></data>
+  <data name="Profile_TradeUrlRequired_Message" xml:space="preserve"><value>Trade URL нужен перед продажей. Откройте страницу Steam, скопируйте полный Trade URL, вставьте его здесь и сохраните.</value></data>
+  <data name="Games_AllGames" xml:space="preserve"><value>Все игры</value></data>
+  <data name="Market_OwnedByYou" xml:space="preserve"><value>Ваш предмет</value></data>
+  <data name="Page_Error_Title" xml:space="preserve"><value>Ошибка</value></data>
+  <data name="Common_OpenSteamPage" xml:space="preserve"><value>Открыть страницу Steam</value></data>
+  <data name="Common_Table" xml:space="preserve"><value>Таблица</value></data>
+  <data name="Common_Description" xml:space="preserve"><value>Описание</value></data>
+  <data name="Auth_Login_WaitingForSteam" xml:space="preserve"><value>Ожидание Steam OpenID</value></data>
+  <data name="Message_MinefieldMaximumBet" xml:space="preserve"><value>Максимальная ставка: {0}.</value></data>
+  <data name="Games_Empty_Title" xml:space="preserve"><value>Игр пока нет</value></data>
+  <data name="Error_SecurityNote" xml:space="preserve"><value>Примечание безопасности</value></data>
+  <data name="Status_AwaitingBotConfirmation" xml:space="preserve"><value>Ожидает подтверждения бота</value></data>
+  <data name="Common_Quantity" xml:space="preserve"><value>Количество</value></data>
+  <data name="Inventory_LiveDescription" xml:space="preserve"><value>Живой Steam-инвентарь с сгруппированными дублями, текущей ценой и статусом трейда.</value></data>
+  <data name="Layout_Admin" xml:space="preserve"><value>Админ</value></data>
+  <data name="Inventory_AutoTradePending" xml:space="preserve"><value>Автотрейд ожидается</value></data>
+  <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Доставка в escrow</value></data>
+  <data name="Common_AssetId" xml:space="preserve"><value>Asset ID</value></data>
+  <data name="Message_MessageInvalid" xml:space="preserve"><value>Сообщение некорректно.</value></data>
+  <data name="Auth_Login_Redirecting" xml:space="preserve"><value>Перенаправление в Steam...</value></data>
+  <data name="Js_CancelConfirm" xml:space="preserve"><value>Отменить этот Steam-офер и освободить операцию продажи?</value></data>
+  <data name="Game_Minefield_Status" xml:space="preserve"><value>API готов</value></data>
+  <data name="Chats_SelectChat" xml:space="preserve"><value>Выберите чат.</value></data>
+  <data name="Common_MarketHash" xml:space="preserve"><value>Market Hash</value></data>
+  <data name="Games_View" xml:space="preserve"><value>Вид игр</value></data>
+  <data name="Chats_WriteMessage" xml:space="preserve"><value>Напишите сообщение</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>Готово</value></data>
+  <data name="Message_MinefieldMinimumBet" xml:space="preserve"><value>Минимальная ставка: {0}.</value></data>
+  <data name="Game_Minefield_Description" xml:space="preserve"><value>Открывайте безопасные ряды, избегайте мин и забирайте множитель до завершения поля.</value></data>
+  <data name="Common_Cards" xml:space="preserve"><value>Карточки</value></data>
+  <data name="Inventory_TradeUrlRequired_Text" xml:space="preserve"><value>Добавьте Steam Trade URL в профиле перед созданием запросов на продажу.</value></data>
+  <data name="Common_OpenItems" xml:space="preserve"><value>Открыть айтемы</value></data>
+  <data name="Status_TradeAcceptedPendingReceipt" xml:space="preserve"><value>Трейд принят</value></data>
+  <data name="Page_Minefield_Title" xml:space="preserve"><value>Minefield</value></data>
+  <data name="Error_RequestId" xml:space="preserve"><value>ID запроса</value></data>
+  <data name="Message_CannotClaimAfterMine" xml:space="preserve"><value>Нельзя забрать выигрыш после шага с миной.</value></data>
+  <data name="Page_Login_Title" xml:space="preserve"><value>Вход</value></data>
+  <data name="Js_CouldNotCancelTrade" xml:space="preserve"><value>Не удалось отменить трейд-офер.</value></data>
+  <data name="Message_GiftCodeActivated" xml:space="preserve"><value>Подарочный код активирован.</value></data>
+  <data name="Message_NotEnoughBalanceGeneric" xml:space="preserve"><value>Недостаточно баланса.</value></data>
+  <data name="Common_Open" xml:space="preserve"><value>Открыть</value></data>
+  <data name="Inventory_CreditWait" xml:space="preserve"><value>Ожидает кредита</value></data>
+  <data name="Message_SelectedRowInactive" xml:space="preserve"><value>Выбранный ряд не активен.</value></data>
+  <data name="Common_Price" xml:space="preserve"><value>Цена</value></data>
+  <data name="Chats_ItemChat" xml:space="preserve"><value>Чат предмета</value></data>
+  <data name="Common_Enter" xml:space="preserve"><value>Ввести</value></data>
+  <data name="Inventory_SummaryReady" xml:space="preserve"><value>Готово</value></data>
+  <data name="Inventory_ActionRequired" xml:space="preserve"><value>Нужно действие</value></data>
+  <data name="Common_Games" xml:space="preserve"><value>Игры</value></data>
+  <data name="Common_Action" xml:space="preserve"><value>Действие</value></data>
+  <data name="Minefield_Description" xml:space="preserve"><value>Unity WebGL игра, подключённая к API виртуального баланса x-mania.</value></data>
+  <data name="Common_Required" xml:space="preserve"><value>Обязательно</value></data>
+  <data name="Minefield_Fullscreen" xml:space="preserve"><value>На весь экран</value></data>
+  <data name="Inventory_TradeBlockMessageSell" xml:space="preserve"><value>Завершите или отмените активный трейд-офер перед продажей другого предмета.</value></data>
+  <data name="Market_AvailableBalance" xml:space="preserve"><value>Доступный баланс</value></data>
+  <data name="Layout_GlobalTrade_Title_Active" xml:space="preserve"><value>Активный трейд в процессе</value></data>
+  <data name="Message_ChatNotFound" xml:space="preserve"><value>Чат не найден.</value></data>
+  <data name="Js_SteamOfferNotCreated" xml:space="preserve"><value>Steam-офер ещё не создан. Статус обновится автоматически.</value></data>
+  <data name="Common_None" xml:space="preserve"><value>Нет</value></data>
+  <data name="Profile_TradeUrlRequired_Status" xml:space="preserve"><value>Обязательно</value></data>
+  <data name="Inventory_GameSelector" xml:space="preserve"><value>Выбор игры</value></data>
+  <data name="Common_Admin" xml:space="preserve"><value>Админ</value></data>
+  <data name="Common_QuantityShort" xml:space="preserve"><value>Кол-во</value></data>
+  <data name="Auth_Callback_SigningIn" xml:space="preserve"><value>Вход...</value></data>
+  <data name="Message_ServiceUnavailable" xml:space="preserve"><value>Функции с базой данных временно недоступны.</value></data>
+  <data name="Message_SelectedCellInvalid" xml:space="preserve"><value>Выбранная клетка некорректна.</value></data>
+  <data name="Chats_NoMessagesYet" xml:space="preserve"><value>Сообщений пока нет.</value></data>
+  <data name="Js_AcceptIntakeOffer" xml:space="preserve"><value>примите intake-офер</value></data>
+  <data name="Message_SteamStatusChecked" xml:space="preserve"><value>Статус Steam проверен. SteamState={0}; AppStatus={1}; Message={2}</value></data>
+  <data name="Profile_GiftCode_Title" xml:space="preserve"><value>Подарочный код</value></data>
+  <data name="Games_GameIconAlt" xml:space="preserve"><value>Иконка {0}</value></data>
+  <data name="Market_OwnItemBotInventory_Text" xml:space="preserve"><value>Ваш предмет уже в инвентаре бота.</value></data>
+  <data name="Profile_GiftCode_Label" xml:space="preserve"><value>Подарочный код</value></data>
+  <data name="Items_Empty_Title" xml:space="preserve"><value>Предметов пока нет</value></data>
+  <data name="Market_View" xml:space="preserve"><value>Вид маркета</value></data>
+  <data name="Js_Purchase" xml:space="preserve"><value>Покупка</value></data>
+  <data name="Inventory_Grouped" xml:space="preserve"><value>Сгруппировано</value></data>
+  <data name="Js_SteamOffer" xml:space="preserve"><value>Steam-офер</value></data>
+  <data name="Items_Type_ServiceItem" xml:space="preserve"><value>Предмет</value></data>
+  <data name="Common_Item" xml:space="preserve"><value>Предмет</value></data>
+  <data name="Layout_GlobalTrade_ConfirmTransfer" xml:space="preserve"><value>Подтвердить передачу предмета</value></data>
+  <data name="Auth_Logout_Title" xml:space="preserve"><value>Выход</value></data>
+  <data name="Items_View" xml:space="preserve"><value>Вид айтемов</value></data>
+  <data name="Page_Games_Title" xml:space="preserve"><value>Игры</value></data>
+  <data name="Items_Description" xml:space="preserve"><value>Кастомные сервисные предметы, созданные из админ-панели.</value></data>
+  <data name="Layout_GlobalTrade_OpenOffers" xml:space="preserve"><value>Открыть трейд-оферы</value></data>
+  <data name="Js_AcceptDeliveryOffer" xml:space="preserve"><value>примите delivery-офер</value></data>
+  <data name="Games_Empty_Text" xml:space="preserve"><value>Этот раздел подготовлен для будущих Unity WebGL интеграций.</value></data>
+  <data name="Layout_GlobalTrade_Title_Action" xml:space="preserve"><value>Steam-офер требует действия</value></data>
+  <data name="Message_SteamOfferStillActive" xml:space="preserve"><value>Steam всё ещё показывает этот офер активным. Если вы нажали Confirm, подождите несколько секунд и проверьте снова; иначе завершите подтверждение в Steam или Steam Mobile.</value></data>
+  <data name="Js_Submit" xml:space="preserve"><value>Отправить</value></data>
+  <data name="Inventory_TradeUrlRequired_Title" xml:space="preserve"><value>Trade URL нужен перед продажей.</value></data>
+  <data name="Profile_GiftCode_Placeholder" xml:space="preserve"><value>Введите подарочный код</value></data>
+  <data name="Js_WaitingNextSteamStep" xml:space="preserve"><value>ожидается следующий шаг Steam</value></data>
+  <data name="Message_SaleRequestCreatedAuto" xml:space="preserve"><value>Запрос на продажу создан. Intake-трейд запустится автоматически.</value></data>
+  <data name="Message_CachedInventoryShown" xml:space="preserve"><value>Steam ограничивает live-запросы к инвентарю, поэтому показан кешированный инвентарь от {0}.</value></data>
+  <data name="Message_CancelRequestInvalid" xml:space="preserve"><value>Запрос на отмену некорректен.</value></data>
+  <data name="PricingDebug_Kicker" xml:space="preserve"><value>Диагностика цен</value></data>
+  <data name="PricingDebug_Final" xml:space="preserve"><value>Финальная</value></data>
+  <data name="PricingDebug_AssetId" xml:space="preserve"><value>AssetId</value></data>
+  <data name="PricingDebug_Empty_Title" xml:space="preserve"><value>Нет предметов для диагностики</value></data>
+  <data name="PricingDebug_Source" xml:space="preserve"><value>Источник</value></data>
+  <data name="PricingDebug_ResolvedMarketHashName" xml:space="preserve"><value>ResolvedMarketHashName</value></data>
+  <data name="PricingDebug_ClassId" xml:space="preserve"><value>ClassId</value></data>
+  <data name="PricingDebug_MarketHashName" xml:space="preserve"><value>MarketHashName</value></data>
+  <data name="PricingDebug_Errors" xml:space="preserve"><value>Ошибки</value></data>
+  <data name="PricingDebug_SteamMarket" xml:space="preserve"><value>Steam Market</value></data>
+  <data name="PricingDebug_MarketName" xml:space="preserve"><value>MarketName</value></data>
+  <data name="PricingDebug_Description" xml:space="preserve"><value>Сравнение расчёта цен Steam Market и Skinport для текущего инвентаря.</value></data>
+  <data name="Page_PricingDebug_Title" xml:space="preserve"><value>Дебаг цен</value></data>
+  <data name="PricingDebug_LoginRequired_Text" xml:space="preserve"><value>Войдите через Steam, чтобы запустить диагностику цен для инвентаря.</value></data>
+  <data name="PricingDebug_Empty_Text" xml:space="preserve"><value>Steam-инвентарь не вернул предметы для диагностики.</value></data>
 </root>

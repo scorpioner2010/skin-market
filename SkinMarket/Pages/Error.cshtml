@@ -1,33 +1,33 @@
 @page
 @model ErrorModel
 @{
-    ViewData["Title"] = "Error";
+    ViewData["Title"] = L["Page_Error_Title"];
 }
 
 <div class="py-4">
     <section class="content-card">
         <div class="page-header">
             <div>
-                <h1>Error</h1>
-                <p class="page-description">An error occurred while processing your request.</p>
+                <h1>@L["Page_Error_Title"]</h1>
+                <p class="page-description">@L["Error_Description"]</p>
             </div>
         </div>
 
         @if (Model.ShowRequestId)
         {
             <div class="app-alert alert-warning" role="alert">
-                <strong>Request ID:</strong> <code>@Model.RequestId</code>
+                <strong>@L["Error_RequestId"]:</strong> <code>@Model.RequestId</code>
             </div>
         }
 
         <div class="stack-grid narrow">
             <article class="content-card">
-                <h2>Development Mode</h2>
-                <p class="meta-note">Enable the <strong>Development</strong> environment only for local debugging to see full exception details.</p>
+                <h2>@L["Error_DevelopmentMode"]</h2>
+                <p class="meta-note">@L["Error_DevelopmentMode_Text"]</p>
             </article>
             <article class="content-card">
-                <h2>Security Note</h2>
-                <p class="meta-note">Do not enable <strong>Development</strong> on deployed applications because it can expose sensitive runtime information.</p>
+                <h2>@L["Error_SecurityNote"]</h2>
+                <p class="meta-note">@L["Error_SecurityNote_Text"]</p>
             </article>
         </div>
     </section>

@@ -10,8 +10,8 @@
             <h1>@L["Page_Market_Title"]</h1>
         </div>
         <div class="status-group">
-            <form method="get" class="game-switcher" aria-label="Game selector">
-                <label class="game-switcher-label" for="market-game">Game</label>
+            <form method="get" class="game-switcher" aria-label="@L["Inventory_GameSelector"]">
+                <label class="game-switcher-label" for="market-game">@L["Common_Game"]</label>
                 <select id="market-game" name="game" class="form-select app-input game-switcher-select" onchange="this.form.submit()">
                     @foreach (var game in Model.SupportedGames.Where(item => item.SupportsInventory))
                     {
@@ -42,7 +42,7 @@
     @if (User.Identity?.IsAuthenticated ?? false)
     {
         <div class="summary-card market-balance-card">
-            <span class="market-balance-label">Available balance</span>
+            <span class="market-balance-label">@L["Market_AvailableBalance"]</span>
             <h2>$@Model.CurrentBalance.ToString("0.00")</h2>
         </div>
     }
@@ -59,11 +59,11 @@
             <div class="section-heading">
                 <div>
                     <h2>@L["Market_AvailableItems_Title"]</h2>
-                    <p class="section-description">@Model.CurrentGameDisplayName: @Model.GroupedItems.Count grouped listing(s), @Model.TotalAvailableItemCount total item(s) currently visible from the bot inventory.</p>
+                    <p class="section-description">@L["Market_AvailableItems_Summary", Model.CurrentGameDisplayName, Model.GroupedItems.Count, Model.TotalAvailableItemCount]</p>
                 </div>
-                <div class="market-view-toggle" role="group" aria-label="Market view">
-                    <button type="button" class="market-view-button active" data-market-view-button="cards">Cards</button>
-                    <button type="button" class="market-view-button" data-market-view-button="table">Table</button>
+                <div class="market-view-toggle" role="group" aria-label="@L["Market_View"]">
+                    <button type="button" class="market-view-button active" data-market-view-button="cards">@L["Common_Cards"]</button>
+                    <button type="button" class="market-view-button" data-market-view-button="table">@L["Common_Table"]</button>
                 </div>
             </div>
             <div class="card-grid market-card-grid" data-market-view-panel="cards">
@@ -93,8 +93,8 @@
                                         }
                                     </div>
                                     <div class="market-price-block">
-                                        <span class="compact-badge market-quantity-badge">Qty: @item.Quantity</span>
-                                        <span class="market-price-label">Price</span>
+                                        <span class="compact-badge market-quantity-badge">@L["Common_QuantityShort"]: @item.Quantity</span>
+                                        <span class="market-price-label">@L["Common_Price"]</span>
                                         <p class="price-tag market-price-tag">$@item.Price.ToString("0.00")</p>
                                     </div>
                                 </div>
@@ -103,13 +103,13 @@
 
                         <dl class="detail-list compact market-detail-list">
                             <div class="detail-row market-detail-row">
-                                <dt>Asset ID</dt>
+                                <dt>@L["Common_AssetId"]</dt>
                                 <dd class="break-value market-detail-value">@item.AssetId</dd>
                             </div>
                             @if (!string.IsNullOrWhiteSpace(item.MarketHashName))
                             {
                                 <div class="detail-row market-detail-row">
-                                    <dt>Market Hash</dt>
+                                    <dt>@L["Common_MarketHash"]</dt>
                                     <dd class="break-value market-detail-value">@item.MarketHashName</dd>
                                 </div>
                             }
@@ -117,7 +117,7 @@
 
                         @if (item.Tradable != true)
                         {
-                            <p class="meta-note market-owner-note">Trade protection is active. This item will become buyable after Steam unlocks it.</p>
+                            <p class="meta-note market-owner-note">@L["Market_TradeProtection_Text"]</p>
                         }
                         else if (!(User.Identity?.IsAuthenticated ?? false))
                         {
@@ -127,11 +127,11 @@
                         }
                         else if (!item.HasBuyableItems)
                         {
-                            <p class="meta-note market-owner-note">Your item is already in the bot inventory.</p>
+                            <p class="meta-note market-owner-note">@L["Market_OwnItemBotInventory_Text"]</p>
                         }
                         else
                         {
-                            <form method="post" asp-page-handler="Buy" class="action-row market-item-actions" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before buying another item.">
+                            <form method="post" asp-page-handler="Buy" class="action-row market-item-actions" data-trade-blockable-form data-trade-block-message="@L["Market_TradeBlockMessageBuy"]">
                                 <input type="hidden" asp-for="PurchaseRequest.GameType" value="@item.GameType" />
                                 <input type="hidden" asp-for="PurchaseRequest.AppId" value="@item.AppId" />
                                 <input type="hidden" asp-for="PurchaseRequest.ContextId" value="@item.ContextId" />
@@ -149,17 +149,17 @@
             <div class="market-table-shell" data-market-view-panel="table" hidden>
                 <div class="market-table-list">
                     <div class="market-table-row market-table-header">
-                        <div class="market-table-cell market-table-item-cell">Item</div>
-                        <div class="market-table-cell">Qty</div>
-                        <div class="market-table-cell">Price</div>
-                        <div class="market-table-cell">Tradable</div>
-                        <div class="market-table-cell market-table-asset-cell">Asset ID</div>
-                        <div class="market-table-cell market-table-actions-cell">Action</div>
+                        <div class="market-table-cell market-table-item-cell">@L["Common_Item"]</div>
+                        <div class="market-table-cell">@L["Common_QuantityShort"]</div>
+                        <div class="market-table-cell">@L["Common_Price"]</div>
+                        <div class="market-table-cell">@L["Common_Tradable"]</div>
+                        <div class="market-table-cell market-table-asset-cell">@L["Common_AssetId"]</div>
+                        <div class="market-table-cell market-table-actions-cell">@L["Common_Action"]</div>
                     </div>
                     @foreach (var item in Model.GroupedItems)
                     {
                         <article class="market-table-row">
-                            <div class="market-table-cell market-table-item-cell" data-label="Item">
+                            <div class="market-table-cell market-table-item-cell" data-label="@L["Common_Item"]">
                                 <div class="market-table-main">
                                     @if (!string.IsNullOrWhiteSpace(item.IconUrl))
                                     {
@@ -180,22 +180,22 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="market-table-cell" data-label="Qty">
+                            <div class="market-table-cell" data-label="@L["Common_QuantityShort"]">
                                 <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                             </div>
-                            <div class="market-table-cell" data-label="Price">
+                            <div class="market-table-cell" data-label="@L["Common_Price"]">
                                 <span class="price-value">$@item.Price.ToString("0.00")</span>
                             </div>
-                            <div class="market-table-cell" data-label="Tradable">
+                            <div class="market-table-cell" data-label="@L["Common_Tradable"]">
                                 <span class="compact-badge">@((item.Tradable.HasValue ? L[item.Tradable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
                             </div>
-                            <div class="market-table-cell market-table-asset-cell" data-label="Asset ID">
+                            <div class="market-table-cell market-table-asset-cell" data-label="@L["Common_AssetId"]">
                                 <span class="inventory-meta break-value">@item.AssetId</span>
                             </div>
-                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
+                            <div class="market-table-cell market-table-actions-cell" data-label="@L["Common_Action"]">
                                 @if (item.Tradable != true)
                                 {
-                                    <span class="compact-badge compact-badge-neutral">Trade protected</span>
+                                    <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "TradeProtected")</span>
                                 }
                                 else if (!(User.Identity?.IsAuthenticated ?? false))
                                 {
@@ -203,11 +203,11 @@
                                 }
                                 else if (!item.HasBuyableItems)
                                 {
-                                    <span class="compact-badge compact-badge-neutral">Owned by you</span>
+                                    <span class="compact-badge compact-badge-neutral">@L["Market_OwnedByYou"]</span>
                                 }
                                 else
                                 {
-                                    <form method="post" asp-page-handler="Buy" class="market-table-action-form" data-trade-blockable-form data-trade-block-message="Finish or cancel the active trade offer before buying another item.">
+                                    <form method="post" asp-page-handler="Buy" class="market-table-action-form" data-trade-blockable-form data-trade-block-message="@L["Market_TradeBlockMessageBuy"]">
                                         <input type="hidden" name="PurchaseRequest.GameType" value="@item.GameType" />
                                         <input type="hidden" name="PurchaseRequest.AppId" value="@item.AppId" />
                                         <input type="hidden" name="PurchaseRequest.ContextId" value="@item.ContextId" />

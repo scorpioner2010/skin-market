@@ -7,8 +7,7 @@
   <data name="Layout_UserFallback" xml:space="preserve"><value>Користувач</value></data>
   <data name="Layout_Subtitle" xml:space="preserve"><value>Маркетплейс ігрових предметів</value></data>
   <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Перемкнути навігацію</value></data>
-  <data name="Layout_Nav_Home" xml:space="preserve"><value>Головна</value></data>
-  <data name="Layout_Nav_Profile" xml:space="preserve"><value>Профіль</value></data>
+<data name="Layout_Nav_Profile" xml:space="preserve"><value>Профіль</value></data>
   <data name="Layout_Nav_Items" xml:space="preserve"><value>Айтеми</value></data>
   <data name="Layout_Nav_Games" xml:space="preserve"><value>Ігри</value></data>
   <data name="Layout_Nav_Chats" xml:space="preserve"><value>Чати</value></data>
@@ -30,30 +29,13 @@
   <data name="Common_No" xml:space="preserve"><value>Ні</value></data>
   <data name="Common_Unknown" xml:space="preserve"><value>Невідомо</value></data>
   <data name="Common_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
-  <data name="Page_Home_Title" xml:space="preserve"><value>Головна</value></data>
-  <data name="Page_Profile_Title" xml:space="preserve"><value>Профіль</value></data>
+<data name="Page_Profile_Title" xml:space="preserve"><value>Профіль</value></data>
   <data name="Page_Inventory_Title" xml:space="preserve"><value>Інвентар</value></data>
   <data name="Page_Items_Title" xml:space="preserve"><value>Айтеми</value></data>
   <data name="Page_Chats_Title" xml:space="preserve"><value>Чати</value></data>
   <data name="Page_Market_Title" xml:space="preserve"><value>Маркет</value></data>
   <data name="Page_History_Title" xml:space="preserve"><value>Історія</value></data>
-  <data name="Home_Kicker" xml:space="preserve"><value>Маркетплейс з готовністю до кількох ігор</value></data>
-  <data name="Home_HeroText" xml:space="preserve"><value>Купуйте, продавайте та відстежуйте ігрові предмети у зрозумілому маркетплейсі з інвентарем, балансом і статусами доставки.</value></data>
-  <data name="Home_OpenMarket" xml:space="preserve"><value>Відкрити маркет</value></data>
-  <data name="Home_ViewInventory" xml:space="preserve"><value>Переглянути інвентар</value></data>
-  <data name="Home_Workflow_Label" xml:space="preserve"><value>Сценарій</value></data>
-  <data name="Home_Workflow_Value" xml:space="preserve"><value>Вхід через Steam, виставлення предметів, зарахування балансу, покупка та відстеження доставки</value></data>
-  <data name="Home_Focus_Label" xml:space="preserve"><value>Фокус</value></data>
-  <data name="Home_Focus_Value" xml:space="preserve"><value>Швидкий перегляд предметів, передбачувані дії та зрозумілі стани маркету</value></data>
-  <data name="Home_Overview_Title" xml:space="preserve"><value>Огляд платформи</value></data>
-  <data name="Home_Overview_Description" xml:space="preserve"><value>Основні можливості маркетплейсу доступні наскрізно для інвентарю, продажів і відстеження покупок.</value></data>
-  <data name="Home_Feature_Profile_Title" xml:space="preserve"><value>Steam-авторизація та профіль</value></data>
-  <data name="Home_Feature_Profile_Text" xml:space="preserve"><value>Увійдіть через Steam, керуйте профілем і тримайте trade-дані готовими для передачі предметів.</value></data>
-  <data name="Home_Feature_Inventory_Title" xml:space="preserve"><value>Інвентар і продажі</value></data>
-  <data name="Home_Feature_Inventory_Text" xml:space="preserve"><value>Переглядайте інвентарі підтримуваних ігор, створюйте запити на продаж і стежте за статусами кожного предмета.</value></data>
-  <data name="Home_Feature_Market_Title" xml:space="preserve"><value>Маркет і доставка</value></data>
-  <data name="Home_Feature_Market_Text" xml:space="preserve"><value>Доступні лістинги можна купувати за баланс акаунта та відстежувати доставку.</value></data>
-  <data name="Profile_SteamUserFallback" xml:space="preserve"><value>Користувач Steam</value></data>
+<data name="Profile_SteamUserFallback" xml:space="preserve"><value>Користувач Steam</value></data>
   <data name="Profile_AvatarAlt" xml:space="preserve"><value>Аватар {0}</value></data>
   <data name="Profile_Kicker" xml:space="preserve"><value>Профіль користувача</value></data>
   <data name="Profile_Description" xml:space="preserve"><value>Керуйте даними акаунта, поточним балансом і Steam Trade URL в одному місці.</value></data>
@@ -147,7 +129,7 @@
   <data name="Status_TradeCreated" xml:space="preserve"><value>Трейд створено</value></data>
   <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade створено</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Доступно</value></data>
-  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protected</value></data>
+  <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protection</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Очікується дія користувача</value></data>
   <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Очікується дія покупця</value></data>
   <data name="Status_ReceivedByBot" xml:space="preserve"><value>Отримано ботом</value></data>
@@ -207,9 +189,190 @@
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Створено stub bot trade. Реальна інтеграція зі Steam-ботом ще не підключена.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Створено stub delivery trade. Реальна Steam-інтеграція доставки ще не підключена.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
-  <data name="PriceStatus_Cached" xml:space="preserve"><value>Cached</value></data>
-  <data name="PriceStatus_Estimated" xml:space="preserve"><value>Estimated</value></data>
-  <data name="PriceStatus_Loading" xml:space="preserve"><value>Loading price...</value></data>
-  <data name="PriceStatus_NoPrice" xml:space="preserve"><value>No price</value></data>
-  <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Refreshing</value></data>
+  <data name="PriceStatus_Cached" xml:space="preserve"><value>З кешу</value></data>
+  <data name="PriceStatus_Estimated" xml:space="preserve"><value>Оціночна</value></data>
+  <data name="PriceStatus_Loading" xml:space="preserve"><value>Завантаження ціни...</value></data>
+  <data name="PriceStatus_NoPrice" xml:space="preserve"><value>Ціни немає</value></data>
+  <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Оновлення</value></data>
+  <data name="Chats_Description" xml:space="preserve"><value>Чати щодо предметів із командою сервісу.</value></data>
+  <data name="Message_FinishActiveTradeBuy" xml:space="preserve"><value>Завершіть або скасуйте активний трейд-офер перед покупкою іншого предмета.</value></data>
+  <data name="Message_CheckSteamOfferStatusFailed" xml:space="preserve"><value>Не вдалося перевірити статус Steam-офера. Bot service не повернув статус.</value></data>
+  <data name="Layout_GlobalTrade_Status_Waiting" xml:space="preserve"><value>Очікування статусу</value></data>
+  <data name="Common_Actions" xml:space="preserve"><value>Дії</value></data>
+  <data name="Message_AdminAccountNotFound" xml:space="preserve"><value>Адмін-акаунт не знайдено.</value></data>
+  <data name="Auth_Login_Description" xml:space="preserve"><value>Авторизація триває. Якщо перенаправлення не почалося автоматично, оновіть сторінку й спробуйте ще раз.</value></data>
+  <data name="Common_Type" xml:space="preserve"><value>Тип</value></data>
+  <data name="Message_ClaimStepInvalid" xml:space="preserve"><value>Крок виплати некоректний.</value></data>
+  <data name="Inventory_SummaryPending" xml:space="preserve"><value>Очікує</value></data>
+  <data name="Market_TradeBlockMessageBuy" xml:space="preserve"><value>Завершіть або скасуйте активний трейд-офер перед покупкою іншого предмета.</value></data>
+  <data name="Chats_NoMessages" xml:space="preserve"><value>Повідомлень немає</value></data>
+  <data name="Inventory_WaitingForCredit" xml:space="preserve"><value>Очікує кредиту</value></data>
+  <data name="Js_Sale" xml:space="preserve"><value>Продаж</value></data>
+  <data name="Profile_BalanceNote" xml:space="preserve"><value>Цей баланс можна витратити на сервіси сайту, ігри та покупки на маркеті. Вивести його в реальні кошти неможливо.</value></data>
+  <data name="Common_Player" xml:space="preserve"><value>Гравець</value></data>
+  <data name="Common_Tradable" xml:space="preserve"><value>Можна передати</value></data>
+  <data name="Common_Items" xml:space="preserve"><value>Предмети</value></data>
+  <data name="Common_Status" xml:space="preserve"><value>Статус</value></data>
+  <data name="Inventory_SellableDescription" xml:space="preserve"><value>Предмети для продажу, ціна та статус трейду.</value></data>
+  <data name="Js_TradeInProgress" xml:space="preserve"><value>Трейд у процесі</value></data>
+  <data name="Layout_GlobalTrade_CancelOffer" xml:space="preserve"><value>Скасувати офер</value></data>
+  <data name="Inventory_TradeUrlRequired" xml:space="preserve"><value>Потрібен Trade URL</value></data>
+  <data name="Js_FinishActiveTradeFirst" xml:space="preserve"><value>Завершіть або скасуйте активний трейд-офер.</value></data>
+  <data name="History_Asset" xml:space="preserve"><value>Asset</value></data>
+  <data name="Message_OpenSafeRowBeforeClaim" xml:space="preserve"><value>Відкрийте хоча б один безпечний ряд перед виплатою.</value></data>
+  <data name="Common_Amount" xml:space="preserve"><value>Сума</value></data>
+  <data name="Common_Game" xml:space="preserve"><value>Гра</value></data>
+  <data name="Common_Details" xml:space="preserve"><value>Деталі</value></data>
+  <data name="Auth_Login_Action" xml:space="preserve"><value>Дія</value></data>
+  <data name="Common_Chat" xml:space="preserve"><value>Чат</value></data>
+  <data name="Message_MinefieldDisabled" xml:space="preserve"><value>Minefield зараз вимкнено.</value></data>
+  <data name="Error_DevelopmentMode" xml:space="preserve"><value>Режим розробки</value></data>
+  <data name="Common_Asset" xml:space="preserve"><value>Asset</value></data>
+  <data name="Message_TradeOfferCanceled" xml:space="preserve"><value>Трейд-офер скасовано.</value></data>
+  <data name="Minefield_LoginRequired_Text" xml:space="preserve"><value>Minefield використовує ваш віртуальний баланс x-mania.</value></data>
+  <data name="Minefield_Loading" xml:space="preserve"><value>Завантаження Minefield</value></data>
+  <data name="Message_TradeUrlBelongsAnotherSteam" xml:space="preserve"><value>Trade URL належить іншому Steam-акаунту.</value></data>
+  <data name="Error_DevelopmentMode_Text" xml:space="preserve"><value>Увімкніть середовище Development лише для локального дебагу, щоб бачити повні деталі винятків.</value></data>
+  <data name="Message_ActiveGameNotFound" xml:space="preserve"><value>Активну гру не знайдено.</value></data>
+  <data name="Market_AvailableItems_Summary" xml:space="preserve"><value>{0}: {1} згрупованих лістингів, {2} предметів зараз видно в інвентарі бота.</value></data>
+  <data name="Message_TradeOfferCanceledBySeller" xml:space="preserve"><value>Трейд-офер скасовано продавцем. {0}</value></data>
+  <data name="Message_MessageEmpty" xml:space="preserve"><value>Повідомлення не може бути порожнім.</value></data>
+  <data name="Chats_NoChats_Title" xml:space="preserve"><value>Чатів ще немає</value></data>
+  <data name="Message_FinishActiveTradeSell" xml:space="preserve"><value>Завершіть або скасуйте активний трейд-офер перед продажем іншого предмета.</value></data>
+  <data name="Message_TradeOfferNoSteamYet" xml:space="preserve"><value>У цього запиту на продаж ще немає Steam trade offer.</value></data>
+  <data name="Js_CancelOnlySaleIntake" xml:space="preserve"><value>Скасування доступне лише для intake-оферів продажу.</value></data>
+  <data name="Message_GiftCodeInvalid" xml:space="preserve"><value>Подарунковий код некоректний.</value></data>
+  <data name="Items_AvailableSummary" xml:space="preserve"><value>Зараз доступно предметів: {0}.</value></data>
+  <data name="Auth_Callback_Title" xml:space="preserve"><value>Steam Callback</value></data>
+  <data name="Auth_Login_Status" xml:space="preserve"><value>Статус</value></data>
+  <data name="Js_SaleOperationNotReadyCancel" xml:space="preserve"><value>Операція продажу ще не готова до скасування.</value></data>
+  <data name="Error_Description" xml:space="preserve"><value>Під час обробки запиту сталася помилка.</value></data>
+  <data name="History_Amount" xml:space="preserve"><value>Сума</value></data>
+  <data name="Status_InEscrow" xml:space="preserve"><value>В escrow</value></data>
+  <data name="Market_TradeProtection_Text" xml:space="preserve"><value>Активний trade protection. Предмет стане доступним для покупки після розблокування Steam.</value></data>
+  <data name="History_Type" xml:space="preserve"><value>Тип</value></data>
+  <data name="Common_Send" xml:space="preserve"><value>Надіслати</value></data>
+  <data name="Profile_GiftCode_AdminActive" xml:space="preserve"><value>Адмін активний</value></data>
+  <data name="Error_SecurityNote_Text" xml:space="preserve"><value>Не вмикайте Development у розгорнутих застосунках, бо це може розкрити чутливі runtime-дані.</value></data>
+  <data name="Chats_You" xml:space="preserve"><value>Ви</value></data>
+  <data name="Js_Canceling" xml:space="preserve"><value>Скасування...</value></data>
+  <data name="Common_OpenProfile" xml:space="preserve"><value>Відкрити профіль</value></data>
+  <data name="Chats_ItemChats" xml:space="preserve"><value>Чати предметів</value></data>
+  <data name="Common_ItemId" xml:space="preserve"><value>ID предмета</value></data>
+  <data name="Message_TradeOfferCannotBeCanceledStatus" xml:space="preserve"><value>Трейд-офер не можна скасувати зі статусу {0}.</value></data>
+  <data name="Js_UnreadChats" xml:space="preserve"><value>{0} непрочитаних чатів</value></data>
+  <data name="Auth_Logout_SigningOut" xml:space="preserve"><value>Вихід...</value></data>
+  <data name="Message_ItemNotFound" xml:space="preserve"><value>Предмет не знайдено.</value></data>
+  <data name="Profile_TradeUrlRequired_Message" xml:space="preserve"><value>Trade URL потрібен перед продажем. Відкрийте сторінку Steam, скопіюйте повний Trade URL, вставте його тут і збережіть.</value></data>
+  <data name="Games_AllGames" xml:space="preserve"><value>Усі ігри</value></data>
+  <data name="Market_OwnedByYou" xml:space="preserve"><value>Ваш предмет</value></data>
+  <data name="Page_Error_Title" xml:space="preserve"><value>Помилка</value></data>
+  <data name="Common_OpenSteamPage" xml:space="preserve"><value>Відкрити сторінку Steam</value></data>
+  <data name="Common_Table" xml:space="preserve"><value>Таблиця</value></data>
+  <data name="Common_Description" xml:space="preserve"><value>Опис</value></data>
+  <data name="Auth_Login_WaitingForSteam" xml:space="preserve"><value>Очікування Steam OpenID</value></data>
+  <data name="Message_MinefieldMaximumBet" xml:space="preserve"><value>Максимальна ставка: {0}.</value></data>
+  <data name="Games_Empty_Title" xml:space="preserve"><value>Ігор поки немає</value></data>
+  <data name="Error_SecurityNote" xml:space="preserve"><value>Примітка безпеки</value></data>
+  <data name="Status_AwaitingBotConfirmation" xml:space="preserve"><value>Очікує підтвердження бота</value></data>
+  <data name="Common_Quantity" xml:space="preserve"><value>Кількість</value></data>
+  <data name="Inventory_LiveDescription" xml:space="preserve"><value>Живий Steam-інвентар із згрупованими дублікатами, поточною ціною та статусом трейду.</value></data>
+  <data name="Layout_Admin" xml:space="preserve"><value>Адмін</value></data>
+  <data name="Inventory_AutoTradePending" xml:space="preserve"><value>Автотрейд очікується</value></data>
+  <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Доставка в escrow</value></data>
+  <data name="Common_AssetId" xml:space="preserve"><value>Asset ID</value></data>
+  <data name="Message_MessageInvalid" xml:space="preserve"><value>Повідомлення некоректне.</value></data>
+  <data name="Auth_Login_Redirecting" xml:space="preserve"><value>Перенаправлення до Steam...</value></data>
+  <data name="Js_CancelConfirm" xml:space="preserve"><value>Скасувати цей Steam-офер і звільнити операцію продажу?</value></data>
+  <data name="Game_Minefield_Status" xml:space="preserve"><value>API готовий</value></data>
+  <data name="Chats_SelectChat" xml:space="preserve"><value>Виберіть чат.</value></data>
+  <data name="Common_MarketHash" xml:space="preserve"><value>Market Hash</value></data>
+  <data name="Games_View" xml:space="preserve"><value>Вигляд ігор</value></data>
+  <data name="Chats_WriteMessage" xml:space="preserve"><value>Напишіть повідомлення</value></data>
+  <data name="Status_Ready" xml:space="preserve"><value>Готово</value></data>
+  <data name="Message_MinefieldMinimumBet" xml:space="preserve"><value>Мінімальна ставка: {0}.</value></data>
+  <data name="Game_Minefield_Description" xml:space="preserve"><value>Відкривайте безпечні ряди, уникайте мін і забирайте множник до завершення поля.</value></data>
+  <data name="Common_Cards" xml:space="preserve"><value>Картки</value></data>
+  <data name="Inventory_TradeUrlRequired_Text" xml:space="preserve"><value>Додайте Steam Trade URL у профілі перед створенням запитів на продаж.</value></data>
+  <data name="Common_OpenItems" xml:space="preserve"><value>Відкрити айтеми</value></data>
+  <data name="Status_TradeAcceptedPendingReceipt" xml:space="preserve"><value>Трейд прийнято</value></data>
+  <data name="Page_Minefield_Title" xml:space="preserve"><value>Minefield</value></data>
+  <data name="Error_RequestId" xml:space="preserve"><value>ID запиту</value></data>
+  <data name="Message_CannotClaimAfterMine" xml:space="preserve"><value>Не можна забрати виграш після кроку з міною.</value></data>
+  <data name="Page_Login_Title" xml:space="preserve"><value>Вхід</value></data>
+  <data name="Js_CouldNotCancelTrade" xml:space="preserve"><value>Не вдалося скасувати трейд-офер.</value></data>
+  <data name="Message_GiftCodeActivated" xml:space="preserve"><value>Подарунковий код активовано.</value></data>
+  <data name="Message_NotEnoughBalanceGeneric" xml:space="preserve"><value>Недостатньо балансу.</value></data>
+  <data name="Common_Open" xml:space="preserve"><value>Відкрити</value></data>
+  <data name="Inventory_CreditWait" xml:space="preserve"><value>Очікує кредиту</value></data>
+  <data name="Message_SelectedRowInactive" xml:space="preserve"><value>Вибраний ряд не активний.</value></data>
+  <data name="Common_Price" xml:space="preserve"><value>Ціна</value></data>
+  <data name="Chats_ItemChat" xml:space="preserve"><value>Чат предмета</value></data>
+  <data name="Common_Enter" xml:space="preserve"><value>Ввести</value></data>
+  <data name="Inventory_SummaryReady" xml:space="preserve"><value>Готово</value></data>
+  <data name="Inventory_ActionRequired" xml:space="preserve"><value>Потрібна дія</value></data>
+  <data name="Common_Games" xml:space="preserve"><value>Ігри</value></data>
+  <data name="Common_Action" xml:space="preserve"><value>Дія</value></data>
+  <data name="Minefield_Description" xml:space="preserve"><value>Unity WebGL гра, підключена до API віртуального балансу x-mania.</value></data>
+  <data name="Common_Required" xml:space="preserve"><value>Обовязково</value></data>
+  <data name="Minefield_Fullscreen" xml:space="preserve"><value>На весь екран</value></data>
+  <data name="Inventory_TradeBlockMessageSell" xml:space="preserve"><value>Завершіть або скасуйте активний трейд-офер перед продажем іншого предмета.</value></data>
+  <data name="Market_AvailableBalance" xml:space="preserve"><value>Доступний баланс</value></data>
+  <data name="Layout_GlobalTrade_Title_Active" xml:space="preserve"><value>Активний трейд у процесі</value></data>
+  <data name="Message_ChatNotFound" xml:space="preserve"><value>Чат не знайдено.</value></data>
+  <data name="Js_SteamOfferNotCreated" xml:space="preserve"><value>Steam-офер ще не створено. Статус оновиться автоматично.</value></data>
+  <data name="Common_None" xml:space="preserve"><value>Немає</value></data>
+  <data name="Profile_TradeUrlRequired_Status" xml:space="preserve"><value>Обовязково</value></data>
+  <data name="Inventory_GameSelector" xml:space="preserve"><value>Вибір гри</value></data>
+  <data name="Common_Admin" xml:space="preserve"><value>Адмін</value></data>
+  <data name="Common_QuantityShort" xml:space="preserve"><value>К-сть</value></data>
+  <data name="Auth_Callback_SigningIn" xml:space="preserve"><value>Вхід...</value></data>
+  <data name="Message_ServiceUnavailable" xml:space="preserve"><value>Функції з базою даних тимчасово недоступні.</value></data>
+  <data name="Message_SelectedCellInvalid" xml:space="preserve"><value>Вибрана клітинка некоректна.</value></data>
+  <data name="Chats_NoMessagesYet" xml:space="preserve"><value>Повідомлень ще немає.</value></data>
+  <data name="Js_AcceptIntakeOffer" xml:space="preserve"><value>прийміть intake-офер</value></data>
+  <data name="Message_SteamStatusChecked" xml:space="preserve"><value>Статус Steam перевірено. SteamState={0}; AppStatus={1}; Message={2}</value></data>
+  <data name="Profile_GiftCode_Title" xml:space="preserve"><value>Подарунковий код</value></data>
+  <data name="Games_GameIconAlt" xml:space="preserve"><value>Іконка {0}</value></data>
+  <data name="Market_OwnItemBotInventory_Text" xml:space="preserve"><value>Ваш предмет уже в інвентарі бота.</value></data>
+  <data name="Profile_GiftCode_Label" xml:space="preserve"><value>Подарунковий код</value></data>
+  <data name="Items_Empty_Title" xml:space="preserve"><value>Предметів ще немає</value></data>
+  <data name="Market_View" xml:space="preserve"><value>Вигляд маркету</value></data>
+  <data name="Js_Purchase" xml:space="preserve"><value>Покупка</value></data>
+  <data name="Inventory_Grouped" xml:space="preserve"><value>Згруповано</value></data>
+  <data name="Js_SteamOffer" xml:space="preserve"><value>Steam-офер</value></data>
+  <data name="Items_Type_ServiceItem" xml:space="preserve"><value>Предмет</value></data>
+  <data name="Common_Item" xml:space="preserve"><value>Предмет</value></data>
+  <data name="Layout_GlobalTrade_ConfirmTransfer" xml:space="preserve"><value>Підтвердити передачу предмета</value></data>
+  <data name="Auth_Logout_Title" xml:space="preserve"><value>Вихід</value></data>
+  <data name="Items_View" xml:space="preserve"><value>Вигляд айтемів</value></data>
+  <data name="Page_Games_Title" xml:space="preserve"><value>Ігри</value></data>
+  <data name="Items_Description" xml:space="preserve"><value>Кастомні сервісні предмети, створені з адмін-панелі.</value></data>
+  <data name="Layout_GlobalTrade_OpenOffers" xml:space="preserve"><value>Відкрити трейд-офери</value></data>
+  <data name="Js_AcceptDeliveryOffer" xml:space="preserve"><value>прийміть delivery-офер</value></data>
+  <data name="Games_Empty_Text" xml:space="preserve"><value>Цей розділ підготовлений для майбутніх Unity WebGL інтеграцій.</value></data>
+  <data name="Layout_GlobalTrade_Title_Action" xml:space="preserve"><value>Steam-офер потребує дії</value></data>
+  <data name="Message_SteamOfferStillActive" xml:space="preserve"><value>Steam все ще показує цей офер активним. Якщо ви натиснули Confirm, зачекайте кілька секунд і перевірте ще раз; інакше завершіть підтвердження у Steam або Steam Mobile.</value></data>
+  <data name="Js_Submit" xml:space="preserve"><value>Надіслати</value></data>
+  <data name="Inventory_TradeUrlRequired_Title" xml:space="preserve"><value>Trade URL потрібен перед продажем.</value></data>
+  <data name="Profile_GiftCode_Placeholder" xml:space="preserve"><value>Введіть подарунковий код</value></data>
+  <data name="Js_WaitingNextSteamStep" xml:space="preserve"><value>очікується наступний крок Steam</value></data>
+  <data name="Message_SaleRequestCreatedAuto" xml:space="preserve"><value>Запит на продаж створено. Intake-трейд запуститься автоматично.</value></data>
+  <data name="Message_CachedInventoryShown" xml:space="preserve"><value>Steam обмежує live-запити до інвентарю, тому показано кешований інвентар від {0}.</value></data>
+  <data name="Message_CancelRequestInvalid" xml:space="preserve"><value>Запит на скасування некоректний.</value></data>
+  <data name="PricingDebug_Kicker" xml:space="preserve"><value>Діагностика цін</value></data>
+  <data name="PricingDebug_Final" xml:space="preserve"><value>Фінальна</value></data>
+  <data name="PricingDebug_AssetId" xml:space="preserve"><value>AssetId</value></data>
+  <data name="PricingDebug_Empty_Title" xml:space="preserve"><value>Немає предметів для діагностики</value></data>
+  <data name="PricingDebug_Source" xml:space="preserve"><value>Джерело</value></data>
+  <data name="PricingDebug_ResolvedMarketHashName" xml:space="preserve"><value>ResolvedMarketHashName</value></data>
+  <data name="PricingDebug_ClassId" xml:space="preserve"><value>ClassId</value></data>
+  <data name="PricingDebug_MarketHashName" xml:space="preserve"><value>MarketHashName</value></data>
+  <data name="PricingDebug_Errors" xml:space="preserve"><value>Помилки</value></data>
+  <data name="PricingDebug_SteamMarket" xml:space="preserve"><value>Steam Market</value></data>
+  <data name="PricingDebug_MarketName" xml:space="preserve"><value>MarketName</value></data>
+  <data name="PricingDebug_Description" xml:space="preserve"><value>Порівняння розрахунку цін Steam Market і Skinport для поточного інвентарю.</value></data>
+  <data name="Page_PricingDebug_Title" xml:space="preserve"><value>Дебаг цін</value></data>
+  <data name="PricingDebug_LoginRequired_Text" xml:space="preserve"><value>Увійдіть через Steam, щоб запустити діагностику цін для інвентарю.</value></data>
+  <data name="PricingDebug_Empty_Text" xml:space="preserve"><value>Steam-інвентар не повернув предмети для діагностики.</value></data>
 </root>

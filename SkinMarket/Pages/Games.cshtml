@@ -1,30 +1,30 @@
 @page
 @model SkinMarket.Pages.GamesModel
 @{
-    ViewData["Title"] = "Games";
+    ViewData["Title"] = L["Page_Games_Title"];
 }
 
 <div class="games-page py-4">
     <div class="page-header">
         <div>
-            <h1>Games</h1>
+            <h1>@L["Page_Games_Title"]</h1>
         </div>
     </div>
 
     @if (Model.Games.Count == 0)
     {
         <div class="empty-state games-empty-state">
-            <h2>No games available yet</h2>
-            <p class="text-muted mb-0">This section is prepared for future Unity WebGL integrations.</p>
+            <h2>@L["Games_Empty_Title"]</h2>
+            <p class="text-muted mb-0">@L["Games_Empty_Text"]</p>
         </div>
     }
     else
     {
         <section class="page-section">
             <div class="section-heading games-section-heading">
-                <div class="market-view-toggle" role="group" aria-label="Games view">
-                    <button type="button" class="market-view-button active" data-games-view-button="cards">Cards</button>
-                    <button type="button" class="market-view-button" data-games-view-button="table">Table</button>
+                <div class="market-view-toggle" role="group" aria-label="@L["Games_View"]">
+                    <button type="button" class="market-view-button active" data-games-view-button="cards">@L["Common_Cards"]</button>
+                    <button type="button" class="market-view-button" data-games-view-button="table">@L["Common_Table"]</button>
                 </div>
             </div>
 
@@ -34,7 +34,7 @@
                     <article class="content-card item-card market-item-card game-card">
                         <div class="market-item-top game-card-top">
                             <div class="market-item-visual game-card-visual">
-                                <img class="game-card-icon" src="@game.IconUrl" alt="@game.Name icon" />
+                                <img class="game-card-icon" src="@game.IconUrl" alt="@L["Games_GameIconAlt", game.Name]" />
                             </div>
                             <div class="market-item-copy">
                                 <div class="market-item-head">
@@ -47,7 +47,7 @@
                             </div>
                         </div>
                         <div class="action-row market-item-actions">
-                            <a class="btn app-button-primary market-action-button" asp-page="@game.PagePath">Open</a>
+                            <a class="btn app-button-primary market-action-button" asp-page="@game.PagePath">@L["Common_Open"]</a>
                         </div>
                     </article>
                 }
@@ -55,27 +55,27 @@
             <div class="market-table-shell games-table-shell" data-games-view-panel="table" hidden>
                 <div class="market-table-list games-table-list">
                     <div class="market-table-row market-table-header games-table-row">
-                        <div class="market-table-cell market-table-item-cell">Game</div>
-                        <div class="market-table-cell">Status</div>
-                        <div class="market-table-cell market-table-actions-cell">Action</div>
+                        <div class="market-table-cell market-table-item-cell">@L["Common_Game"]</div>
+                        <div class="market-table-cell">@L["Common_Status"]</div>
+                        <div class="market-table-cell market-table-actions-cell">@L["Common_Action"]</div>
                     </div>
                     @foreach (var game in Model.Games)
                     {
                         <article class="market-table-row games-table-row">
-                            <div class="market-table-cell market-table-item-cell" data-label="Game">
+                            <div class="market-table-cell market-table-item-cell" data-label="@L["Common_Game"]">
                                 <div class="market-table-main">
-                                    <img class="inventory-icon game-table-icon" src="@game.IconUrl" alt="@game.Name icon" />
+                                    <img class="inventory-icon game-table-icon" src="@game.IconUrl" alt="@L["Games_GameIconAlt", game.Name]" />
                                     <div class="market-table-copy">
                                         <h2 class="inventory-item-name">@game.Name</h2>
                                         <div class="inventory-meta market-table-subtitle">@game.Description</div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="market-table-cell" data-label="Status">
+                            <div class="market-table-cell" data-label="@L["Common_Status"]">
                                 <span class="compact-badge">@game.Status</span>
                             </div>
-                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
-                                <a class="btn app-button-primary market-table-action-button" asp-page="@game.PagePath">Open</a>
+                            <div class="market-table-cell market-table-actions-cell" data-label="@L["Common_Action"]">
+                                <a class="btn app-button-primary market-table-action-button" asp-page="@game.PagePath">@L["Common_Open"]</a>
                             </div>
                         </article>
                     }

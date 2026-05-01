@@ -7,6 +7,6 @@ public class IndexModel : PageModel
 {
     public IActionResult OnGet()
     {
-        return RedirectToPage("/Inventory");
+        return RedirectToPage("/Profile");
     }
 }

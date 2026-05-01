@@ -9,19 +9,19 @@
     <div class="page-header">
         <div>
             <h1>@L["Page_Items_Title"]</h1>
-            <p class="text-muted mb-0">Custom service items created from the admin panel.</p>
+            <p class="text-muted mb-0">@L["Items_Description"]</p>
         </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+        <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
     }
 
     @if (Model.Items.Count == 0)
     {
         <div class="empty-state">
-            <h2>No items created yet</h2>
+            <h2>@L["Items_Empty_Title"]</h2>
         </div>
     }
     else
@@ -29,12 +29,12 @@
         <section class="page-section">
             <div class="section-heading">
                 <div>
-                    <h2>Items</h2>
-                    <p class="section-description">@Model.Items.Count item(s) currently available.</p>
+                    <h2>@L["Page_Items_Title"]</h2>
+                    <p class="section-description">@L["Items_AvailableSummary", Model.Items.Count]</p>
                 </div>
-                <div class="market-view-toggle" role="group" aria-label="Items view">
-                    <button type="button" class="market-view-button active" data-market-view-button="cards">Cards</button>
-                    <button type="button" class="market-view-button" data-market-view-button="table">Table</button>
+                <div class="market-view-toggle" role="group" aria-label="@L["Items_View"]">
+                    <button type="button" class="market-view-button active" data-market-view-button="cards">@L["Common_Cards"]</button>
+                    <button type="button" class="market-view-button" data-market-view-button="table">@L["Common_Table"]</button>
                 </div>
             </div>
 
@@ -65,8 +65,8 @@
                                         }
                                     </div>
                                     <div class="market-price-block">
-                                        <span class="compact-badge market-quantity-badge">Item</span>
-                                        <span class="market-price-label">Price</span>
+                                        <span class="compact-badge market-quantity-badge">@L["Items_Type_ServiceItem"]</span>
+                                        <span class="market-price-label">@L["Common_Price"]</span>
                                         <p class="price-tag market-price-tag">$@item.Price.ToString("0.00")</p>
                                     </div>
                                 </div>
@@ -75,30 +75,30 @@
 
                         <dl class="detail-list compact market-detail-list">
                             <div class="detail-row market-detail-row">
-                                <dt>Item ID</dt>
+                                <dt>@L["Common_ItemId"]</dt>
                                 <dd class="break-value market-detail-value">@item.Id</dd>
                             </div>
                             @if (!string.IsNullOrWhiteSpace(item.Description))
                             {
                                 <div class="detail-row market-detail-row">
-                                    <dt>Description</dt>
+                                    <dt>@L["Common_Description"]</dt>
                                     <dd class="break-value market-detail-value">@item.Description</dd>
                                 </div>
                             }
                         </dl>
 
-                        <p class="meta-note market-owner-note">Created: @FormatLocalDateTime(item.CreatedAtUtc)</p>
+                        <p class="meta-note market-owner-note">@L["Common_Created"]: @FormatLocalDateTime(item.CreatedAtUtc)</p>
                         @if (User.Identity?.IsAuthenticated ?? false)
                         {
                             <form method="post" asp-page-handler="OpenChat" class="action-row market-item-actions">
                                 <input type="hidden" asp-for="ChatItemId" value="@item.Id" />
-                                <button type="submit" class="btn app-button-primary market-action-button">Chat</button>
+                                <button type="submit" class="btn app-button-primary market-action-button">@L["Common_Chat"]</button>
                             </form>
                         }
                         else
                         {
                             <div class="action-row market-item-actions">
-                                <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">Chat</a>
+                                <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">@L["Common_Chat"]</a>
                             </div>
                         }
                     </article>
@@ -107,17 +107,17 @@
             <div class="market-table-shell" data-market-view-panel="table" hidden>
                 <div class="market-table-list">
                     <div class="market-table-row market-table-header">
-                        <div class="market-table-cell market-table-item-cell">Item</div>
-                        <div class="market-table-cell">Type</div>
-                        <div class="market-table-cell">Price</div>
-                        <div class="market-table-cell">Created</div>
-                        <div class="market-table-cell market-table-asset-cell">Item ID</div>
-                        <div class="market-table-cell market-table-actions-cell">Action</div>
+                        <div class="market-table-cell market-table-item-cell">@L["Common_Item"]</div>
+                        <div class="market-table-cell">@L["Common_Type"]</div>
+                        <div class="market-table-cell">@L["Common_Price"]</div>
+                        <div class="market-table-cell">@L["Common_Created"]</div>
+                        <div class="market-table-cell market-table-asset-cell">@L["Common_ItemId"]</div>
+                        <div class="market-table-cell market-table-actions-cell">@L["Common_Action"]</div>
                     </div>
                     @foreach (var item in Model.Items)
                     {
                         <article class="market-table-row">
-                            <div class="market-table-cell market-table-item-cell" data-label="Item">
+                            <div class="market-table-cell market-table-item-cell" data-label="@L["Common_Item"]">
                                 <div class="market-table-main">
                                     @if (!string.IsNullOrWhiteSpace(item.ImageUrl))
                                     {
@@ -138,29 +138,29 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="market-table-cell" data-label="Type">
-                                <span class="balance-pill inventory-count-pill">Item</span>
+                            <div class="market-table-cell" data-label="@L["Common_Type"]">
+                                <span class="balance-pill inventory-count-pill">@L["Items_Type_ServiceItem"]</span>
                             </div>
-                            <div class="market-table-cell" data-label="Price">
+                            <div class="market-table-cell" data-label="@L["Common_Price"]">
                                 <span class="price-value">$@item.Price.ToString("0.00")</span>
                             </div>
-                            <div class="market-table-cell" data-label="Created">
+                            <div class="market-table-cell" data-label="@L["Common_Created"]">
                                 <span class="inventory-meta">@FormatLocalDateTime(item.CreatedAtUtc)</span>
                             </div>
-                            <div class="market-table-cell market-table-asset-cell" data-label="Item ID">
+                            <div class="market-table-cell market-table-asset-cell" data-label="@L["Common_ItemId"]">
                                 <span class="inventory-meta break-value">@item.Id</span>
                             </div>
-                            <div class="market-table-cell market-table-actions-cell" data-label="Action">
+                            <div class="market-table-cell market-table-actions-cell" data-label="@L["Common_Action"]">
                                 @if (User.Identity?.IsAuthenticated ?? false)
                                 {
                                     <form method="post" asp-page-handler="OpenChat" class="market-table-action-form">
                                         <input type="hidden" name="ChatItemId" value="@item.Id" />
-                                        <button type="submit" class="btn app-button-primary market-table-action-button">Chat</button>
+                                        <button type="submit" class="btn app-button-primary market-table-action-button">@L["Common_Chat"]</button>
                                     </form>
                                 }
                                 else
                                 {
-                                    <a class="btn app-button-primary market-table-action-button" asp-page="/Auth/Login">Chat</a>
+                                    <a class="btn app-button-primary market-table-action-button" asp-page="/Auth/Login">@L["Common_Chat"]</a>
                                 }
                             </div>
                         </article>

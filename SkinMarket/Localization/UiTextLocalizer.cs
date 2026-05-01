@@ -60,25 +60,83 @@ public static partial class UiTextLocalizer
             return localizer["Message_BalanceCreditedBy", amount];
         }
 
+        var cannotCancelMatch = TradeOfferCannotBeCanceledRegex().Match(message);
+        if (cannotCancelMatch.Success)
+        {
+            var status = cannotCancelMatch.Groups["status"].Value;
+            return localizer["Message_TradeOfferCannotBeCanceledStatus", LocalizeStatus(localizer, status)];
+        }
+
+        var canceledBySellerMatch = TradeOfferCanceledBySellerRegex().Match(message);
+        if (canceledBySellerMatch.Success)
+        {
+            var reason = LocalizeMessage(localizer, canceledBySellerMatch.Groups["message"].Value);
+            return localizer["Message_TradeOfferCanceledBySeller", reason];
+        }
+
+        var steamStatusMatch = SteamStatusCheckedRegex().Match(message);
+        if (steamStatusMatch.Success)
+        {
+            var steamState = steamStatusMatch.Groups["steamState"].Value;
+            var appStatus = LocalizeStatus(localizer, steamStatusMatch.Groups["appStatus"].Value);
+            var steamMessage = steamStatusMatch.Groups["message"].Value;
+            return localizer["Message_SteamStatusChecked", steamState, appStatus, steamMessage];
+        }
+
+        var minimumBetMatch = MinimumBetRegex().Match(message);
+        if (minimumBetMatch.Success)
+        {
+            return localizer["Message_MinefieldMinimumBet", minimumBetMatch.Groups["amount"].Value];
+        }
+
+        var maximumBetMatch = MaximumBetRegex().Match(message);
+        if (maximumBetMatch.Success)
+        {
+            return localizer["Message_MinefieldMaximumBet", maximumBetMatch.Groups["amount"].Value];
+        }
+
+        var cachedInventoryMatch = CachedInventoryRegex().Match(message);
+        if (cachedInventoryMatch.Success)
+        {
+            return localizer["Message_CachedInventoryShown", cachedInventoryMatch.Groups["time"].Value];
+        }
+
         return message switch
         {
+            "Database-backed features are temporarily unavailable." => Resolve(localizer, "Message_ServiceUnavailable", message),
             "Steam login is required to create a sale request." => Resolve(localizer, "Message_LoginRequiredSaleRequest", message),
             "Trade URL must be set before creating a sale request." => Resolve(localizer, "Message_TradeUrlRequiredSale", message),
             "Selected inventory item is invalid." => Resolve(localizer, "Message_SelectedItemInvalid", message),
             "This item already has a sale operation." => Resolve(localizer, "Message_ItemAlreadyHasSaleOperation", message),
             "Sale request created." => Resolve(localizer, "Message_SaleRequestCreated", message),
+            "Sale request created. Intake trade will start automatically." => Resolve(localizer, "Message_SaleRequestCreatedAuto", message),
+            "Finish or cancel the active trade offer before selling another item." => Resolve(localizer, "Message_FinishActiveTradeSell", message),
+            "Finish or cancel the active trade offer before buying another item." => Resolve(localizer, "Message_FinishActiveTradeBuy", message),
             "Steam login is required to create bot intake." => Resolve(localizer, "Message_LoginRequiredBotIntake", message),
             "Sale request is invalid." => Resolve(localizer, "Message_SaleRequestInvalid", message),
+            "Cancel request is invalid." => Resolve(localizer, "Message_CancelRequestInvalid", message),
             "Steam login is required to credit balance." => Resolve(localizer, "Message_LoginRequiredCreditBalance", message),
             "Trade URL is not set yet. Inventory still loads by SteamID." => Resolve(localizer, "Message_TradeUrlNotSetInventoryStillLoads", message),
             "SteamID is not available for the current session." => Resolve(localizer, "Message_SteamIdUnavailable", message),
             "Local user profile was not found." => Resolve(localizer, "Message_LocalUserProfileNotFound", message),
+            "Trade URL belongs to another Steam account." => Resolve(localizer, "Message_TradeUrlBelongsAnotherSteam", message),
+            "Gift code is invalid." => Resolve(localizer, "Message_GiftCodeInvalid", message),
+            "Gift code activated." => Resolve(localizer, "Message_GiftCodeActivated", message),
+            "Item was not found." => Resolve(localizer, "Message_ItemNotFound", message),
+            "Message is invalid." => Resolve(localizer, "Message_MessageInvalid", message),
+            "Message cannot be empty." => Resolve(localizer, "Message_MessageEmpty", message),
+            "Chat was not found." => Resolve(localizer, "Message_ChatNotFound", message),
+            "Admin account was not found." => Resolve(localizer, "Message_AdminAccountNotFound", message),
             "Steam login is required to buy market items." => Resolve(localizer, "Message_LoginRequiredBuyMarketItems", message),
             "Steam login is required to create delivery trade." => Resolve(localizer, "Message_LoginRequiredCreateDeliveryTrade", message),
             "Steam login is required to confirm delivery." => Resolve(localizer, "Message_LoginRequiredConfirmDelivery", message),
             "Trade URL must be a valid Steam trade offer link." => Resolve(localizer, "Message_TradeUrlMustBeValid", message),
             "Trade URL saved." => Resolve(localizer, "Message_TradeUrlSaved", message),
             "Sale request was not found." => Resolve(localizer, "Message_SaleRequestNotFound", message),
+            "This sale request does not have a Steam trade offer yet." => Resolve(localizer, "Message_TradeOfferNoSteamYet", message),
+            "Could not check Steam offer status. Bot service did not return a status." => Resolve(localizer, "Message_CheckSteamOfferStatusFailed", message),
+            "Steam still reports this offer as active. If you clicked Confirm, wait a few seconds and check again; otherwise complete the Steam confirmation popup or Steam mobile confirmation." => Resolve(localizer, "Message_SteamOfferStillActive", message),
+            "Trade offer was canceled." => Resolve(localizer, "Message_TradeOfferCanceled", message),
             "This sale request was already credited." => Resolve(localizer, "Message_SaleRequestAlreadyCredited", message),
             "Only trade-created requests can be credited." => Resolve(localizer, "Message_OnlyTradeCreatedCanBeCredited", message),
             "Trade intake is available only for pending sale requests." => Resolve(localizer, "Message_TradeIntakeOnlyPending", message),
@@ -104,6 +162,14 @@ public static partial class UiTextLocalizer
             "Steam inventory response is incomplete: assets were not returned." => Resolve(localizer, "Message_SteamInventoryIncomplete", message),
             "Stub bot trade created. Real Steam bot integration is not connected yet." => Resolve(localizer, "Message_StubBotTradeCreated", message),
             "Stub delivery trade created. Real Steam delivery integration is not connected yet." => Resolve(localizer, "Message_StubDeliveryTradeCreated", message),
+            "Not enough balance." => Resolve(localizer, "Message_NotEnoughBalanceGeneric", message),
+            "Minefield is currently disabled." => Resolve(localizer, "Message_MinefieldDisabled", message),
+            "Selected cell is invalid." => Resolve(localizer, "Message_SelectedCellInvalid", message),
+            "Active game was not found." => Resolve(localizer, "Message_ActiveGameNotFound", message),
+            "Selected row is not active." => Resolve(localizer, "Message_SelectedRowInactive", message),
+            "Open at least one safe row before claiming." => Resolve(localizer, "Message_OpenSafeRowBeforeClaim", message),
+            "Claim step is invalid." => Resolve(localizer, "Message_ClaimStepInvalid", message),
+            "Cannot claim after a mine step." => Resolve(localizer, "Message_CannotClaimAfterMine", message),
             _ => message
         };
     }
@@ -116,4 +182,22 @@ public static partial class UiTextLocalizer
 
     [GeneratedRegex(@"^Balance credited by (?<amount>.+)\.$", RegexOptions.CultureInvariant)]
     private static partial Regex CreditedMessageRegex();
+
+    [GeneratedRegex(@"^Trade offer cannot be canceled from status (?<status>.+)\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex TradeOfferCannotBeCanceledRegex();
+
+    [GeneratedRegex(@"^Trade offer was canceled by seller\. (?<message>.+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex TradeOfferCanceledBySellerRegex();
+
+    [GeneratedRegex(@"^Steam status checked\. SteamState=(?<steamState>[^;]+); AppStatus=(?<appStatus>[^;]+); Message=(?<message>.+)$", RegexOptions.CultureInvariant)]
+    private static partial Regex SteamStatusCheckedRegex();
+
+    [GeneratedRegex(@"^Minimum bet is (?<amount>.+)\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex MinimumBetRegex();
+
+    [GeneratedRegex(@"^Maximum bet is (?<amount>.+)\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex MaximumBetRegex();
+
+    [GeneratedRegex(@"^Steam is rate-limiting live inventory requests, so cached inventory from (?<time>.+) is shown\.$", RegexOptions.CultureInvariant)]
+    private static partial Regex CachedInventoryRegex();
 }

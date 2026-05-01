@@ -125,7 +125,7 @@ public class InventoryModel : PageModel
 
         if (await HasActiveTradeFlowAsync(appUser.Id, cancellationToken))
         {
-            SellErrorMessage = "Finish or cancel the active trade offer before selling another item.";
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Finish or cancel the active trade offer before selling another item.");
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -257,7 +257,7 @@ public class InventoryModel : PageModel
 
         if (string.IsNullOrWhiteSpace(operation.TradeOfferId))
         {
-            SellErrorMessage = "This sale request does not have a Steam trade offer yet.";
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "This sale request does not have a Steam trade offer yet.");
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -274,7 +274,7 @@ public class InventoryModel : PageModel
         var status = results.FirstOrDefault();
         if (status is null)
         {
-            SellErrorMessage = "Could not check Steam offer status. Bot service did not return a status.";
+            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Could not check Steam offer status. Bot service did not return a status.");
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -337,7 +337,7 @@ public class InventoryModel : PageModel
 
         if (string.IsNullOrWhiteSpace(operation.TradeOfferId) || !CanCancelIntakeStatus(operation.Status))
         {
-            return BuildCancelIntakeResponse(false, $"Trade offer cannot be canceled from status {operation.Status}.");
+            return BuildCancelIntakeResponse(false, UiTextLocalizer.LocalizeMessage(_localizer, $"Trade offer cannot be canceled from status {operation.Status}."));
         }
 
         var previousStatus = operation.Status;
@@ -363,7 +363,7 @@ public class InventoryModel : PageModel
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
 
-        return BuildCancelIntakeResponse(true, "Trade offer was canceled.");
+        return BuildCancelIntakeResponse(true, UiTextLocalizer.LocalizeMessage(_localizer, "Trade offer was canceled."));
     }
 
     public async Task<IActionResult> OnGetSaleStatusAsync(CancellationToken cancellationToken)

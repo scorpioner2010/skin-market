@@ -1,35 +1,35 @@
 @page
 @model SkinMarket.Pages.PricingDebugModel
 @{
-    ViewData["Title"] = "Pricing Debug";
+    ViewData["Title"] = L["Page_PricingDebug_Title"];
 }
 
 <div class="py-4">
     <div class="page-header">
         <div>
-            <span class="section-kicker">Pricing diagnostics</span>
-            <h1>PricingDebug</h1>
-            <p class="page-description">Compare Steam Market and Skinport price resolution for your current inventory.</p>
+            <span class="section-kicker">@L["PricingDebug_Kicker"]</span>
+            <h1>@L["Page_PricingDebug_Title"]</h1>
+            <p class="page-description">@L["PricingDebug_Description"]</p>
         </div>
     </div>
 
     @if (!(User.Identity?.IsAuthenticated ?? false))
     {
         <div class="empty-state">
-            <h2>Steam login required</h2>
-            <p>Sign in with Steam to run pricing diagnostics for your inventory.</p>
-            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <p>@L["PricingDebug_LoginRequired_Text"]</p>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
         </div>
     }
     else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+        <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
     }
     else if (Model.Items.Count == 0)
     {
         <div class="empty-state">
-            <h2>No diagnostic items</h2>
-            <p>Steam inventory did not return items for diagnostics.</p>
+            <h2>@L["PricingDebug_Empty_Title"]</h2>
+            <p>@L["PricingDebug_Empty_Text"]</p>
         </div>
     }
     else
@@ -38,19 +38,19 @@
             <table class="table debug-table">
                 <thead>
                     <tr>
-                        <th>Item</th>
-                        <th>AssetId</th>
-                        <th>ClassId</th>
-                        <th>MarketHashName</th>
-                        <th>MarketName</th>
-                        <th>ResolvedMarketHashName</th>
-                        <th>Steam Market</th>
+                        <th>@L["Common_Item"]</th>
+                        <th>@L["PricingDebug_AssetId"]</th>
+                        <th>@L["PricingDebug_ClassId"]</th>
+                        <th>@L["PricingDebug_MarketHashName"]</th>
+                        <th>@L["PricingDebug_MarketName"]</th>
+                        <th>@L["PricingDebug_ResolvedMarketHashName"]</th>
+                        <th>@L["PricingDebug_SteamMarket"]</th>
                         <th>CSFloat</th>
                         <th>Skinport</th>
-                        <th>Final</th>
-                        <th>Source</th>
-                        <th>Status</th>
-                        <th>Errors</th>
+                        <th>@L["PricingDebug_Final"]</th>
+                        <th>@L["PricingDebug_Source"]</th>
+                        <th>@L["Common_Status"]</th>
+                        <th>@L["PricingDebug_Errors"]</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,7 +84,7 @@
                             }
                             @if (!string.IsNullOrWhiteSpace(item.FailureReason))
                             {
-                                <div><strong>Final:</strong> @item.FailureReason</div>
+                                <div><strong>@L["PricingDebug_Final"]:</strong> @item.FailureReason</div>
                             }
                             @if (string.IsNullOrWhiteSpace(item.SteamError) &&
                                  string.IsNullOrWhiteSpace(item.CsFloatError) &&

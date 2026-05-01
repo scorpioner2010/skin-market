@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
 using SkinMarket.Data;
 using SkinMarket.Models;
 
@@ -8,10 +9,12 @@ namespace SkinMarket.Pages;
 public class GamesModel : PageModel
 {
     private readonly AppDbContext _dbContext;
+    private readonly IStringLocalizer<SharedResource> _localizer;
 
-    public GamesModel(AppDbContext dbContext)
+    public GamesModel(AppDbContext dbContext, IStringLocalizer<SharedResource> localizer)
     {
         _dbContext = dbContext;
+        _localizer = localizer;
     }
 
     public IReadOnlyList<GameListItem> Games { get; private set; } = [];
@@ -36,8 +39,8 @@ public class GamesModel : PageModel
                 "MF",
                 "/games/minefield/icon.png",
                 "/Games/Minefield",
-                "Open safe rows, avoid mines, and claim the multiplier before the field ends.",
-                "API ready")
+                _localizer["Game_Minefield_Description"].Value,
+                _localizer["Game_Minefield_Status"].Value)
         };
     }
 

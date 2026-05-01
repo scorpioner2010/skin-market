@@ -2,7 +2,7 @@
 @model SkinMarket.Pages.ChatsModel
 @{
     ViewData["Title"] = L["Page_Chats_Title"];
-    string FormatLocalDateTime(DateTime? timestamp) => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "No messages";
+    string FormatLocalDateTime(DateTime? timestamp) => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? L["Chats_NoMessages"].Value;
     string FormatMessageTime(DateTime timestamp) => timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
     var activeThreadId = Model.ActiveThreadId;
 }
@@ -11,40 +11,40 @@
     <div class="page-header">
         <div>
             <h1>@L["Page_Chats_Title"]</h1>
-            <p class="text-muted mb-0">Item conversations with the service team.</p>
+            <p class="text-muted mb-0">@L["Chats_Description"]</p>
         </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
     {
-        <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
+        <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
     }
 
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+        <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
     }
 
     @if (Model.RequiresLogin)
     {
         <div class="empty-state">
-            <h2>Steam login required</h2>
-            <a class="btn app-button-primary" asp-page="/Auth/Login">Login with Steam</a>
+            <h2>@L["Common_SteamLoginRequired"]</h2>
+            <a class="btn app-button-primary" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
         </div>
     }
     else if (Model.Threads.Count == 0)
     {
         <div class="empty-state">
-            <h2>No chats yet</h2>
-            <a class="btn app-button-primary" asp-page="/Items">Open Items</a>
+            <h2>@L["Chats_NoChats_Title"]</h2>
+            <a class="btn app-button-primary" asp-page="/Items">@L["Common_OpenItems"]</a>
         </div>
     }
     else
     {
         <section class="chat-shell">
-            <aside class="chat-contact-list" aria-label="Item chats">
+            <aside class="chat-contact-list" aria-label="@L["Chats_ItemChats"]">
                 <div class="chat-contact-list-header">
-                    <h2>Items</h2>
+                    <h2>@L["Page_Items_Title"]</h2>
                     <span class="compact-badge compact-badge-neutral">@Model.Threads.Count</span>
                 </div>
                 @foreach (var thread in Model.Threads)
@@ -74,7 +74,7 @@
                 @if (Model.Conversation is null)
                 {
                     <div class="empty-state compact">
-                        <h3>Select a chat.</h3>
+                        <h3>@L["Chats_SelectChat"]</h3>
                     </div>
                 }
                 else
@@ -86,7 +86,7 @@
                                 <img class="chat-subject-image" src="@Model.Conversation.Thread.ItemImageUrl" alt="@Model.Conversation.Thread.ItemName" />
                             }
                             <div>
-                                <span class="section-kicker">Item chat</span>
+                                <span class="section-kicker">@L["Chats_ItemChat"]</span>
                                 <h2>@Model.Conversation.Thread.ItemName</h2>
                                 <p class="card-subtitle mb-0">$@Model.Conversation.Thread.ItemPrice.ToString("0.00")</p>
                             </div>
@@ -97,7 +97,7 @@
                         @if (Model.Conversation.Messages.Count == 0)
                         {
                             <div class="empty-state compact">
-                                <h3>No messages yet.</h3>
+                                <h3>@L["Chats_NoMessagesYet"]</h3>
                             </div>
                         }
                         else
@@ -108,7 +108,7 @@
                                 <article class="chat-message @(isMine ? "mine" : "theirs")">
                                     <div class="chat-message-bubble">
                                         <div class="chat-message-meta">
-                                            <strong>@(isMine ? "You" : "Admin")</strong>
+                                            <strong>@(isMine ? L["Chats_You"] : L["Common_Admin"])</strong>
                                             <time>@FormatMessageTime(message.CreatedAtUtc)</time>
                                         </div>
                                         <div class="chat-message-body">@message.Body</div>
@@ -120,8 +120,8 @@
 
                     <form method="post" asp-page-handler="Send" class="chat-compose">
                         <input type="hidden" asp-for="MessageInput.ThreadId" value="@Model.Conversation.Thread.Id" />
-                        <textarea class="form-control app-input chat-compose-input" asp-for="MessageInput.Body" maxlength="4000" placeholder="Write a message"></textarea>
-                        <button type="submit" class="btn app-button-primary">Send</button>
+                        <textarea class="form-control app-input chat-compose-input" asp-for="MessageInput.Body" maxlength="4000" placeholder="@L["Chats_WriteMessage"]"></textarea>
+                        <button type="submit" class="btn app-button-primary">@L["Common_Send"]</button>
                     </form>
                 }
             </div>

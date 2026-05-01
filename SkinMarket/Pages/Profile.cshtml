@@ -16,7 +16,7 @@
     </div>
     @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
     {
-        <div class="app-alert alert-warning" role="alert">@Model.ErrorMessage</div>
+        <div class="app-alert alert-warning" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
     }
     @if (User.Identity?.IsAuthenticated ?? false)
     {
@@ -51,7 +51,7 @@
                     <div class="profile-balance-copy">
                         <span class="profile-balance-label" id="profile-balance-title">@L["Profile_Balance"]</span>
                         <strong class="profile-balance-value">$@Model.Balance.ToString("0.00")</strong>
-                        <span class="profile-balance-note">Цей баланс можна витратити на сервіси сайту, ігри та покупки на маркеті. Вивести його в реальні кошти неможливо.</span>
+                        <span class="profile-balance-note">@L["Profile_BalanceNote"]</span>
                     </div>
                 </section>
 
@@ -92,14 +92,14 @@
                     <h2>@L["Profile_TradeSettings"]</h2>
                     @if (!isTradeUrlConfigured)
                     {
-                        <span class="status-badge" data-status="Pending">Required</span>
+                        <span class="status-badge" data-status="Pending">@L["Profile_TradeUrlRequired_Status"]</span>
                     }
                 </div>
                 <form method="post" class="stack-form">
                     @if (!isTradeUrlConfigured)
                     {
                         <div class="trade-url-critical-message" role="alert">
-                            Trade URL is required before selling. Open the Steam page, copy the full Trade URL, paste it here, then save.
+                            @L["Profile_TradeUrlRequired_Message"]
                         </div>
                     }
                     <div>
@@ -109,26 +109,26 @@
                     </div>
                     <div class="trade-url-form-actions">
                         <button type="submit" class="btn app-button-primary">@L["Profile_SaveTradeUrl"]</button>
-                        <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/privacy#trade_offer_access_url" target="_blank" rel="noopener">Open Steam page</a>
+                        <a class="btn app-button-secondary" href="https://steamcommunity.com/my/tradeoffers/privacy#trade_offer_access_url" target="_blank" rel="noopener">@L["Common_OpenSteamPage"]</a>
                     </div>
                 </form>
             </section>
 
             <section class="content-card">
                 <div class="card-heading">
-                    <h2>Gift code</h2>
+                    <h2>@L["Profile_GiftCode_Title"]</h2>
                     @if (Model.AppUser?.IsAdmin == true)
                     {
-                        <span class="status-badge" data-status="Credited">Admin active</span>
+                        <span class="status-badge" data-status="Credited">@L["Profile_GiftCode_AdminActive"]</span>
                     }
                 </div>
                 <form method="post" asp-page-handler="ActivateGiftCode" class="stack-form">
                     <div>
-                        <label asp-for="GiftCodeInput.Code" class="form-label">Gift code</label>
-                        <input asp-for="GiftCodeInput.Code" class="form-control app-input" placeholder="Enter gift code" autocomplete="off" />
+                        <label asp-for="GiftCodeInput.Code" class="form-label">@L["Profile_GiftCode_Label"]</label>
+                        <input asp-for="GiftCodeInput.Code" class="form-control app-input" placeholder="@L["Profile_GiftCode_Placeholder"]" autocomplete="off" />
                         <span asp-validation-for="GiftCodeInput.Code" class="text-danger small"></span>
                     </div>
-                    <button type="submit" class="btn app-button-secondary">Enter</button>
+                    <button type="submit" class="btn app-button-secondary">@L["Common_Enter"]</button>
                 </form>
             </section>
         </div>

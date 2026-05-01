@@ -12,8 +12,11 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Localization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
+using SkinMarket;
+using SkinMarket.Localization;
 
 LocalEnvFileLoader.TryLoad(Directory.GetCurrentDirectory());
 
@@ -421,6 +424,7 @@ app.MapGet("/api/sales/status", async (
     ISteamTradeClient steamTradeClient,
     ICreditService creditService,
     IAppLogService appLogService,
+    IStringLocalizer<SharedResource> localizer,
     CancellationToken cancellationToken) =>
 {
     if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
@@ -442,7 +446,7 @@ app.MapGet("/api/sales/status", async (
         return Results.NotFound(new
         {
             success = false,
-            message = "Local user profile was not found."
+            message = UiTextLocalizer.LocalizeMessage(localizer, "Local user profile was not found.")
         });
     }
 
@@ -562,7 +566,7 @@ app.MapGet("/api/sales/status", async (
             assetId = operation.AssetId,
             itemName = operation.ItemName,
             status = operation.Status,
-            statusText = SaleStatusApiText.FormatStatus(operation.Status),
+            statusText = UiTextLocalizer.LocalizeStatus(localizer, operation.Status),
             tradeOfferId = operation.TradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
             accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
@@ -586,7 +590,7 @@ app.MapGet("/api/sales/status", async (
             assetId = item.AssetId,
             itemName = item.ItemName,
             status = item.DeliveryStatus!,
-            statusText = SaleStatusApiText.FormatStatus(item.DeliveryStatus),
+            statusText = UiTextLocalizer.LocalizeStatus(localizer, item.DeliveryStatus),
             tradeOfferId = item.DeliveryTradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
             accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
@@ -608,7 +612,7 @@ app.MapGet("/api/sales/status", async (
             assetId = operation.AssetId,
             itemName = operation.ItemName,
             status = operation.Status,
-            statusText = SaleStatusApiText.FormatStatus(operation.Status),
+            statusText = UiTextLocalizer.LocalizeStatus(localizer, operation.Status),
             tradeOfferId = operation.TradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
             accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
@@ -630,7 +634,7 @@ app.MapGet("/api/sales/status", async (
             assetId = item.AssetId,
             itemName = item.ItemName,
             status = item.DeliveryStatus ?? item.Status,
-            statusText = SaleStatusApiText.FormatStatus(item.DeliveryStatus ?? item.Status),
+            statusText = UiTextLocalizer.LocalizeStatus(localizer, item.DeliveryStatus ?? item.Status),
             tradeOfferId = item.DeliveryTradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
             accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
@@ -777,6 +781,7 @@ app.MapPost("/api/sales/cancel", async (
     AppDbContext dbContext,
     ISteamTradeClient steamTradeClient,
     IAppLogService appLogService,
+    IStringLocalizer<SharedResource> localizer,
     CancellationToken cancellationToken) =>
 {
     if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
@@ -795,7 +800,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.BadRequest(new
         {
             success = false,
-            message = "Cancel request is invalid."
+            message = UiTextLocalizer.LocalizeMessage(localizer, "Cancel request is invalid.")
         });
     }
 
@@ -805,7 +810,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.BadRequest(new
         {
             success = false,
-            message = "Sale request is invalid."
+            message = UiTextLocalizer.LocalizeMessage(localizer, "Sale request is invalid.")
         });
     }
 
@@ -816,7 +821,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.NotFound(new
         {
             success = false,
-            message = "Local user profile was not found."
+            message = UiTextLocalizer.LocalizeMessage(localizer, "Local user profile was not found.")
         });
     }
 
@@ -827,7 +832,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.NotFound(new
         {
             success = false,
-            message = "Sale request was not found."
+            message = UiTextLocalizer.LocalizeMessage(localizer, "Sale request was not found.")
         });
     }
 
@@ -836,7 +841,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.BadRequest(new
         {
             success = false,
-            message = $"Trade offer cannot be canceled from status {operation.Status}."
+            message = UiTextLocalizer.LocalizeMessage(localizer, $"Trade offer cannot be canceled from status {operation.Status}.")
         });
     }
 
@@ -852,7 +857,7 @@ app.MapPost("/api/sales/cancel", async (
         return Results.BadRequest(new
         {
             success = false,
-            message = result.Message
+            message = UiTextLocalizer.LocalizeMessage(localizer, result.Message)
         });
     }
 
@@ -870,7 +875,7 @@ app.MapPost("/api/sales/cancel", async (
     return Results.Ok(new
     {
         success = true,
-        message = "Trade offer was canceled."
+        message = UiTextLocalizer.LocalizeMessage(localizer, "Trade offer was canceled.")
     });
 });
 
