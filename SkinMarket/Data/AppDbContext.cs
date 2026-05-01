@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<MinefieldGameSettings> MinefieldGameSettings => Set<MinefieldGameSettings>();
     public DbSet<NavigationMenuSetting> NavigationMenuSettings => Set<NavigationMenuSetting>();
     public DbSet<SteamInventoryCacheEntry> SteamInventoryCacheEntries => Set<SteamInventoryCacheEntry>();
+    public DbSet<SteamInventorySnapshot> SteamInventorySnapshots => Set<SteamInventorySnapshot>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -224,6 +225,19 @@ public class AppDbContext : DbContext
             entity.Property(entry => entry.ItemsJson).IsRequired();
             entity.HasIndex(entry => new { entry.SteamId, entry.AppId, entry.ContextId }).IsUnique();
             entity.HasIndex(entry => entry.ExpiresAtUtc);
+        });
+
+        modelBuilder.Entity<SteamInventorySnapshot>(entity =>
+        {
+            entity.ToTable("SteamInventorySnapshots");
+            entity.HasKey(snapshot => snapshot.Id);
+            entity.Property(snapshot => snapshot.SteamId).IsRequired().HasMaxLength(32);
+            entity.Property(snapshot => snapshot.ItemsJson).IsRequired();
+            entity.Property(snapshot => snapshot.LastErrorCode).HasMaxLength(64);
+            entity.Property(snapshot => snapshot.LastErrorMessage).HasMaxLength(1000);
+            entity.HasIndex(snapshot => new { snapshot.SteamId, snapshot.GameType }).IsUnique();
+            entity.HasIndex(snapshot => snapshot.NextAllowedRefreshUtc);
+            entity.HasIndex(snapshot => snapshot.RefreshInProgress);
         });
     }
 }

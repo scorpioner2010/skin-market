@@ -635,6 +635,59 @@ namespace SkinMarket.Migrations
                     b.ToTable("SteamInventoryCacheEntries", (string)null);
                 });
 
+            modelBuilder.Entity("SkinMarket.Models.SteamInventorySnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("GameType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ItemsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastAttemptUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("LastSuccessRefreshUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextAllowedRefreshUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("RateLimitStrikeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("RefreshInProgress")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SteamId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NextAllowedRefreshUtc");
+
+                    b.HasIndex("RefreshInProgress");
+
+                    b.HasIndex("SteamId", "GameType")
+                        .IsUnique();
+
+                    b.ToTable("SteamInventorySnapshots", (string)null);
+                });
+
             modelBuilder.Entity("SkinMarket.Models.TradeOperation", b =>
                 {
                     b.Property<Guid>("Id")

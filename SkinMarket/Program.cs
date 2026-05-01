@@ -92,6 +92,7 @@ builder.Services.AddSingleton(Options.Create(steamBotOptions));
 builder.Services.AddSingleton(Options.Create(steamApiOptions));
 builder.Services.AddSingleton<BotServiceAvailabilityTracker>();
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
+builder.Services.Configure<SteamInventoryRefreshOptions>(builder.Configuration.GetSection(SteamInventoryRefreshOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
 builder.Services.AddScoped<AdminAccessPageFilter>();
@@ -132,6 +133,9 @@ builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
 builder.Services.AddSingleton<InventoryPriceRefreshService>();
 builder.Services.AddSingleton<IInventoryPriceRefreshService>(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
 builder.Services.AddHostedService(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
+builder.Services.AddSingleton<SteamInventoryRefreshWorker>();
+builder.Services.AddSingleton<ISteamInventoryRefreshService>(provider => provider.GetRequiredService<SteamInventoryRefreshWorker>());
+builder.Services.AddHostedService(provider => provider.GetRequiredService<SteamInventoryRefreshWorker>());
 builder.Services.AddScoped<IMarketPricingService, MarketPricingService>();
 builder.Services.AddScoped<IMarketService, MarketService>();
 builder.Services.AddScoped<IMarketPurchaseService, MarketPurchaseService>();
@@ -175,6 +179,19 @@ builder.Services.AddHttpClient<ISteamOpenIdService, SteamOpenIdService>();
 builder.Services.AddHttpClient<ISteamInventoryService, SteamInventoryService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.Brotli |
+                                 DecompressionMethods.GZip |
+                                 DecompressionMethods.Deflate
+    });
+builder.Services.AddHttpClient("SteamInventoryRefresh", (serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<SteamInventoryRefreshOptions>>().Value;
+    client.Timeout = TimeSpan.FromSeconds(Math.Max(5, options.RequestTimeoutSeconds));
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
     client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
 })
@@ -337,6 +354,56 @@ app.MapGet("/set-language", (HttpContext httpContext, string culture, string? re
 });
 
 app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+
+app.MapPost("/api/inventory/refresh", async (
+    HttpContext httpContext,
+    SteamInventoryRefreshRequest request,
+    ISteamInventoryRefreshService refreshService,
+    AppDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var status = await refreshService.EnqueueRefreshAsync(
+        appUser.SteamId,
+        request.GameType,
+        SteamInventoryRefreshPriority.High,
+        SteamInventoryRefreshSource.Manual,
+        cancellationToken);
+
+    return Results.Ok(status);
+});
+
+app.MapPost("/api/inventory/status", async (
+    HttpContext httpContext,
+    SteamInventoryRefreshRequest request,
+    ISteamInventoryRefreshService refreshService,
+    AppDbContext dbContext,
+    CancellationToken cancellationToken) =>
+{
+    if (!(httpContext.User.Identity?.IsAuthenticated ?? false))
+    {
+        return Results.Unauthorized();
+    }
+
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    var status = await refreshService.GetStatusAsync(appUser.SteamId, request.GameType, cancellationToken);
+    return Results.Ok(status);
+});
 
 app.MapPost("/api/inventory/prices/refresh", async (
     HttpContext httpContext,

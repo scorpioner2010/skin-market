@@ -19,6 +19,7 @@ public static class BotDiagnosticsCatalog
     public static readonly string[] InventoryLogSources =
     [
         nameof(SteamInventoryService),
+        nameof(SteamInventoryRefreshWorker),
         nameof(BotServiceSteamInventoryClient),
         nameof(InventoryModel)
     ];
@@ -35,6 +36,7 @@ public static class BotDiagnosticsCatalog
         nameof(MarketPurchaseService),
         nameof(MarketDeliveryService),
         nameof(SteamInventoryService),
+        nameof(SteamInventoryRefreshWorker),
         nameof(BotServiceSteamInventoryClient),
         nameof(LocalSteamBotHostService),
         nameof(InventoryModel),

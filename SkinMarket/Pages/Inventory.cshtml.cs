@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.Extensions.Localization;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,7 @@ namespace SkinMarket.Pages;
 public class InventoryModel : PageModel
 {
     private readonly AppDbContext _dbContext;
-    private readonly ISteamInventoryService _steamInventoryService;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
     private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
     private readonly ITradeOperationService _tradeOperationService;
     private readonly ISteamBotIntakeService _steamBotIntakeService;
@@ -25,10 +26,11 @@ public class InventoryModel : PageModel
     private readonly IStringLocalizer<SharedResource> _localizer;
     private readonly IGameCatalog _gameCatalog;
     private readonly AppRuntimeState _runtimeState;
+    private readonly SteamInventoryRefreshOptions _inventoryRefreshOptions;
 
     public InventoryModel(
         AppDbContext dbContext,
-        ISteamInventoryService steamInventoryService,
+        ISteamInventoryRefreshService steamInventoryRefreshService,
         IInventoryPriceRefreshService inventoryPriceRefreshService,
         ITradeOperationService tradeOperationService,
         ISteamBotIntakeService steamBotIntakeService,
@@ -37,10 +39,11 @@ public class InventoryModel : PageModel
         IAppLogService appLogService,
         IStringLocalizer<SharedResource> localizer,
         IGameCatalog gameCatalog,
-        AppRuntimeState runtimeState)
+        AppRuntimeState runtimeState,
+        IOptions<SteamInventoryRefreshOptions> inventoryRefreshOptions)
     {
         _dbContext = dbContext;
-        _steamInventoryService = steamInventoryService;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
         _inventoryPriceRefreshService = inventoryPriceRefreshService;
         _tradeOperationService = tradeOperationService;
         _steamBotIntakeService = steamBotIntakeService;
@@ -50,6 +53,7 @@ public class InventoryModel : PageModel
         _localizer = localizer;
         _gameCatalog = gameCatalog;
         _runtimeState = runtimeState;
+        _inventoryRefreshOptions = inventoryRefreshOptions.Value;
     }
 
     public List<SteamInventoryItemDto> Items { get; private set; } = new();
@@ -60,6 +64,21 @@ public class InventoryModel : PageModel
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
     public string? WarningMessage { get; private set; }
+    public string? InventorySnapshotWarningMessage { get; private set; }
+    public string? InventoryRefreshLastErrorMessage { get; private set; }
+    public DateTime? InventoryLastSuccessRefreshUtc { get; private set; }
+    public DateTime? InventoryLastAttemptUtc { get; private set; }
+    public DateTime? InventoryNextAllowedRefreshUtc { get; private set; }
+    public bool InventoryRefreshInProgress { get; private set; }
+    public bool InventoryRefreshRateLimited { get; private set; }
+    public bool InventorySnapshotStale { get; private set; }
+    public bool InventoryIsLoading { get; private set; }
+    public string InventoryRefreshState { get; private set; } = "Idle";
+    public string InventoryRefreshReason { get; private set; } = "StatusRead";
+    public bool CanManualRefreshInventory => !InventoryRefreshInProgress && !InventoryRefreshRateLimited;
+    public int InventoryRefreshCountdownSeconds => InventoryNextAllowedRefreshUtc is null
+        ? 0
+        : Math.Max(0, (int)Math.Ceiling((InventoryNextAllowedRefreshUtc.Value - DateTime.UtcNow).TotalSeconds));
     public bool IsTradeUrlConfigured { get; private set; }
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -491,30 +510,56 @@ public class InventoryModel : PageModel
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
 
-        var result = await _steamInventoryService.GetInventoryAsync(appUser.SteamId, CurrentGameType, cancellationToken);
-        await _appLogService.WriteAsync(
-            result.IsSuccess ? "Info" : "Warning",
-            $"Inventory service result received. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; Success={result.IsSuccess}; IsStale={result.IsStale}; CachedAt={result.CachedAtUtc?.ToString("O") ?? "<null>"}; ItemCount={result.Items.Count}; Error={result.ErrorMessage ?? "<null>"}",
-            nameof(InventoryModel),
-            cancellationToken: cancellationToken);
+        var snapshot = await _steamInventoryRefreshService.GetLatestSnapshotAsync(
+            appUser.SteamId,
+            CurrentGameType,
+            cancellationToken);
+        ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.GetStatusAsync(
+            appUser.SteamId,
+            CurrentGameType,
+            cancellationToken));
 
-        if (!result.IsSuccess)
+        if (snapshot is null)
         {
-            ErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, result.ErrorMessage);
+            InventoryIsLoading = true;
+            ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                appUser.SteamId,
+                CurrentGameType,
+                SteamInventoryRefreshPriority.Normal,
+                SteamInventoryRefreshSource.Auto,
+                cancellationToken));
             await _appLogService.WriteAsync(
-                "Warning",
-                $"Inventory page load failed. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; Error={result.ErrorMessage}",
+                "Info",
+                $"Inventory page has no snapshot yet. Refresh queued. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; IsRefreshing={InventoryRefreshInProgress}; NextAllowed={InventoryNextAllowedRefreshUtc?.ToString("O") ?? "<null>"}",
                 nameof(InventoryModel),
                 cancellationToken: cancellationToken);
             return;
         }
 
-        Items = result.Items;
-        if (result.IsStale)
+        Items = snapshot.Items;
+        InventoryLastSuccessRefreshUtc = snapshot.LastSuccessRefreshUtc;
+        InventorySnapshotStale = snapshot.LastSuccessRefreshUtc <= DateTime.UtcNow.AddMinutes(-Math.Max(1, _inventoryRefreshOptions.SnapshotFreshnessMinutes));
+        if (InventorySnapshotStale)
         {
-            var cachedAt = result.CachedAtUtc?.ToString("yyyy-MM-dd HH:mm 'UTC'") ?? "recently";
-            WarningMessage = $"Steam is rate-limiting live inventory requests, so cached inventory from {cachedAt} is shown.";
+            InventorySnapshotWarningMessage = "Inventory snapshot is stale. A background refresh has been queued.";
+            ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                appUser.SteamId,
+                CurrentGameType,
+                SteamInventoryRefreshPriority.Normal,
+                SteamInventoryRefreshSource.Auto,
+                cancellationToken));
         }
+
+        if (!string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
+        {
+            InventorySnapshotWarningMessage ??= InventoryRefreshLastErrorMessage;
+        }
+
+        await _appLogService.WriteAsync(
+            "Info",
+            $"Inventory snapshot accepted by page. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; LastSuccess={snapshot.LastSuccessRefreshUtc:O}; IsStale={InventorySnapshotStale}; ItemCount={Items.Count}; IsRefreshing={InventoryRefreshInProgress}; NextAllowed={InventoryNextAllowedRefreshUtc?.ToString("O") ?? "<null>"}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
 
         await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
         var marketHashNames = Items
@@ -617,6 +662,51 @@ public class InventoryModel : PageModel
             $"Inventory page loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; ItemCount={Items.Count}; RecentOperations={RecentOperations.Count}; PricePollingCount={PricePollingItems.Count}; RefreshTargets={distinctRefreshTargets.Count}",
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
+    }
+
+    private void ApplyInventoryRefreshStatus(SteamInventoryRefreshStatus status)
+    {
+        InventoryLastSuccessRefreshUtc = status.LastSuccessRefreshUtc ?? InventoryLastSuccessRefreshUtc;
+        InventoryLastAttemptUtc = status.LastAttemptUtc;
+        InventoryRefreshInProgress = status.IsRefreshing;
+        InventoryRefreshRateLimited = status.IsRateLimited;
+        InventoryNextAllowedRefreshUtc = status.NextAllowedRefreshUtc;
+        InventoryRefreshLastErrorMessage = status.LastErrorMessage;
+        InventoryRefreshState = status.RefreshState;
+        InventoryRefreshReason = status.Reason;
+    }
+
+    public string FormatInventoryLastUpdated()
+    {
+        if (InventoryLastSuccessRefreshUtc is null)
+        {
+            return "Inventory has not been loaded yet.";
+        }
+
+        return $"Inventory last updated: {FormatAge(DateTime.UtcNow - InventoryLastSuccessRefreshUtc.Value)} ago.";
+    }
+
+    private static string FormatAge(TimeSpan age)
+    {
+        if (age < TimeSpan.FromMinutes(1))
+        {
+            return "less than 1 minute";
+        }
+
+        if (age < TimeSpan.FromHours(1))
+        {
+            var minutes = Math.Max(1, (int)Math.Floor(age.TotalMinutes));
+            return minutes == 1 ? "1 minute" : $"{minutes} minutes";
+        }
+
+        if (age < TimeSpan.FromDays(1))
+        {
+            var hours = Math.Max(1, (int)Math.Floor(age.TotalHours));
+            return hours == 1 ? "1 hour" : $"{hours} hours";
+        }
+
+        var days = Math.Max(1, (int)Math.Floor(age.TotalDays));
+        return days == 1 ? "1 day" : $"{days} days";
     }
 
     private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)

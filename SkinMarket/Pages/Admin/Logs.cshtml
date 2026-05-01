@@ -140,6 +140,62 @@
                     </div>
                 </div>
 
+                <div class="content-card mb-4">
+                    <div class="card-heading">
+                        <div>
+                            <h3>Current Inventory Refresh State</h3>
+                            <p class="card-subtitle">Database snapshot state plus in-memory queue information.</p>
+                        </div>
+                    </div>
+                    @if (Model.InventoryRefreshStates.Count == 0)
+                    {
+                        <div class="empty-state compact">
+                            <h3>No inventory snapshots have been created yet.</h3>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="market-table-shell admin-table-shell admin-log-shell">
+                            <div class="market-table-list admin-log-table">
+                                <div class="market-table-row market-table-header admin-log-row">
+                                    <div class="market-table-cell market-table-item-cell">Snapshot</div>
+                                    <div class="market-table-cell">Items</div>
+                                    <div class="market-table-cell">Refresh</div>
+                                    <div class="market-table-cell">Cooldown</div>
+                                </div>
+                                @foreach (var state in Model.InventoryRefreshStates)
+                                {
+                                    <article class="market-table-row admin-log-row">
+                                        <div class="market-table-cell market-table-item-cell" data-label="Snapshot">
+                                            <div class="market-table-copy">
+                                                <strong>@state.SteamId</strong>
+                                                <div class="card-subtitle">GameType=@((int)state.GameType) (@state.GameType)</div>
+                                                @if (!string.IsNullOrWhiteSpace(state.LastErrorCode) || !string.IsNullOrWhiteSpace(state.LastErrorMessage))
+                                                {
+                                                    <div class="meta-note break-value">Error: @state.LastErrorCode @state.LastErrorMessage</div>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="market-table-cell" data-label="Items">
+                                            <span class="balance-pill">@state.ItemCount</span>
+                                        </div>
+                                        <div class="market-table-cell admin-log-details" data-label="Refresh">
+                                            <span><strong>Last success:</strong> @(state.LastSuccessRefreshUtc?.ToLocalTime().ToString() ?? "Never")</span>
+                                            <span><strong>Last attempt:</strong> @(state.LastAttemptUtc?.ToLocalTime().ToString() ?? "Never")</span>
+                                            <span><strong>In progress:</strong> @(state.RefreshInProgress ? "Yes" : "No")</span>
+                                            <span><strong>Queue:</strong> @state.QueueStatus @(string.IsNullOrWhiteSpace(state.QueuePriority) ? string.Empty : $"({state.QueuePriority})")</span>
+                                        </div>
+                                        <div class="market-table-cell admin-log-details" data-label="Cooldown">
+                                            <span><strong>Next allowed:</strong> @(state.NextAllowedRefreshUtc?.ToLocalTime().ToString() ?? "Now")</span>
+                                            <span><strong>Rate limit strikes:</strong> @state.RateLimitStrikeCount</span>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
                 @if (Model.InventoryEntries.Count == 0)
                 {
                     <div class="empty-state compact">

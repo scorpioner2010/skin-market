@@ -10,13 +10,16 @@ public class LogsModel : PageModel
 {
     private readonly IAppLogReader _appLogReader;
     private readonly IBotServiceStatusClient _botServiceStatusClient;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
 
     public LogsModel(
         IAppLogReader appLogReader,
-        IBotServiceStatusClient botServiceStatusClient)
+        IBotServiceStatusClient botServiceStatusClient,
+        ISteamInventoryRefreshService steamInventoryRefreshService)
     {
         _appLogReader = appLogReader;
         _botServiceStatusClient = botServiceStatusClient;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -26,6 +29,7 @@ public class LogsModel : PageModel
     public IReadOnlyList<AppLog> AppEntries { get; private set; } = Array.Empty<AppLog>();
     public IReadOnlyList<AppLog> InventoryEntries { get; private set; } = Array.Empty<AppLog>();
     public IReadOnlyList<AppLog> WorkflowEntries { get; private set; } = Array.Empty<AppLog>();
+    public IReadOnlyList<SteamInventoryRefreshDebugState> InventoryRefreshStates { get; private set; } = Array.Empty<SteamInventoryRefreshDebugState>();
     public IReadOnlyDictionary<string, string> HostingDetails { get; private set; } = new Dictionary<string, string>();
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
@@ -36,6 +40,7 @@ public class LogsModel : PageModel
         AppEntries = BotDiagnosticsCatalog.FilterImportantAppEntries(recent, take);
         InventoryEntries = _appLogReader.GetRecent(take, sources: BotDiagnosticsCatalog.InventoryLogSources);
         WorkflowEntries = _appLogReader.GetRecent(Math.Max(take, 40), sources: BotDiagnosticsCatalog.WorkflowLogSources);
+        InventoryRefreshStates = await _steamInventoryRefreshService.GetDebugStatesAsync(take, cancellationToken);
         HostingDetails = BuildHostingDetails();
     }
 
