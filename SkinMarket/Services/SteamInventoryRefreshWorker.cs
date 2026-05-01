@@ -14,7 +14,7 @@ namespace SkinMarket.Services;
 public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRefreshService
 {
     private const string IconBaseUrl = "https://community.akamai.steamstatic.com/economy/image/";
-    private const int BodySnippetLength = 280;
+    private const int BodySnippetLength = 300;
     private const int MaxInventoryPages = 50;
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
@@ -111,52 +111,14 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 item => item.SteamId == normalizedSteamId && item.GameType == gameType,
                 cancellationToken);
 
-        return BuildStatus(snapshot, BuildKey(normalizedSteamId, gameType));
-    }
-
-    public async Task<IReadOnlyList<SteamInventoryRefreshDebugState>> GetDebugStatesAsync(
-        int limit = 100,
-        CancellationToken cancellationToken = default)
-    {
-        var take = limit <= 0 ? 100 : Math.Min(limit, 500);
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var snapshots = await dbContext.SteamInventorySnapshots
-            .AsNoTracking()
-            .OrderByDescending(item => item.LastAttemptUtc ?? item.LastSuccessRefreshUtc ?? DateTime.MinValue)
-            .ThenBy(item => item.SteamId)
-            .Take(take)
-            .ToListAsync(cancellationToken);
-
-        return snapshots
-            .Select(snapshot =>
-            {
-                var key = BuildKey(snapshot.SteamId, snapshot.GameType);
-                var isQueued = _queuedKeys.TryGetValue(key, out var queuedPriority);
-                return new SteamInventoryRefreshDebugState
-                {
-                    SteamId = snapshot.SteamId,
-                    GameType = snapshot.GameType,
-                    ItemCount = CountSnapshotItems(snapshot.ItemsJson),
-                    LastSuccessRefreshUtc = snapshot.LastSuccessRefreshUtc,
-                    LastAttemptUtc = snapshot.LastAttemptUtc,
-                    LastErrorCode = snapshot.LastErrorCode,
-                    LastErrorMessage = snapshot.LastErrorMessage,
-                    RateLimitStrikeCount = snapshot.RateLimitStrikeCount,
-                    NextAllowedRefreshUtc = MaxUtc(snapshot.NextAllowedRefreshUtc, GetGlobalNextAllowedRefreshUtc()),
-                    RefreshInProgress = snapshot.RefreshInProgress,
-                    QueueStatus = isQueued ? "Queued" : snapshot.RefreshInProgress ? "InProgress" : "NotQueued",
-                    QueuePriority = isQueued ? queuedPriority.ToString() : null
-                };
-            })
-            .ToList();
+        var effectiveNextAllowedUtc = await GetEffectiveNextAllowedUtcAsync(dbContext, snapshot, cancellationToken);
+        return BuildStatus(snapshot, BuildKey(normalizedSteamId, gameType), effectiveNextAllowedUtc);
     }
 
     public async Task<SteamInventoryRefreshStatus> EnqueueRefreshAsync(
         string steamId,
         GameType gameType,
         SteamInventoryRefreshPriority priority,
-        SteamInventoryRefreshSource source,
         CancellationToken cancellationToken = default)
     {
         var normalizedSteamId = NormalizeSteamId(steamId);
@@ -169,69 +131,39 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var snapshot = await GetOrCreateSnapshotAsync(dbContext, normalizedSteamId, gameType, cancellationToken);
             var now = DateTime.UtcNow;
-            var globalNextAllowedUtc = GetGlobalNextAllowedRefreshUtc();
-            var perUserNextAllowedUtc = snapshot.NextAllowedRefreshUtc is not null && snapshot.NextAllowedRefreshUtc > now
-                ? snapshot.NextAllowedRefreshUtc
-                : null;
-            var effectiveNextAllowedUtc = MaxUtc(perUserNextAllowedUtc, globalNextAllowedUtc);
+            var effectiveNextAllowedUtc = await GetEffectiveNextAllowedUtcAsync(dbContext, snapshot, cancellationToken);
             if (dbContext.ChangeTracker.HasChanges())
             {
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            await WriteInventoryRefreshLogAsync(
-                "Info",
-                "PerUserCooldownCheck",
-                normalizedSteamId,
-                gameType,
-                priority,
-                source,
-                snapshot: snapshot,
-                nextAllowedRefreshUtc: perUserNextAllowedUtc,
-                reason: perUserNextAllowedUtc is null ? "NoPerUserCooldown" : "PerUserCooldownActive",
-                cancellationToken: CancellationToken.None);
-            await WriteInventoryRefreshLogAsync(
-                "Info",
-                "GlobalCooldownCheck",
-                normalizedSteamId,
-                gameType,
-                priority,
-                source,
-                snapshot: snapshot,
-                nextAllowedRefreshUtc: globalNextAllowedUtc,
-                reason: globalNextAllowedUtc is null ? "NoGlobalCooldown" : "GlobalCooldownActive",
-                cancellationToken: CancellationToken.None);
-
             if (effectiveNextAllowedUtc is not null && effectiveNextAllowedUtc.Value > now)
             {
-                await WriteInventoryRefreshLogAsync(
-                    "Warning",
-                    "SkipEnqueue",
-                    normalizedSteamId,
-                    gameType,
-                    priority,
-                    source,
-                    snapshot: snapshot,
-                    nextAllowedRefreshUtc: effectiveNextAllowedUtc,
-                    reason: "CooldownActive",
-                    cancellationToken: CancellationToken.None);
-                return BuildStatus(snapshot, key, effectiveNextAllowedUtc, "CooldownActive");
-            }
-
-            if (snapshot.RefreshInProgress && !_queuedKeys.ContainsKey(key))
-            {
-                await WriteInventoryRefreshLogAsync(
+                await WriteRefreshLogAsync(
                     "Info",
                     "SkipEnqueue",
                     normalizedSteamId,
                     gameType,
                     priority,
-                    source,
+                    reason: "CooldownActive",
                     snapshot: snapshot,
-                    reason: "RefreshInProgress",
-                    queueStatus: "InProgress",
+                    nextAllowedRefreshUtc: effectiveNextAllowedUtc,
                     cancellationToken: CancellationToken.None);
-                return BuildStatus(snapshot, key, reason: "RefreshInProgress");
+                return BuildStatus(snapshot, key, effectiveNextAllowedUtc);
+            }
+
+            if (snapshot.RefreshInProgress && !_queuedKeys.ContainsKey(key))
+            {
+                await WriteRefreshLogAsync(
+                    "Info",
+                    "SkipEnqueue",
+                    normalizedSteamId,
+                    gameType,
+                    priority,
+                    reason: "RefreshInProgress",
+                    snapshot: snapshot,
+                    cancellationToken: CancellationToken.None);
+                return BuildStatus(snapshot, key, effectiveNextAllowedUtc);
             }
 
             if (_queuedKeys.TryGetValue(key, out var existingPriority))
@@ -239,54 +171,49 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 if (priority < existingPriority &&
                     _queuedKeys.TryUpdate(key, priority, existingPriority))
                 {
-                    EnqueueJob(new SteamInventoryRefreshJob(normalizedSteamId, gameType, priority, source));
-                    await WriteInventoryRefreshLogAsync(
+                    EnqueueJob(new SteamInventoryRefreshJob(normalizedSteamId, gameType, priority));
+                    await WriteRefreshLogAsync(
                         "Info",
-                        "PriorityUpgrade",
+                        "PriorityUpgraded",
                         normalizedSteamId,
                         gameType,
                         priority,
-                        source,
+                        reason: $"PreviousPriority={existingPriority}",
                         snapshot: snapshot,
-                        reason: $"Priority upgraded from {existingPriority} to {priority}.",
-                        queueStatus: "Queued",
                         cancellationToken: CancellationToken.None);
-                    return BuildStatus(snapshot, key, reason: "PriorityUpgraded");
+                }
+                else
+                {
+                    await WriteRefreshLogAsync(
+                        "Info",
+                        "SkipEnqueue",
+                        normalizedSteamId,
+                        gameType,
+                        priority,
+                        reason: $"DuplicateQueued; ExistingPriority={existingPriority}",
+                        snapshot: snapshot,
+                        cancellationToken: CancellationToken.None);
                 }
 
-                await WriteInventoryRefreshLogAsync(
-                    "Info",
-                    "SkipDuplicateJob",
-                    normalizedSteamId,
-                    gameType,
-                    priority,
-                    source,
-                    snapshot: snapshot,
-                    reason: $"Duplicate queued job already exists with priority {existingPriority}.",
-                    queueStatus: "Queued",
-                    queuePriority: existingPriority.ToString(),
-                    cancellationToken: CancellationToken.None);
-                return BuildStatus(snapshot, key, reason: "DuplicateQueued");
+                return BuildStatus(snapshot, key, effectiveNextAllowedUtc);
             }
 
             snapshot.RefreshInProgress = true;
             await dbContext.SaveChangesAsync(cancellationToken);
 
             _queuedKeys[key] = priority;
-            EnqueueJob(new SteamInventoryRefreshJob(normalizedSteamId, gameType, priority, source));
-            await WriteInventoryRefreshLogAsync(
+            EnqueueJob(new SteamInventoryRefreshJob(normalizedSteamId, gameType, priority));
+            await WriteRefreshLogAsync(
                 "Info",
                 "EnqueueJob",
                 normalizedSteamId,
                 gameType,
                 priority,
-                source,
-                snapshot: snapshot,
                 reason: "Queued",
-                queueStatus: "Queued",
+                snapshot: snapshot,
                 cancellationToken: CancellationToken.None);
 
-            return BuildStatus(snapshot, key, reason: "Queued");
+            return BuildStatus(snapshot, key, effectiveNextAllowedUtc);
         }
         finally
         {
@@ -297,6 +224,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await ResetStaleInProgressFlagsAsync(stoppingToken);
+        await HydrateGlobalRateLimitFromSnapshotsAsync(stoppingToken);
         await _appLogService.WriteAsync(
             "Info",
             $"Steam inventory refresh worker started. Concurrency=1; DelayBetweenSteamRequestsSeconds={Math.Max(1, _options.DelayBetweenSteamRequestsSeconds)}",
@@ -362,16 +290,13 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
         var key = BuildKey(job.SteamId, job.GameType);
         if (_queuedKeys.TryGetValue(key, out var queuedPriority) && job.Priority > queuedPriority)
         {
-            await WriteInventoryRefreshLogAsync(
+            await WriteRefreshLogAsync(
                 "Info",
-                "SkipDuplicateJob",
+                "SkipEnqueue",
                 job.SteamId,
                 job.GameType,
                 job.Priority,
-                job.Source,
-                reason: $"Stale lower-priority job skipped because queued priority is {queuedPriority}.",
-                queueStatus: "Queued",
-                queuePriority: queuedPriority.ToString(),
+                reason: $"StaleLowerPriorityJob; QueuedPriority={queuedPriority}",
                 cancellationToken: CancellationToken.None);
             return;
         }
@@ -384,61 +309,32 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var snapshot = await GetOrCreateSnapshotAsync(dbContext, job.SteamId, job.GameType, cancellationToken);
-            await WriteInventoryRefreshLogAsync(
+            await WriteRefreshLogAsync(
                 "Info",
                 "WorkerStartedJob",
                 job.SteamId,
                 job.GameType,
                 job.Priority,
-                job.Source,
+                reason: "Dequeued",
                 snapshot: snapshot,
-                queueStatus: "Dequeued",
                 cancellationToken: CancellationToken.None);
 
-            var globalNextAllowedUtc = GetGlobalNextAllowedRefreshUtc();
-            var perUserNextAllowedUtc = snapshot.NextAllowedRefreshUtc is not null && snapshot.NextAllowedRefreshUtc > DateTime.UtcNow
-                ? snapshot.NextAllowedRefreshUtc
-                : null;
-            var effectiveNextAllowedUtc = MaxUtc(perUserNextAllowedUtc, globalNextAllowedUtc);
+            var effectiveNextAllowedUtc = await GetEffectiveNextAllowedUtcAsync(dbContext, snapshot, cancellationToken);
             var now = DateTime.UtcNow;
-            await WriteInventoryRefreshLogAsync(
-                "Info",
-                "PerUserCooldownCheck",
-                job.SteamId,
-                job.GameType,
-                job.Priority,
-                job.Source,
-                snapshot: snapshot,
-                nextAllowedRefreshUtc: perUserNextAllowedUtc,
-                reason: perUserNextAllowedUtc is null ? "NoPerUserCooldown" : "PerUserCooldownActive",
-                cancellationToken: CancellationToken.None);
-            await WriteInventoryRefreshLogAsync(
-                "Info",
-                "GlobalCooldownCheck",
-                job.SteamId,
-                job.GameType,
-                job.Priority,
-                job.Source,
-                snapshot: snapshot,
-                nextAllowedRefreshUtc: globalNextAllowedUtc,
-                reason: globalNextAllowedUtc is null ? "NoGlobalCooldown" : "GlobalCooldownActive",
-                cancellationToken: CancellationToken.None);
-
             if (effectiveNextAllowedUtc is not null && effectiveNextAllowedUtc.Value > now)
             {
                 snapshot.RefreshInProgress = false;
                 snapshot.NextAllowedRefreshUtc = MaxUtc(snapshot.NextAllowedRefreshUtc, effectiveNextAllowedUtc);
                 await dbContext.SaveChangesAsync(cancellationToken);
-                await WriteInventoryRefreshLogAsync(
-                    "Warning",
-                    "SkipWorkerJob",
+                await WriteRefreshLogAsync(
+                    "Info",
+                    "RefreshFinished",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: "SkippedCooldownActive",
                     snapshot: snapshot,
                     nextAllowedRefreshUtc: effectiveNextAllowedUtc,
-                    reason: "CooldownActive",
                     cancellationToken: CancellationToken.None);
                 return;
             }
@@ -462,26 +358,25 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 ResetGlobalRateLimit();
                 await dbContext.SaveChangesAsync(cancellationToken);
 
-                await WriteInventoryRefreshLogAsync(
+                await WriteRefreshLogAsync(
                     "Info",
                     "SnapshotSaved",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: "Success",
                     parsedItemCount: fetchResult.Items.Count,
                     snapshot: snapshot,
                     cancellationToken: CancellationToken.None);
-                await WriteInventoryRefreshLogAsync(
+                await WriteRefreshLogAsync(
                     "Info",
                     "RefreshFinished",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: "Success",
                     parsedItemCount: fetchResult.Items.Count,
                     snapshot: snapshot,
-                    reason: "Success",
                     cancellationToken: CancellationToken.None);
                 return;
             }
@@ -495,9 +390,29 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             if (fetchResult.IsRateLimited)
             {
                 snapshot.RateLimitStrikeCount = Math.Max(1, snapshot.RateLimitStrikeCount + 1);
-                var backoff = GetRateLimitBackoff(snapshot.RateLimitStrikeCount);
+                var adaptiveBackoff = GetRateLimitBackoff(snapshot.RateLimitStrikeCount);
+                var backoff = Max(adaptiveBackoff, fetchResult.RetryAfterDelay);
                 snapshot.NextAllowedRefreshUtc = failureUtc.Add(backoff);
                 ActivateGlobalRateLimit(backoff);
+                await WriteRefreshLogAsync(
+                    "Warning",
+                    "RateLimited",
+                    job.SteamId,
+                    job.GameType,
+                    job.Priority,
+                    reason: $"BackoffSeconds={(int)Math.Ceiling(backoff.TotalSeconds)}; AdaptiveBackoffSeconds={(int)Math.Ceiling(adaptiveBackoff.TotalSeconds)}",
+                    httpStatusCode: fetchResult.HttpStatusCode,
+                    pageNumber: fetchResult.PageNumber,
+                    parsedItemCount: fetchResult.ParsedItemCount,
+                    snapshot: snapshot,
+                    nextAllowedRefreshUtc: snapshot.NextAllowedRefreshUtc,
+                    rateLimitStrikeCount: snapshot.RateLimitStrikeCount,
+                    retryAfter: fetchResult.RetryAfter,
+                    responseHeaders: fetchResult.ResponseHeaders,
+                    bodyLength: fetchResult.BodyLength,
+                    bodySnippet: fetchResult.BodySnippet,
+                    errorMessage: snapshot.LastErrorMessage,
+                    cancellationToken: CancellationToken.None);
             }
             else
             {
@@ -505,37 +420,36 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             }
 
             await dbContext.SaveChangesAsync(cancellationToken);
-            if (fetchResult.IsRateLimited)
-            {
-                await WriteInventoryRefreshLogAsync(
-                    "Warning",
-                    "RateLimited429",
-                    job.SteamId,
-                    job.GameType,
-                    job.Priority,
-                    job.Source,
-                    httpStatusCode: fetchResult.HttpStatusCode,
-                    pageNumber: fetchResult.PageNumber,
-                    parsedItemCount: fetchResult.ParsedItemCount,
-                    snapshot: snapshot,
-                    errorMessage: snapshot.LastErrorMessage,
-                    reason: "Steam429BackoffApplied",
-                    cancellationToken: CancellationToken.None);
-            }
-
-            await WriteInventoryRefreshLogAsync(
+            await WriteRefreshLogAsync(
+                fetchResult.IsRateLimited ? "Warning" : "Error",
+                "RefreshFailed",
+                job.SteamId,
+                job.GameType,
+                job.Priority,
+                reason: fetchResult.ErrorCode,
+                httpStatusCode: fetchResult.HttpStatusCode,
+                pageNumber: fetchResult.PageNumber,
+                parsedItemCount: fetchResult.ParsedItemCount,
+                snapshot: snapshot,
+                retryAfter: fetchResult.RetryAfter,
+                responseHeaders: fetchResult.ResponseHeaders,
+                bodyLength: fetchResult.BodyLength,
+                bodySnippet: fetchResult.BodySnippet,
+                errorMessage: snapshot.LastErrorMessage,
+                cancellationToken: CancellationToken.None);
+            await WriteRefreshLogAsync(
                 fetchResult.IsRateLimited ? "Warning" : "Error",
                 "RefreshFinished",
                 job.SteamId,
                 job.GameType,
                 job.Priority,
-                job.Source,
+                reason: "Failure",
                 httpStatusCode: fetchResult.HttpStatusCode,
                 pageNumber: fetchResult.PageNumber,
                 parsedItemCount: fetchResult.ParsedItemCount,
                 snapshot: snapshot,
+                retryAfter: fetchResult.RetryAfter,
                 errorMessage: snapshot.LastErrorMessage,
-                reason: "Failure",
                 cancellationToken: CancellationToken.None);
         }
         finally
@@ -564,9 +478,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 return SteamInventoryFetchResult.Failed(
                     "PaginationLimit",
                     $"Steam inventory pagination exceeded {MaxInventoryPages} pages.",
-                    isRateLimited: false,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count);
+                    isRateLimited: false);
             }
 
             await WaitForSteamRequestSlotAsync(cancellationToken);
@@ -576,17 +488,16 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
 
             try
             {
-                await WriteInventoryRefreshLogAsync(
+                await WriteRefreshLogAsync(
                     "Info",
                     "SteamRequestStarted",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: $"Url={requestUrl}",
                     pageNumber: page,
                     parsedItemCount: allItems.Count,
                     snapshot: snapshot,
-                    reason: $"Url={requestUrl}",
                     cancellationToken: CancellationToken.None);
 
                 using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
@@ -594,76 +505,81 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 request.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 rawContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                await WriteInventoryRefreshLogAsync(
+                var bodyLength = rawContent?.Length ?? 0;
+                var bodySnippet = BuildBodySnippet(rawContent);
+                var retryAfter = GetRetryAfterValue(response);
+                var responseHeaders = BuildHeaderSummary(response);
+                await WriteRefreshLogAsync(
                     response.IsSuccessStatusCode ? "Info" : "Warning",
                     "SteamHttpStatus",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: $"ElapsedMs={stopwatch.ElapsedMilliseconds}; ReasonPhrase={response.ReasonPhrase ?? "<null>"}",
                     httpStatusCode: (int)response.StatusCode,
                     pageNumber: page,
                     parsedItemCount: allItems.Count,
                     snapshot: snapshot,
-                    reason: response.ReasonPhrase ?? "<null>",
+                    retryAfter: retryAfter,
+                    responseHeaders: responseHeaders,
+                    bodyLength: bodyLength,
+                    bodySnippet: bodySnippet,
                     cancellationToken: CancellationToken.None);
 
                 if ((int)response.StatusCode == 429)
                 {
                     return SteamInventoryFetchResult.Failed(
                         "429",
-                        $"Steam inventory request was rate limited on page {page}. Body={BuildBodySnippet(rawContent)}",
+                        $"Steam inventory request was rate limited on page {page}. Body={bodySnippet}",
                         isRateLimited: true,
                         httpStatusCode: 429,
                         pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        parsedItemCount: allItems.Count,
+                        retryAfterDelay: GetRetryAfterDelay(response),
+                        retryAfter: retryAfter,
+                        responseHeaders: responseHeaders,
+                        bodyLength: bodyLength,
+                        bodySnippet: bodySnippet);
                 }
 
                 if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                 {
-                    await WriteInventoryRefreshLogAsync(
-                        "Warning",
-                        "PrivateInventory403",
-                        job.SteamId,
-                        job.GameType,
-                        job.Priority,
-                        job.Source,
-                        httpStatusCode: 403,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count,
-                        snapshot: snapshot,
-                        errorMessage: "Steam inventory is private or unavailable.",
-                        cancellationToken: CancellationToken.None);
                     return SteamInventoryFetchResult.Failed(
                         "403",
                         "Steam inventory is private or unavailable.",
                         isRateLimited: false,
                         httpStatusCode: 403,
                         pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        parsedItemCount: allItems.Count,
+                        retryAfter: retryAfter,
+                        responseHeaders: responseHeaders,
+                        bodyLength: bodyLength,
+                        bodySnippet: bodySnippet);
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
                     return SteamInventoryFetchResult.Failed(
                         $"HTTP_{(int)response.StatusCode}",
-                        $"Steam inventory request failed with HTTP {(int)response.StatusCode} on page {page}. Body={BuildBodySnippet(rawContent)}",
+                        $"Steam inventory request failed with HTTP {(int)response.StatusCode} on page {page}. Body={bodySnippet}",
                         isRateLimited: false,
                         httpStatusCode: (int)response.StatusCode,
                         pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        parsedItemCount: allItems.Count,
+                        retryAfter: retryAfter,
+                        responseHeaders: responseHeaders,
+                        bodyLength: bodyLength,
+                        bodySnippet: bodySnippet);
                 }
 
-                using var document = JsonDocument.Parse(rawContent);
+                using var document = JsonDocument.Parse(rawContent ?? string.Empty);
                 var root = document.RootElement;
                 if (root.ValueKind != JsonValueKind.Object)
                 {
                     return SteamInventoryFetchResult.Failed(
                         "InvalidPayload",
                         $"Steam inventory response root was invalid on page {page}.",
-                        isRateLimited: false,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        isRateLimited: false);
                 }
 
                 if (root.TryGetProperty("success", out var successElement) &&
@@ -673,9 +589,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                     return SteamInventoryFetchResult.Failed(
                         "SteamUnavailable",
                         $"Steam inventory payload reported success={successElement.GetInt32()} on page {page}.",
-                        isRateLimited: false,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        isRateLimited: false);
                 }
 
                 var totalInventoryCount = GetInt32(root, "total_inventory_count");
@@ -684,27 +598,13 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 {
                     if (totalInventoryCount == 0)
                     {
-                        await WriteInventoryRefreshLogAsync(
-                            "Info",
-                            "TotalParsedItems",
-                            job.SteamId,
-                            job.GameType,
-                            job.Priority,
-                            job.Source,
-                            pageNumber: page,
-                            parsedItemCount: allItems.Count,
-                            snapshot: snapshot,
-                            reason: "EmptyInventory",
-                            cancellationToken: CancellationToken.None);
-                        return SteamInventoryFetchResult.Success(allItems, page, allItems.Count);
+                        return SteamInventoryFetchResult.Success(allItems);
                     }
 
                     return SteamInventoryFetchResult.Failed(
                         "MissingAssets",
                         $"Steam inventory response omitted assets on page {page}. TotalInventoryCount={FormatInt(totalInventoryCount)}.",
-                        isRateLimited: false,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        isRateLimited: false);
                 }
 
                 var descriptions = BuildDescriptions(root);
@@ -721,36 +621,22 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
 
                 var moreItems = GetBooleanFlag(root, "more_items") == true;
                 var lastAssetId = GetString(root, "last_assetid");
-                await WriteInventoryRefreshLogAsync(
+                await WriteRefreshLogAsync(
                     "Info",
-                    "PaginationPageParsed",
+                    "PaginationPage",
                     job.SteamId,
                     job.GameType,
                     job.Priority,
-                    job.Source,
+                    reason: $"Game={game.Key}; PageAssets={assetsElement.GetArrayLength()}; MoreItems={moreItems}; LastAssetId={lastAssetId ?? "<null>"}; ElapsedMs={stopwatch.ElapsedMilliseconds}",
+                    httpStatusCode: 200,
                     pageNumber: page,
                     parsedItemCount: allItems.Count,
                     snapshot: snapshot,
-                    moreItems: moreItems,
-                    lastAssetId: lastAssetId,
-                    reason: $"PageAssets={assetsElement.GetArrayLength()}; ElapsedMs={stopwatch.ElapsedMilliseconds}",
                     cancellationToken: CancellationToken.None);
 
                 if (!moreItems)
                 {
-                    await WriteInventoryRefreshLogAsync(
-                        "Info",
-                        "TotalParsedItems",
-                        job.SteamId,
-                        job.GameType,
-                        job.Priority,
-                        job.Source,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count,
-                        snapshot: snapshot,
-                        reason: "PaginationComplete",
-                        cancellationToken: CancellationToken.None);
-                    return SteamInventoryFetchResult.Success(allItems, page, allItems.Count);
+                    return SteamInventoryFetchResult.Success(allItems);
                 }
 
                 if (string.IsNullOrWhiteSpace(lastAssetId))
@@ -758,9 +644,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                     return SteamInventoryFetchResult.Failed(
                         "MissingLastAssetId",
                         $"Steam inventory requested pagination but omitted last_assetid on page {page}.",
-                        isRateLimited: false,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        isRateLimited: false);
                 }
 
                 if (string.Equals(lastAssetId, startAssetId, StringComparison.Ordinal))
@@ -768,9 +652,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                     return SteamInventoryFetchResult.Failed(
                         "RepeatedLastAssetId",
                         $"Steam inventory pagination repeated last_assetid={lastAssetId} on page {page}.",
-                        isRateLimited: false,
-                        pageNumber: page,
-                        parsedItemCount: allItems.Count);
+                        isRateLimited: false);
                 }
 
                 startAssetId = lastAssetId;
@@ -781,68 +663,24 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             }
             catch (JsonException exception)
             {
-                await WriteInventoryRefreshLogAsync(
-                    "Error",
-                    "RefreshError",
-                    job.SteamId,
-                    job.GameType,
-                    job.Priority,
-                    job.Source,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count,
-                    snapshot: snapshot,
-                    errorMessage: exception.Message,
-                    reason: "InvalidJson",
-                    cancellationToken: CancellationToken.None);
                 return SteamInventoryFetchResult.Failed(
                     "InvalidJson",
                     $"Steam inventory returned invalid JSON on page {page}: {exception.Message}. Body={BuildBodySnippet(rawContent)}",
-                    isRateLimited: false,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count);
+                    isRateLimited: false);
             }
             catch (HttpRequestException exception)
             {
-                await WriteInventoryRefreshLogAsync(
-                    "Error",
-                    "RefreshError",
-                    job.SteamId,
-                    job.GameType,
-                    job.Priority,
-                    job.Source,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count,
-                    snapshot: snapshot,
-                    errorMessage: exception.Message,
-                    reason: "HttpRequestException",
-                    cancellationToken: CancellationToken.None);
                 return SteamInventoryFetchResult.Failed(
                     "HttpRequestException",
                     $"Failed to reach Steam inventory endpoint on page {page}: {exception.Message}",
-                    isRateLimited: false,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count);
+                    isRateLimited: false);
             }
             catch (TaskCanceledException exception)
             {
-                await WriteInventoryRefreshLogAsync(
-                    "Error",
-                    "RefreshTimeout",
-                    job.SteamId,
-                    job.GameType,
-                    job.Priority,
-                    job.Source,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count,
-                    snapshot: snapshot,
-                    errorMessage: exception.Message,
-                    cancellationToken: CancellationToken.None);
                 return SteamInventoryFetchResult.Failed(
                     "Timeout",
                     $"Steam inventory request timed out on page {page}: {exception.Message}",
-                    isRateLimited: false,
-                    pageNumber: page,
-                    parsedItemCount: allItems.Count);
+                    isRateLimited: false);
             }
         }
     }
@@ -927,12 +765,11 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
     private SteamInventoryRefreshStatus BuildStatus(
         SteamInventorySnapshot? snapshot,
         string key,
-        DateTime? effectiveNextAllowedUtc = null,
-        string reason = "StatusRead")
+        DateTime? effectiveNextAllowedUtc = null)
     {
         var nextAllowedUtc = MaxUtc(effectiveNextAllowedUtc, GetEffectiveNextAllowedUtc(snapshot));
         var now = DateTime.UtcNow;
-        var isQueued = _queuedKeys.TryGetValue(key, out var queuedPriority);
+        var isQueued = _queuedKeys.ContainsKey(key);
         var isRefreshing = (snapshot?.RefreshInProgress ?? false) || isQueued;
         return new SteamInventoryRefreshStatus
         {
@@ -941,17 +778,77 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             IsRefreshing = isRefreshing,
             IsRateLimited = nextAllowedUtc is not null && nextAllowedUtc.Value > now,
             NextAllowedRefreshUtc = nextAllowedUtc,
-            LastErrorMessage = snapshot?.LastErrorMessage,
-            RefreshState = isQueued ? "Queued" : snapshot?.RefreshInProgress == true ? "Refreshing" : nextAllowedUtc is not null && nextAllowedUtc.Value > now ? "Cooldown" : "Idle",
-            Reason = reason,
-            QueueStatus = isQueued ? "Queued" : snapshot?.RefreshInProgress == true ? "InProgress" : "NotQueued",
-            QueuePriority = isQueued ? queuedPriority.ToString() : null
+            LastErrorMessage = snapshot?.LastErrorMessage
         };
     }
 
     private DateTime? GetEffectiveNextAllowedUtc(SteamInventorySnapshot? snapshot)
     {
         return MaxUtc(snapshot?.NextAllowedRefreshUtc, GetGlobalNextAllowedRefreshUtc());
+    }
+
+    private async Task<DateTime?> GetEffectiveNextAllowedUtcAsync(
+        AppDbContext dbContext,
+        SteamInventorySnapshot? snapshot,
+        CancellationToken cancellationToken)
+    {
+        var persistedGlobal = await GetPersistedGlobalNextAllowedRefreshUtcAsync(dbContext, cancellationToken);
+        if (persistedGlobal is not null)
+        {
+            SetGlobalNextAllowedRefreshUtc(persistedGlobal.Value);
+        }
+
+        return MaxUtc(snapshot?.NextAllowedRefreshUtc, MaxUtc(GetGlobalNextAllowedRefreshUtc(), persistedGlobal));
+    }
+
+    private async Task<DateTime?> GetPersistedGlobalNextAllowedRefreshUtcAsync(
+        AppDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        return await dbContext.SteamInventorySnapshots
+            .AsNoTracking()
+            .Where(item => item.LastErrorCode == "429" &&
+                           item.NextAllowedRefreshUtc != null &&
+                           item.NextAllowedRefreshUtc > now)
+            .MaxAsync(item => item.NextAllowedRefreshUtc, cancellationToken);
+    }
+
+    private async Task HydrateGlobalRateLimitFromSnapshotsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var nextAllowedUtc = await GetPersistedGlobalNextAllowedRefreshUtcAsync(dbContext, cancellationToken);
+            if (nextAllowedUtc is null)
+            {
+                return;
+            }
+
+            SetGlobalNextAllowedRefreshUtc(nextAllowedUtc.Value);
+            await WriteRefreshLogAsync(
+                "Warning",
+                "GlobalCooldownRestored",
+                "<global>",
+                _gameCatalog.DefaultGameType,
+                reason: "RestoredFromRecent429Snapshots",
+                nextAllowedRefreshUtc: nextAllowedUtc,
+                cancellationToken: CancellationToken.None);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Failed to hydrate Steam inventory global cooldown from snapshots. Message={exception.Message}",
+                nameof(SteamInventoryRefreshWorker),
+                exception,
+                CancellationToken.None);
+        }
     }
 
     private DateTime? GetGlobalNextAllowedRefreshUtc()
@@ -975,6 +872,14 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             var nextAllowed = DateTime.UtcNow.Add(GetRateLimitBackoff(_globalRateLimitStrikeCount));
             var perUserNextAllowed = DateTime.UtcNow.Add(backoff);
             _globalNextAllowedRefreshUtc = MaxUtc(_globalNextAllowedRefreshUtc, MaxUtc(nextAllowed, perUserNextAllowed));
+        }
+    }
+
+    private void SetGlobalNextAllowedRefreshUtc(DateTime nextAllowedRefreshUtc)
+    {
+        lock (_globalRateLimitLock)
+        {
+            _globalNextAllowedRefreshUtc = MaxUtc(_globalNextAllowedRefreshUtc, nextAllowedRefreshUtc);
         }
     }
 
@@ -1012,6 +917,16 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
         }
 
         return first.Value >= second.Value ? first : second;
+    }
+
+    private static TimeSpan Max(TimeSpan first, TimeSpan? second)
+    {
+        if (second is null || second.Value <= TimeSpan.Zero)
+        {
+            return first;
+        }
+
+        return first >= second.Value ? first : second.Value;
     }
 
     private static string BuildInventoryUrl(string steamId, int appId, string contextId, string? startAssetId)
@@ -1161,28 +1076,30 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
         return $"{steamId}::{(int)gameType}";
     }
 
-    private async Task WriteInventoryRefreshLogAsync(
+    private async Task WriteRefreshLogAsync(
         string level,
         string eventName,
         string steamId,
         GameType gameType,
-        SteamInventoryRefreshPriority priority,
-        SteamInventoryRefreshSource source,
+        SteamInventoryRefreshPriority? priority = null,
+        string? reason = null,
         int? httpStatusCode = null,
         int? pageNumber = null,
         int? parsedItemCount = null,
         SteamInventorySnapshot? snapshot = null,
         DateTime? nextAllowedRefreshUtc = null,
         int? rateLimitStrikeCount = null,
-        bool? moreItems = null,
-        string? lastAssetId = null,
+        string? retryAfter = null,
+        string? responseHeaders = null,
+        int? bodyLength = null,
+        string? bodySnippet = null,
         string? errorMessage = null,
-        string? reason = null,
-        string? queueStatus = null,
-        string? queuePriority = null,
         CancellationToken cancellationToken = default)
     {
         var normalizedLevel = string.IsNullOrWhiteSpace(level) ? "Info" : level.Trim();
+        var normalizedPriority = priority?.ToString() ?? "<none>";
+        var refreshSource = priority == SteamInventoryRefreshPriority.High ? "Manual" :
+            priority == SteamInventoryRefreshPriority.Normal ? "Auto" : "<unknown>";
         var message = string.Join("; ", new[]
             {
                 $"Event={eventName}",
@@ -1190,21 +1107,21 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 $"TimestampUtc={DateTime.UtcNow:O}",
                 $"SteamId={steamId}",
                 $"GameType={(int)gameType}",
-                $"JobPriority={priority}",
-                $"RefreshSource={source}",
+                $"Priority={normalizedPriority}",
+                $"RefreshSource={refreshSource}",
                 httpStatusCode.HasValue ? $"HttpStatusCode={httpStatusCode.Value}" : null,
                 pageNumber.HasValue ? $"PageNumber={pageNumber.Value}" : null,
                 parsedItemCount.HasValue ? $"ParsedItemCount={parsedItemCount.Value}" : null,
                 snapshot?.LastSuccessRefreshUtc is not null ? $"LastSuccessRefreshUtc={snapshot.LastSuccessRefreshUtc.Value:O}" : null,
                 snapshot?.LastAttemptUtc is not null ? $"LastAttemptUtc={snapshot.LastAttemptUtc.Value:O}" : null,
                 (nextAllowedRefreshUtc ?? snapshot?.NextAllowedRefreshUtc) is DateTime nextAllowed ? $"NextAllowedRefreshUtc={nextAllowed:O}" : null,
-                $"RateLimitStrikeCount={rateLimitStrikeCount ?? snapshot?.RateLimitStrikeCount ?? 0}",
-                moreItems.HasValue ? $"MoreItems={moreItems.Value}" : null,
-                !string.IsNullOrWhiteSpace(lastAssetId) ? $"LastAssetId={lastAssetId}" : null,
-                !string.IsNullOrWhiteSpace(queueStatus) ? $"QueueStatus={queueStatus}" : null,
-                !string.IsNullOrWhiteSpace(queuePriority) ? $"QueuePriority={queuePriority}" : null,
-                !string.IsNullOrWhiteSpace(reason) ? $"Reason={Truncate(reason, 500)}" : null,
-                !string.IsNullOrWhiteSpace(errorMessage) ? $"Error={Truncate(errorMessage, 500)}" : null
+                (rateLimitStrikeCount ?? snapshot?.RateLimitStrikeCount) is int strikes ? $"RateLimitStrikeCount={strikes}" : null,
+                !string.IsNullOrWhiteSpace(retryAfter) ? $"RetryAfter={retryAfter}" : null,
+                bodyLength.HasValue ? $"BodyLength={bodyLength.Value}" : null,
+                !string.IsNullOrWhiteSpace(bodySnippet) ? $"BodySnippet={Truncate(bodySnippet, 300)}" : null,
+                !string.IsNullOrWhiteSpace(responseHeaders) ? $"Headers={Truncate(responseHeaders, 1200)}" : null,
+                !string.IsNullOrWhiteSpace(reason) ? $"Reason={Truncate(reason, 700)}" : null,
+                !string.IsNullOrWhiteSpace(errorMessage) ? $"Error={Truncate(errorMessage, 700)}" : null
             }
             .Where(item => !string.IsNullOrWhiteSpace(item)));
 
@@ -1229,24 +1146,45 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             cancellationToken: cancellationToken);
     }
 
-    private static int CountSnapshotItems(string? itemsJson)
+    private static string GetRetryAfterValue(HttpResponseMessage response)
     {
-        if (string.IsNullOrWhiteSpace(itemsJson))
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is TimeSpan delta)
         {
-            return 0;
+            return $"{Math.Max(0, (int)Math.Ceiling(delta.TotalSeconds))}s";
         }
 
-        try
+        if (retryAfter?.Date is DateTimeOffset date)
         {
-            using var document = JsonDocument.Parse(itemsJson);
-            return document.RootElement.ValueKind == JsonValueKind.Array
-                ? document.RootElement.GetArrayLength()
-                : 0;
+            return date.UtcDateTime.ToString("O");
         }
-        catch (JsonException)
+
+        return "<none>";
+    }
+
+    private static TimeSpan? GetRetryAfterDelay(HttpResponseMessage response)
+    {
+        var retryAfter = response.Headers.RetryAfter;
+        if (retryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
         {
-            return 0;
+            return delta;
         }
+
+        if (retryAfter?.Date is DateTimeOffset date)
+        {
+            var delay = date.UtcDateTime - DateTime.UtcNow;
+            return delay > TimeSpan.Zero ? delay : null;
+        }
+
+        return null;
+    }
+
+    private static string BuildHeaderSummary(HttpResponseMessage response)
+    {
+        var headers = response.Headers
+            .Select(header => $"{header.Key}={string.Join(",", header.Value)}")
+            .Concat(response.Content.Headers.Select(header => $"{header.Key}={string.Join(",", header.Value)}"));
+        return string.Join(" | ", headers);
     }
 
     private static string Truncate(string value, int maxLength)
@@ -1257,8 +1195,7 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
     private readonly record struct SteamInventoryRefreshJob(
         string SteamId,
         GameType GameType,
-        SteamInventoryRefreshPriority Priority,
-        SteamInventoryRefreshSource Source);
+        SteamInventoryRefreshPriority Priority);
 
     private sealed class SteamInventoryFetchResult
     {
@@ -1269,15 +1206,18 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
         public int? HttpStatusCode { get; private init; }
         public int? PageNumber { get; private init; }
         public int ParsedItemCount { get; private init; }
+        public TimeSpan? RetryAfterDelay { get; private init; }
+        public string? RetryAfter { get; private init; }
+        public string? ResponseHeaders { get; private init; }
+        public int? BodyLength { get; private init; }
+        public string? BodySnippet { get; private init; }
         public List<SteamInventoryItemDto> Items { get; private init; } = new();
 
-        public static SteamInventoryFetchResult Success(List<SteamInventoryItemDto> items, int pageNumber, int parsedItemCount)
+        public static SteamInventoryFetchResult Success(List<SteamInventoryItemDto> items)
         {
             return new SteamInventoryFetchResult
             {
                 IsSuccess = true,
-                PageNumber = pageNumber,
-                ParsedItemCount = parsedItemCount,
                 Items = items
             };
         }
@@ -1288,7 +1228,12 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
             bool isRateLimited,
             int? httpStatusCode = null,
             int? pageNumber = null,
-            int parsedItemCount = 0)
+            int parsedItemCount = 0,
+            TimeSpan? retryAfterDelay = null,
+            string? retryAfter = null,
+            string? responseHeaders = null,
+            int? bodyLength = null,
+            string? bodySnippet = null)
         {
             return new SteamInventoryFetchResult
             {
@@ -1297,7 +1242,12 @@ public class SteamInventoryRefreshWorker : BackgroundService, ISteamInventoryRef
                 IsRateLimited = isRateLimited,
                 HttpStatusCode = httpStatusCode,
                 PageNumber = pageNumber,
-                ParsedItemCount = parsedItemCount
+                ParsedItemCount = parsedItemCount,
+                RetryAfterDelay = retryAfterDelay,
+                RetryAfter = retryAfter,
+                ResponseHeaders = responseHeaders,
+                BodyLength = bodyLength,
+                BodySnippet = bodySnippet
             };
         }
     }

@@ -8,9 +8,11 @@ using SkinMarket.Data;
 using SkinMarket.Infrastructure;
 using SkinMarket.Models;
 using SkinMarket.Services;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Localization;
 using Microsoft.AspNetCore.Mvc;
@@ -92,6 +94,7 @@ builder.Services.AddSingleton(Options.Create(steamBotOptions));
 builder.Services.AddSingleton(Options.Create(steamApiOptions));
 builder.Services.AddSingleton<BotServiceAvailabilityTracker>();
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
+builder.Services.Configure<SteamMarketPriceOptions>(builder.Configuration.GetSection(SteamMarketPriceOptions.SectionName));
 builder.Services.Configure<SteamInventoryRefreshOptions>(builder.Configuration.GetSection(SteamInventoryRefreshOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
@@ -197,6 +200,19 @@ builder.Services.AddHttpClient("SteamInventoryRefresh", (serviceProvider, client
 })
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
     {
+        AutomaticDecompression = DecompressionMethods.Brotli |
+                                 DecompressionMethods.GZip |
+                                 DecompressionMethods.Deflate
+    });
+builder.Services.AddHttpClient("SteamInventoryDiagnostic", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(25);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; SkinMarket/1.0; +https://skinmarket.local)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json,text/javascript,*/*;q=0.9");
+})
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AllowAutoRedirect = false,
         AutomaticDecompression = DecompressionMethods.Brotli |
                                  DecompressionMethods.GZip |
                                  DecompressionMethods.Deflate
@@ -377,7 +393,6 @@ app.MapPost("/api/inventory/refresh", async (
         appUser.SteamId,
         request.GameType,
         SteamInventoryRefreshPriority.High,
-        SteamInventoryRefreshSource.Manual,
         cancellationToken);
 
     return Results.Ok(status);
@@ -403,6 +418,77 @@ app.MapPost("/api/inventory/status", async (
 
     var status = await refreshService.GetStatusAsync(appUser.SteamId, request.GameType, cancellationToken);
     return Results.Ok(status);
+});
+
+app.MapPost("/api/admin/steam-inventory/test", async (
+    HttpContext httpContext,
+    SteamInventoryServerTestRequest request,
+    AppDbContext dbContext,
+    IHttpClientFactory httpClientFactory,
+    IGameCatalog gameCatalog,
+    IAppLogService appLogService,
+    CancellationToken cancellationToken) =>
+{
+    var appUser = await ResolveCurrentAppUserAsync(httpContext, dbContext, cancellationToken);
+    if (appUser is null)
+    {
+        return Results.Unauthorized();
+    }
+
+    if (!appUser.IsAdmin)
+    {
+        return Results.Forbid();
+    }
+
+    var steamId = string.IsNullOrWhiteSpace(request.SteamId)
+        ? appUser.SteamId
+        : request.SteamId.Trim();
+    var game = gameCatalog.Get(request.GameType);
+    var timestampUtc = DateTime.UtcNow;
+    var outboundIp = await ReadOutboundIpAsync(httpClientFactory, cancellationToken);
+    var inventoryResult = await TestSteamInventoryRequestAsync(
+        httpClientFactory,
+        steamId,
+        game,
+        cancellationToken);
+
+    var level = inventoryResult.HttpStatusCode is 429 or 403 ||
+                !string.IsNullOrWhiteSpace(inventoryResult.ExceptionMessage)
+        ? "Warning"
+        : "Info";
+    await appLogService.WriteAsync(
+        level,
+        string.Join("; ", new[]
+        {
+            "Event=SteamInventoryServerTest",
+            $"TimestampUtc={timestampUtc:O}",
+            $"SteamId={steamId}",
+            $"GameType={(int)game.Type}",
+            $"HttpStatusCode={inventoryResult.HttpStatusCode?.ToString() ?? "<null>"}",
+            $"RetryAfter={inventoryResult.RetryAfter ?? "<none>"}",
+            $"BodyLength={inventoryResult.BodyLength?.ToString() ?? "<null>"}",
+            $"BodySnippet={TruncateForDiagnosticLog(inventoryResult.BodySnippet, 300)}",
+            $"DurationMs={inventoryResult.DurationMs}",
+            $"OutboundIp={outboundIp.OutboundIp ?? "<null>"}",
+            $"IpLookupError={outboundIp.ExceptionMessage ?? "<null>"}",
+            $"Headers={TruncateForDiagnosticLog(inventoryResult.Headers, 1200)}",
+            $"Exception={inventoryResult.ExceptionMessage ?? "<null>"}"
+        }),
+        "AdminSteamInventoryDiagnostic",
+        cancellationToken: CancellationToken.None);
+
+    return Results.Ok(new
+    {
+        timestampUtc,
+        steamId,
+        gameType = game.Type,
+        appId = game.SteamAppId,
+        contextId = game.SteamContextId,
+        outboundIp = outboundIp.OutboundIp,
+        outboundIpTimestampUtc = outboundIp.TimestampUtc,
+        outboundIpException = outboundIp.ExceptionMessage,
+        inventory = inventoryResult
+    });
 });
 
 app.MapPost("/api/inventory/prices/refresh", async (
@@ -950,6 +1036,143 @@ app.MapRazorPages();
 
 app.Run();
 
+static async Task<SteamInventoryServerTestResult> TestSteamInventoryRequestAsync(
+    IHttpClientFactory httpClientFactory,
+    string steamId,
+    GameDefinition game,
+    CancellationToken cancellationToken)
+{
+    var client = httpClientFactory.CreateClient("SteamInventoryDiagnostic");
+    var url = $"https://steamcommunity.com/inventory/{steamId}/{game.SteamAppId}/{game.SteamContextId}?l=english&count=2000";
+    var stopwatch = Stopwatch.StartNew();
+
+    try
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Referrer = new Uri($"https://steamcommunity.com/profiles/{steamId}/inventory");
+        request.Headers.TryAddWithoutValidation("Accept-Language", "en-US,en;q=0.9");
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        stopwatch.Stop();
+
+        return new SteamInventoryServerTestResult
+        {
+            RequestUrl = url,
+            HttpStatusCode = (int)response.StatusCode,
+            RetryAfter = GetRetryAfterValue(response),
+            Headers = BuildHeaderSummary(response),
+            BodyLength = body.Length,
+            BodySnippet = BuildDiagnosticBodySnippet(body),
+            DurationMs = stopwatch.ElapsedMilliseconds
+        };
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception exception)
+    {
+        stopwatch.Stop();
+        return new SteamInventoryServerTestResult
+        {
+            RequestUrl = url,
+            DurationMs = stopwatch.ElapsedMilliseconds,
+            ExceptionMessage = exception.Message
+        };
+    }
+}
+
+static async Task<OutboundIpDiagnosticResult> ReadOutboundIpAsync(
+    IHttpClientFactory httpClientFactory,
+    CancellationToken cancellationToken)
+{
+    var timestampUtc = DateTime.UtcNow;
+    try
+    {
+        var client = httpClientFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(10);
+        var raw = await client.GetStringAsync("https://api.ipify.org?format=json", cancellationToken);
+        string? ip = null;
+        using var document = JsonDocument.Parse(raw);
+        if (document.RootElement.TryGetProperty("ip", out var ipElement))
+        {
+            ip = ipElement.GetString();
+        }
+
+        return new OutboundIpDiagnosticResult
+        {
+            TimestampUtc = timestampUtc,
+            OutboundIp = ip,
+            RawBody = BuildDiagnosticBodySnippet(raw)
+        };
+    }
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+    {
+        throw;
+    }
+    catch (Exception exception)
+    {
+        return new OutboundIpDiagnosticResult
+        {
+            TimestampUtc = timestampUtc,
+            ExceptionMessage = exception.Message
+        };
+    }
+}
+
+static string GetRetryAfterValue(HttpResponseMessage response)
+{
+    var retryAfter = response.Headers.RetryAfter;
+    if (retryAfter?.Delta is TimeSpan delta)
+    {
+        return $"{Math.Max(0, (int)Math.Ceiling(delta.TotalSeconds))}s";
+    }
+
+    if (retryAfter?.Date is DateTimeOffset date)
+    {
+        return date.UtcDateTime.ToString("O");
+    }
+
+    return "<none>";
+}
+
+static string BuildHeaderSummary(HttpResponseMessage response)
+{
+    var headers = response.Headers
+        .Select(header => $"{header.Key}={string.Join(",", header.Value)}")
+        .Concat(response.Content.Headers.Select(header => $"{header.Key}={string.Join(",", header.Value)}"));
+    return string.Join(" | ", headers);
+}
+
+static string BuildDiagnosticBodySnippet(string? body)
+{
+    if (string.IsNullOrWhiteSpace(body))
+    {
+        return "<empty>";
+    }
+
+    var compact = body
+        .Replace("\r", " ", StringComparison.Ordinal)
+        .Replace("\n", " ", StringComparison.Ordinal)
+        .Replace("\t", " ", StringComparison.Ordinal);
+    while (compact.Contains("  ", StringComparison.Ordinal))
+    {
+        compact = compact.Replace("  ", " ", StringComparison.Ordinal);
+    }
+
+    return TruncateForDiagnosticLog(compact.Trim(), 300);
+}
+
+static string TruncateForDiagnosticLog(string? value, int maxLength)
+{
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        return "<empty>";
+    }
+
+    return value.Length <= maxLength ? value : value[..maxLength] + "...";
+}
+
 static async Task<AppUser?> ResolveCurrentAppUserAsync(
     HttpContext httpContext,
     AppDbContext dbContext,
@@ -1011,4 +1234,30 @@ internal static class SaleStatusApiText
     {
         return status is "AwaitingBotConfirmation" or "TradeCreated" or "AwaitingUserAction";
     }
+}
+
+internal sealed class SteamInventoryServerTestRequest
+{
+    public string? SteamId { get; set; }
+    public GameType GameType { get; set; } = GameType.CS2;
+}
+
+internal sealed class SteamInventoryServerTestResult
+{
+    public string RequestUrl { get; set; } = string.Empty;
+    public int? HttpStatusCode { get; set; }
+    public string? RetryAfter { get; set; }
+    public string? Headers { get; set; }
+    public int? BodyLength { get; set; }
+    public string? BodySnippet { get; set; }
+    public long DurationMs { get; set; }
+    public string? ExceptionMessage { get; set; }
+}
+
+internal sealed class OutboundIpDiagnosticResult
+{
+    public DateTime TimestampUtc { get; set; }
+    public string? OutboundIp { get; set; }
+    public string? RawBody { get; set; }
+    public string? ExceptionMessage { get; set; }
 }

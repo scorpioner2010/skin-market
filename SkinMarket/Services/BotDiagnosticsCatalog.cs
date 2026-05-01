@@ -20,6 +20,7 @@ public static class BotDiagnosticsCatalog
     [
         nameof(SteamInventoryService),
         nameof(SteamInventoryRefreshWorker),
+        "AdminSteamInventoryDiagnostic",
         nameof(BotServiceSteamInventoryClient),
         nameof(InventoryModel)
     ];

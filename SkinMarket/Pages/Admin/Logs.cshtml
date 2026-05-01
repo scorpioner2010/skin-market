@@ -140,60 +140,30 @@
                     </div>
                 </div>
 
-                <div class="content-card mb-4">
+                <div class="content-card mb-4" data-steam-inventory-server-test>
                     <div class="card-heading">
                         <div>
-                            <h3>Current Inventory Refresh State</h3>
-                            <p class="card-subtitle">Database snapshot state plus in-memory queue information.</p>
+                            <h3>Steam Inventory Server Test</h3>
+                            <p class="card-subtitle">Runs one inventory request from this server and one outbound IP lookup. It does not update snapshots or cooldowns.</p>
                         </div>
                     </div>
-                    @if (Model.InventoryRefreshStates.Count == 0)
-                    {
-                        <div class="empty-state compact">
-                            <h3>No inventory snapshots have been created yet.</h3>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="market-table-shell admin-table-shell admin-log-shell">
-                            <div class="market-table-list admin-log-table">
-                                <div class="market-table-row market-table-header admin-log-row">
-                                    <div class="market-table-cell market-table-item-cell">Snapshot</div>
-                                    <div class="market-table-cell">Items</div>
-                                    <div class="market-table-cell">Refresh</div>
-                                    <div class="market-table-cell">Cooldown</div>
-                                </div>
-                                @foreach (var state in Model.InventoryRefreshStates)
+                    <div class="history-metrics">
+                        <label>
+                            <strong>SteamId</strong>
+                            <input class="form-control app-input" data-test-steamid value="@Model.CurrentSteamId" />
+                        </label>
+                        <label>
+                            <strong>Game</strong>
+                            <select class="form-select app-input" data-test-game>
+                                @foreach (var game in Model.SupportedInventoryGames)
                                 {
-                                    <article class="market-table-row admin-log-row">
-                                        <div class="market-table-cell market-table-item-cell" data-label="Snapshot">
-                                            <div class="market-table-copy">
-                                                <strong>@state.SteamId</strong>
-                                                <div class="card-subtitle">GameType=@((int)state.GameType) (@state.GameType)</div>
-                                                @if (!string.IsNullOrWhiteSpace(state.LastErrorCode) || !string.IsNullOrWhiteSpace(state.LastErrorMessage))
-                                                {
-                                                    <div class="meta-note break-value">Error: @state.LastErrorCode @state.LastErrorMessage</div>
-                                                }
-                                            </div>
-                                        </div>
-                                        <div class="market-table-cell" data-label="Items">
-                                            <span class="balance-pill">@state.ItemCount</span>
-                                        </div>
-                                        <div class="market-table-cell admin-log-details" data-label="Refresh">
-                                            <span><strong>Last success:</strong> @(state.LastSuccessRefreshUtc?.ToLocalTime().ToString() ?? "Never")</span>
-                                            <span><strong>Last attempt:</strong> @(state.LastAttemptUtc?.ToLocalTime().ToString() ?? "Never")</span>
-                                            <span><strong>In progress:</strong> @(state.RefreshInProgress ? "Yes" : "No")</span>
-                                            <span><strong>Queue:</strong> @state.QueueStatus @(string.IsNullOrWhiteSpace(state.QueuePriority) ? string.Empty : $"({state.QueuePriority})")</span>
-                                        </div>
-                                        <div class="market-table-cell admin-log-details" data-label="Cooldown">
-                                            <span><strong>Next allowed:</strong> @(state.NextAllowedRefreshUtc?.ToLocalTime().ToString() ?? "Now")</span>
-                                            <span><strong>Rate limit strikes:</strong> @state.RateLimitStrikeCount</span>
-                                        </div>
-                                    </article>
+                                    <option value="@((int)game.Type)">@game.ShortName (@game.SteamAppId/@game.SteamContextId)</option>
                                 }
-                            </div>
-                        </div>
-                    }
+                            </select>
+                        </label>
+                        <button type="button" class="btn app-button-secondary" data-test-button>Test Steam Inventory From Server</button>
+                    </div>
+                    <pre class="meta-note mt-3 mb-0" data-test-result hidden></pre>
                 </div>
 
                 @if (Model.InventoryEntries.Count == 0)
@@ -367,6 +337,47 @@
 
 @section Scripts {
     <script>
+        (() => {
+            const root = document.querySelector('[data-steam-inventory-server-test]');
+            if (!root) {
+                return;
+            }
+
+            const button = root.querySelector('[data-test-button]');
+            const result = root.querySelector('[data-test-result]');
+            const steamIdInput = root.querySelector('[data-test-steamid]');
+            const gameInput = root.querySelector('[data-test-game]');
+
+            button?.addEventListener('click', async () => {
+                if (!result) {
+                    return;
+                }
+
+                button.disabled = true;
+                result.hidden = false;
+                result.textContent = 'Running Steam inventory diagnostic...';
+                try {
+                    const response = await fetch('/api/admin/steam-inventory/test', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            steamId: steamIdInput?.value || '',
+                            gameType: Number(gameInput?.value || 1)
+                        })
+                    });
+
+                    const payload = await response.json();
+                    result.textContent = JSON.stringify(payload, null, 2);
+                } catch (error) {
+                    result.textContent = `Diagnostic failed: ${error}`;
+                } finally {
+                    button.disabled = false;
+                }
+            });
+        })();
+
         (() => {
             const root = document.querySelector('[data-admin-log-tabs]');
             if (!root) {

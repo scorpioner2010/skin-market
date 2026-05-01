@@ -18,6 +18,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
     private readonly ILogger<SteamMarketPriceService> _logger;
     private readonly IGameCatalog _gameCatalog;
     private readonly PricingOptions _options;
+    private readonly SteamMarketPriceOptions _steamMarketPriceOptions;
     private readonly IAppLogService _appLogService;
 
     public SteamMarketPriceService(
@@ -26,6 +27,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         ILogger<SteamMarketPriceService> logger,
         IGameCatalog gameCatalog,
         IOptions<PricingOptions> options,
+        IOptions<SteamMarketPriceOptions> steamMarketPriceOptions,
         IAppLogService appLogService)
     {
         _httpClient = httpClient;
@@ -33,6 +35,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         _logger = logger;
         _gameCatalog = gameCatalog;
         _options = options.Value;
+        _steamMarketPriceOptions = steamMarketPriceOptions.Value;
         _appLogService = appLogService;
     }
 
@@ -56,6 +59,17 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         {
             cachedResult.IsCached = true;
             return cachedResult;
+        }
+
+        if (!_steamMarketPriceOptions.Enabled)
+        {
+            var disabled = Failure("Steam", "Disabled", "Steam market priceoverview is disabled by configuration.", normalizedName);
+            await _appLogService.WriteAsync(
+                "Info",
+                $"Disabled. Url=skipped; GameType={(int)gameType}; MarketHashName={normalizedName}; Reason={disabled.FailureReason}",
+                nameof(SteamMarketPriceService),
+                cancellationToken: CancellationToken.None);
+            return disabled;
         }
 
         if (_memoryCache.TryGetValue<DateTimeOffset>(cooldownKey, out var cooldownUntil) &&

@@ -2272,7 +2272,7 @@ a:hover {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  max-width: 720px;
+  max-width: 420px;
   color: var(--vk-muted);
   font-size: 12px;
 }

@@ -10,16 +10,16 @@ public class LogsModel : PageModel
 {
     private readonly IAppLogReader _appLogReader;
     private readonly IBotServiceStatusClient _botServiceStatusClient;
-    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
+    private readonly IGameCatalog _gameCatalog;
 
     public LogsModel(
         IAppLogReader appLogReader,
         IBotServiceStatusClient botServiceStatusClient,
-        ISteamInventoryRefreshService steamInventoryRefreshService)
+        IGameCatalog gameCatalog)
     {
         _appLogReader = appLogReader;
         _botServiceStatusClient = botServiceStatusClient;
-        _steamInventoryRefreshService = steamInventoryRefreshService;
+        _gameCatalog = gameCatalog;
     }
 
     [BindProperty(SupportsGet = true)]
@@ -29,19 +29,21 @@ public class LogsModel : PageModel
     public IReadOnlyList<AppLog> AppEntries { get; private set; } = Array.Empty<AppLog>();
     public IReadOnlyList<AppLog> InventoryEntries { get; private set; } = Array.Empty<AppLog>();
     public IReadOnlyList<AppLog> WorkflowEntries { get; private set; } = Array.Empty<AppLog>();
-    public IReadOnlyList<SteamInventoryRefreshDebugState> InventoryRefreshStates { get; private set; } = Array.Empty<SteamInventoryRefreshDebugState>();
     public IReadOnlyDictionary<string, string> HostingDetails { get; private set; } = new Dictionary<string, string>();
+    public IReadOnlyList<GameDefinition> SupportedInventoryGames { get; private set; } = Array.Empty<GameDefinition>();
+    public string? CurrentSteamId { get; private set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
         var take = Limit <= 0 ? 100 : Math.Min(Limit, 500);
         BotStatus = await _botServiceStatusClient.GetStatusAsync(cancellationToken);
-        var recent = _appLogReader.GetRecent(take * 4, sources: BotDiagnosticsCatalog.AppLogSources);
+        var recent = await _appLogReader.GetRecentAsync(take * 4, sources: BotDiagnosticsCatalog.AppLogSources, cancellationToken: cancellationToken);
         AppEntries = BotDiagnosticsCatalog.FilterImportantAppEntries(recent, take);
-        InventoryEntries = _appLogReader.GetRecent(take, sources: BotDiagnosticsCatalog.InventoryLogSources);
-        WorkflowEntries = _appLogReader.GetRecent(Math.Max(take, 40), sources: BotDiagnosticsCatalog.WorkflowLogSources);
-        InventoryRefreshStates = await _steamInventoryRefreshService.GetDebugStatesAsync(take, cancellationToken);
+        InventoryEntries = await _appLogReader.GetRecentAsync(take, sources: BotDiagnosticsCatalog.InventoryLogSources, cancellationToken: cancellationToken);
+        WorkflowEntries = await _appLogReader.GetRecentAsync(Math.Max(take, 40), sources: BotDiagnosticsCatalog.WorkflowLogSources, cancellationToken: cancellationToken);
         HostingDetails = BuildHostingDetails();
+        SupportedInventoryGames = _gameCatalog.SupportedGames.Where(item => item.SupportsInventory).ToList();
+        CurrentSteamId = User.FindFirst("SteamId")?.Value;
     }
 
     private static IReadOnlyDictionary<string, string> BuildHostingDetails()

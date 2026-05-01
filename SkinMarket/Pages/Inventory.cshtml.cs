@@ -73,8 +73,6 @@ public class InventoryModel : PageModel
     public bool InventoryRefreshRateLimited { get; private set; }
     public bool InventorySnapshotStale { get; private set; }
     public bool InventoryIsLoading { get; private set; }
-    public string InventoryRefreshState { get; private set; } = "Idle";
-    public string InventoryRefreshReason { get; private set; } = "StatusRead";
     public bool CanManualRefreshInventory => !InventoryRefreshInProgress && !InventoryRefreshRateLimited;
     public int InventoryRefreshCountdownSeconds => InventoryNextAllowedRefreshUtc is null
         ? 0
@@ -514,23 +512,29 @@ public class InventoryModel : PageModel
             appUser.SteamId,
             CurrentGameType,
             cancellationToken);
-        ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.GetStatusAsync(
+        var refreshStatus = await _steamInventoryRefreshService.GetStatusAsync(
             appUser.SteamId,
             CurrentGameType,
-            cancellationToken));
+            cancellationToken);
+        ApplyInventoryRefreshStatus(refreshStatus);
 
         if (snapshot is null)
         {
             InventoryIsLoading = true;
-            ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.EnqueueRefreshAsync(
+            var enqueueStatus = await _steamInventoryRefreshService.EnqueueRefreshAsync(
                 appUser.SteamId,
                 CurrentGameType,
                 SteamInventoryRefreshPriority.Normal,
-                SteamInventoryRefreshSource.Auto,
-                cancellationToken));
+                cancellationToken);
+            ApplyInventoryRefreshStatus(enqueueStatus);
+            if (InventoryRefreshRateLimited)
+            {
+                InventorySnapshotWarningMessage = "Inventory is loading. Refresh skipped because cooldown is active.";
+            }
+
             await _appLogService.WriteAsync(
                 "Info",
-                $"Inventory page has no snapshot yet. Refresh queued. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; IsRefreshing={InventoryRefreshInProgress}; NextAllowed={InventoryNextAllowedRefreshUtc?.ToString("O") ?? "<null>"}",
+                $"Inventory page has no snapshot yet. Refresh requested. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; IsRefreshing={InventoryRefreshInProgress}; RateLimited={InventoryRefreshRateLimited}; NextAllowed={InventoryNextAllowedRefreshUtc?.ToString("O") ?? "<null>"}",
                 nameof(InventoryModel),
                 cancellationToken: cancellationToken);
             return;
@@ -538,16 +542,38 @@ public class InventoryModel : PageModel
 
         Items = snapshot.Items;
         InventoryLastSuccessRefreshUtc = snapshot.LastSuccessRefreshUtc;
-        InventorySnapshotStale = snapshot.LastSuccessRefreshUtc <= DateTime.UtcNow.AddMinutes(-Math.Max(1, _inventoryRefreshOptions.SnapshotFreshnessMinutes));
+        InventorySnapshotStale = snapshot.LastSuccessRefreshUtc <= DateTime.UtcNow.AddMinutes(-Math.Max(1, _inventoryRefreshOptions.AutoRefreshStaleMinutes));
         if (InventorySnapshotStale)
         {
-            InventorySnapshotWarningMessage = "Inventory snapshot is stale. A background refresh has been queued.";
-            ApplyInventoryRefreshStatus(await _steamInventoryRefreshService.EnqueueRefreshAsync(
-                appUser.SteamId,
-                CurrentGameType,
-                SteamInventoryRefreshPriority.Normal,
-                SteamInventoryRefreshSource.Auto,
-                cancellationToken));
+            var failedAttemptCooldownMinutes = Math.Max(1, _inventoryRefreshOptions.FailedAutoRefreshAttemptCooldownMinutes);
+            var recentFailedAttempt = InventoryLastAttemptUtc is not null &&
+                                      InventoryLastAttemptUtc.Value >= DateTime.UtcNow.AddMinutes(-failedAttemptCooldownMinutes) &&
+                                      !string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage);
+            if (InventoryRefreshRateLimited)
+            {
+                InventorySnapshotWarningMessage = "Inventory snapshot is stale. Refresh skipped because cooldown is active.";
+            }
+            else if (recentFailedAttempt)
+            {
+                InventorySnapshotWarningMessage = $"Inventory snapshot is stale. Refresh skipped because the last failed attempt was less than {failedAttemptCooldownMinutes} minutes ago.";
+                await _appLogService.WriteAsync(
+                    "Info",
+                    $"Inventory stale auto-refresh skipped after recent failed attempt. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; LastAttempt={InventoryLastAttemptUtc:O}; LastError={InventoryRefreshLastErrorMessage ?? "<null>"}",
+                    nameof(InventoryModel),
+                    cancellationToken: cancellationToken);
+            }
+            else
+            {
+                var enqueueStatus = await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                    appUser.SteamId,
+                    CurrentGameType,
+                    SteamInventoryRefreshPriority.Normal,
+                    cancellationToken);
+                ApplyInventoryRefreshStatus(enqueueStatus);
+                InventorySnapshotWarningMessage = InventoryRefreshRateLimited
+                    ? "Inventory snapshot is stale. Refresh skipped because cooldown is active."
+                    : "Inventory snapshot is stale. A background refresh has been queued.";
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
@@ -672,8 +698,6 @@ public class InventoryModel : PageModel
         InventoryRefreshRateLimited = status.IsRateLimited;
         InventoryNextAllowedRefreshUtc = status.NextAllowedRefreshUtc;
         InventoryRefreshLastErrorMessage = status.LastErrorMessage;
-        InventoryRefreshState = status.RefreshState;
-        InventoryRefreshReason = status.Reason;
     }
 
     public string FormatInventoryLastUpdated()

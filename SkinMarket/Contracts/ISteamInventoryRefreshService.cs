@@ -18,10 +18,5 @@ public interface ISteamInventoryRefreshService
         string steamId,
         GameType gameType,
         SteamInventoryRefreshPriority priority,
-        SteamInventoryRefreshSource source,
-        CancellationToken cancellationToken = default);
-
-    Task<IReadOnlyList<SteamInventoryRefreshDebugState>> GetDebugStatesAsync(
-        int limit = 100,
         CancellationToken cancellationToken = default);
 }

@@ -73,41 +73,6 @@
                     <span class="inventory-refresh-status" data-inventory-refresh-status>
                         @Model.FormatInventoryLastUpdated()
                     </span>
-                    <span class="compact-badge compact-badge-neutral" data-inventory-refresh-state>
-                        State: @Model.InventoryRefreshState
-                    </span>
-                    @if (Model.InventoryLastAttemptUtc is not null)
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-attempt>
-                            Last attempt: @Model.InventoryLastAttemptUtc.Value.ToLocalTime()
-                        </span>
-                    }
-                    else
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-attempt>
-                            Last attempt: never
-                        </span>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(Model.InventoryRefreshLastErrorMessage))
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-error>
-                            Last error: @Model.InventoryRefreshLastErrorMessage
-                        </span>
-                    }
-                    else
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-error></span>
-                    }
-                    @if (Model.InventoryNextAllowedRefreshUtc is not null)
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-next>
-                            Next allowed: @Model.InventoryNextAllowedRefreshUtc.Value.ToLocalTime()
-                        </span>
-                    }
-                    else
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-next></span>
-                    }
                     @if (Model.InventoryRefreshInProgress)
                     {
                         <span class="compact-badge compact-badge-neutral" data-inventory-refresh-countdown>Refresh in progress</span>
@@ -376,10 +341,6 @@
 
             const button = root.querySelector('[data-inventory-refresh-button]');
             const statusElement = root.querySelector('[data-inventory-refresh-status]');
-            const stateElement = root.querySelector('[data-inventory-refresh-state]');
-            const attemptElement = root.querySelector('[data-inventory-refresh-attempt]');
-            const errorElement = root.querySelector('[data-inventory-refresh-error]');
-            const nextElement = root.querySelector('[data-inventory-refresh-next]');
             const countdownElement = root.querySelector('[data-inventory-refresh-countdown]');
             const requestBody = {
                 gameType: Number(root.dataset.gameType || @((int)Model.CurrentGameType))
@@ -427,10 +388,7 @@
 
             const render = (status) => {
                 const lastSuccessValue = read(status, 'lastSuccessRefreshUtc', 'LastSuccessRefreshUtc');
-                const lastAttemptValue = read(status, 'lastAttemptUtc', 'LastAttemptUtc');
                 const nextAllowedValue = read(status, 'nextAllowedRefreshUtc', 'NextAllowedRefreshUtc');
-                const refreshState = read(status, 'refreshState', 'RefreshState') || 'Idle';
-                const lastError = read(status, 'lastErrorMessage', 'LastErrorMessage');
                 isRefreshing = Boolean(read(status, 'isRefreshing', 'IsRefreshing'));
                 nextAllowedUtc = nextAllowedValue ? new Date(nextAllowedValue) : null;
 
@@ -442,24 +400,6 @@
                     } else {
                         statusElement.textContent = 'Inventory is loading.';
                     }
-                }
-
-                if (stateElement) {
-                    stateElement.textContent = `State: ${refreshState}`;
-                }
-
-                if (attemptElement) {
-                    attemptElement.textContent = lastAttemptValue
-                        ? `Last attempt: ${new Date(lastAttemptValue).toLocaleString()}`
-                        : 'Last attempt: never';
-                }
-
-                if (errorElement) {
-                    errorElement.textContent = lastError ? `Last error: ${lastError}` : '';
-                }
-
-                if (nextElement) {
-                    nextElement.textContent = nextAllowedUtc ? `Next allowed: ${nextAllowedUtc.toLocaleString()}` : '';
                 }
 
                 updateCountdown();
