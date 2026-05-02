@@ -1,0 +1,6 @@
+.gitattributes text eol=lf
+deploy/vps/*.md text eol=lf
+deploy/vps/*.sh text eol=lf
+deploy/vps/*.service text eol=lf
+deploy/vps/*.conf text eol=lf
+deploy/vps/*.env.example text eol=lf

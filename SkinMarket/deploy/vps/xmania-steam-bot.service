@@ -1,0 +1,19 @@
+[Unit]
+Description=Xmania Steam Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=xmania
+Group=www-data
+WorkingDirectory=/var/www/xmania/SkinMarket/bot-service
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+SyslogIdentifier=xmania-steam-bot
+Environment=NODE_ENV=production
+Environment=STEAM_BOT_SERVICE_PORT=5174
+EnvironmentFile=/etc/xmania/xmania.env
+
+[Install]
+WantedBy=multi-user.target
