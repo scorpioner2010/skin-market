@@ -18,5 +18,7 @@ public interface ISteamInventoryRefreshService
         string steamId,
         GameType gameType,
         SteamInventoryRefreshPriority priority,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool forceFreshness = false,
+        string? reason = null);
 }

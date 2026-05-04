@@ -9,12 +9,21 @@ public class CreditService : ICreditService
 {
     private readonly AppDbContext _dbContext;
     private readonly IItemPricingService _itemPricingService;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
+    private readonly IGameCatalog _gameCatalog;
     private readonly IAppLogService _appLogService;
 
-    public CreditService(AppDbContext dbContext, IItemPricingService itemPricingService, IAppLogService appLogService)
+    public CreditService(
+        AppDbContext dbContext,
+        IItemPricingService itemPricingService,
+        ISteamInventoryRefreshService steamInventoryRefreshService,
+        IGameCatalog gameCatalog,
+        IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _itemPricingService = itemPricingService;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
+        _gameCatalog = gameCatalog;
         _appLogService = appLogService;
     }
 
@@ -91,6 +100,11 @@ public class CreditService : ICreditService
             $"Credit processing finished. TradeOperationId={operation.Id}; AppUserId={appUserId}; Amount={amount:0.##}; Status={operation.Status}",
             nameof(CreditService),
             cancellationToken: cancellationToken);
+        await TryEnqueueInventoryRefreshAsync(
+            appUser.SteamId,
+            ResolveGameType(operation.AppId, operation.ContextId),
+            SteamInventoryRefreshReasons.ItemCredited,
+            cancellationToken);
 
         return new BotIntakeResult
         {
@@ -99,5 +113,44 @@ public class CreditService : ICreditService
             TradeOfferId = operation.TradeOfferId,
             Message = $"Balance credited by {amount:0.##}."
         };
+    }
+
+    private GameType ResolveGameType(int appId, string contextId)
+    {
+        return _gameCatalog.SupportedGames
+            .FirstOrDefault(game => game.SteamAppId == appId &&
+                                    string.Equals(game.SteamContextId.ToString(), contextId, StringComparison.Ordinal))
+            ?.Type ?? _gameCatalog.DefaultGameType;
+    }
+
+    private async Task TryEnqueueInventoryRefreshAsync(
+        string steamId,
+        GameType gameType,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                steamId,
+                gameType,
+                SteamInventoryRefreshPriority.High,
+                cancellationToken,
+                forceFreshness: true,
+                reason: reason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory refresh enqueue failed after credit. SteamId={steamId}; GameType={(int)gameType}; Reason={reason}; Message={exception.Message}",
+                nameof(CreditService),
+                exception,
+                CancellationToken.None);
+        }
     }
 }

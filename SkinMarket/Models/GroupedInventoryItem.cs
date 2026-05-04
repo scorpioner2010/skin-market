@@ -24,6 +24,8 @@ public class GroupedInventoryItem
     public string? AwaitingUserTradeOfferId { get; set; }
     public bool HasWaitingForCredit { get; set; }
     public bool HasTradeProtected { get; set; }
+    public bool HasIncomingDelivery { get; set; }
+    public string? IncomingDeliveryStatus { get; set; }
     public bool HasSellableItem => !string.IsNullOrWhiteSpace(SellAssetId);
     public List<GroupedInventoryStatusItem> StatusItems { get; set; } = new();
 }

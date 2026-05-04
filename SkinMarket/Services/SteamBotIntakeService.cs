@@ -11,17 +11,23 @@ public class SteamBotIntakeService : ISteamBotIntakeService
 {
     private readonly AppDbContext _dbContext;
     private readonly ISteamTradeClient _steamTradeClient;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
+    private readonly IGameCatalog _gameCatalog;
     private readonly SteamBotOptions _options;
     private readonly IAppLogService _appLogService;
 
     public SteamBotIntakeService(
         AppDbContext dbContext,
         ISteamTradeClient steamTradeClient,
+        ISteamInventoryRefreshService steamInventoryRefreshService,
+        IGameCatalog gameCatalog,
         IOptions<SteamBotOptions> options,
         IAppLogService appLogService)
     {
         _dbContext = dbContext;
         _steamTradeClient = steamTradeClient;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
+        _gameCatalog = gameCatalog;
         _options = options.Value;
         _appLogService = appLogService;
     }
@@ -126,6 +132,15 @@ public class SteamBotIntakeService : ISteamBotIntakeService
             $"Intake request processing finished. TradeOperationId={operation.Id}; AppUserId={appUserId}; Success={intakeResult.Success}; Status={operation.Status}; OfferId={operation.TradeOfferId ?? "<null>"}; Message={intakeResult.Message}",
             nameof(SteamBotIntakeService),
             cancellationToken: cancellationToken);
+        if (intakeResult.Success)
+        {
+            await TryEnqueueInventoryRefreshAsync(
+                seller.SteamId,
+                ResolveGameType(operation.AppId, operation.ContextId),
+                SteamInventoryRefreshReasons.TradeCreated,
+                cancellationToken,
+                "intake trade creation");
+        }
 
         return intakeResult;
     }
@@ -135,5 +150,45 @@ public class SteamBotIntakeService : ISteamBotIntakeService
         return !string.IsNullOrWhiteSpace(_options.Username) &&
                !string.IsNullOrWhiteSpace(_options.Password) &&
                !string.IsNullOrWhiteSpace(_options.BotSteamId);
+    }
+
+    private GameType ResolveGameType(int appId, string contextId)
+    {
+        return _gameCatalog.SupportedGames
+            .FirstOrDefault(game => game.SteamAppId == appId &&
+                                    string.Equals(game.SteamContextId.ToString(), contextId, StringComparison.Ordinal))
+            ?.Type ?? _gameCatalog.DefaultGameType;
+    }
+
+    private async Task TryEnqueueInventoryRefreshAsync(
+        string steamId,
+        GameType gameType,
+        string reason,
+        CancellationToken cancellationToken,
+        string source)
+    {
+        try
+        {
+            await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                steamId,
+                gameType,
+                SteamInventoryRefreshPriority.High,
+                cancellationToken,
+                forceFreshness: true,
+                reason: reason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory refresh enqueue failed after {source}. SteamId={steamId}; GameType={(int)gameType}; Reason={reason}; Message={exception.Message}",
+                nameof(SteamBotIntakeService),
+                exception,
+                CancellationToken.None);
+        }
     }
 }

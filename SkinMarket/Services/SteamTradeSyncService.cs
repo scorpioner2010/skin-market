@@ -76,6 +76,8 @@ public class SteamTradeSyncService : BackgroundService
         var tradeClient = scope.ServiceProvider.GetRequiredService<ISteamTradeClient>();
         var appLogService = scope.ServiceProvider.GetRequiredService<IAppLogService>();
         var creditService = scope.ServiceProvider.GetRequiredService<ICreditService>();
+        var inventoryRefreshService = scope.ServiceProvider.GetRequiredService<ISteamInventoryRefreshService>();
+        var gameCatalog = scope.ServiceProvider.GetRequiredService<IGameCatalog>();
 
         var operations = await dbContext.TradeOperations
             .Where(operation => operation.TradeOfferId != null &&
@@ -129,6 +131,8 @@ public class SteamTradeSyncService : BackgroundService
             StringComparer.Ordinal);
 
         var transitionLogs = new List<(string Level, string Message, string Source)>();
+        var sellerRefreshRequests = new List<PendingInventoryRefreshRequest>();
+        var buyerRefreshRequests = new List<(Guid BuyerAppUserId, GameType GameType, string Reason)>();
         var stateChanged = false;
 
         foreach (var operation in operations)
@@ -143,9 +147,18 @@ public class SteamTradeSyncService : BackgroundService
                 continue;
             }
 
+            var previousStatus = operation.Status;
             if (ApplyTradeOperationStatus(operation, status, transitionLogs))
             {
                 stateChanged = true;
+                if (!string.Equals(previousStatus, "ReceivedByBot", StringComparison.Ordinal) &&
+                    string.Equals(operation.Status, "ReceivedByBot", StringComparison.Ordinal))
+                {
+                    sellerRefreshRequests.Add(new PendingInventoryRefreshRequest(
+                        operation.SteamId,
+                        ResolveGameType(gameCatalog, operation.AppId, operation.ContextId),
+                        SteamInventoryRefreshReasons.TradeAccepted));
+                }
             }
         }
 
@@ -161,9 +174,19 @@ public class SteamTradeSyncService : BackgroundService
                 continue;
             }
 
+            var previousDeliveryStatus = item.DeliveryStatus;
             if (ApplyDeliveryStatus(item, status, transitionLogs))
             {
                 stateChanged = true;
+                if (!string.Equals(previousDeliveryStatus, "Delivered", StringComparison.Ordinal) &&
+                    string.Equals(item.DeliveryStatus, "Delivered", StringComparison.Ordinal) &&
+                    item.BuyerAppUserId is Guid buyerAppUserId)
+                {
+                    buyerRefreshRequests.Add((
+                        buyerAppUserId,
+                        ResolveGameType(gameCatalog, item.AppId, item.ContextId),
+                        SteamInventoryRefreshReasons.ItemDelivered));
+                }
             }
         }
 
@@ -177,6 +200,53 @@ public class SteamTradeSyncService : BackgroundService
         foreach (var entry in transitionLogs)
         {
             await appLogService.WriteAsync(entry.Level, entry.Message, entry.Source, cancellationToken: cancellationToken);
+        }
+
+        foreach (var request in sellerRefreshRequests)
+        {
+            if (string.IsNullOrWhiteSpace(request.SteamId))
+            {
+                continue;
+            }
+
+            await TryEnqueueInventoryRefreshAsync(
+                inventoryRefreshService,
+                appLogService,
+                request.SteamId,
+                request.GameType,
+                request.Reason,
+                cancellationToken,
+                "intake trade sync");
+        }
+
+        if (buyerRefreshRequests.Count > 0)
+        {
+            var buyerIds = buyerRefreshRequests
+                .Select(item => item.BuyerAppUserId)
+                .Distinct()
+                .ToList();
+            var buyersById = await dbContext.AppUsers
+                .AsNoTracking()
+                .Where(user => buyerIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.SteamId, cancellationToken);
+
+            foreach (var request in buyerRefreshRequests)
+            {
+                if (!buyersById.TryGetValue(request.BuyerAppUserId, out var buyerSteamId) ||
+                    string.IsNullOrWhiteSpace(buyerSteamId))
+                {
+                    continue;
+                }
+
+                await TryEnqueueInventoryRefreshAsync(
+                    inventoryRefreshService,
+                    appLogService,
+                    buyerSteamId,
+                    request.GameType,
+                    request.Reason,
+                    cancellationToken,
+                    "delivery trade sync");
+            }
         }
 
         var creditTargets = pendingCredits
@@ -490,6 +560,48 @@ public class SteamTradeSyncService : BackgroundService
         }
     }
 
+    private static GameType ResolveGameType(IGameCatalog gameCatalog, int appId, string contextId)
+    {
+        return gameCatalog.SupportedGames
+            .FirstOrDefault(game => game.SteamAppId == appId &&
+                                    string.Equals(game.SteamContextId.ToString(), contextId, StringComparison.Ordinal))
+            ?.Type ?? gameCatalog.DefaultGameType;
+    }
+
+    private static async Task TryEnqueueInventoryRefreshAsync(
+        ISteamInventoryRefreshService inventoryRefreshService,
+        IAppLogService appLogService,
+        string steamId,
+        GameType gameType,
+        string reason,
+        CancellationToken cancellationToken,
+        string source)
+    {
+        try
+        {
+            await inventoryRefreshService.EnqueueRefreshAsync(
+                steamId,
+                gameType,
+                SteamInventoryRefreshPriority.High,
+                cancellationToken,
+                forceFreshness: true,
+                reason: reason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await appLogService.WriteAsync(
+                "Warning",
+                $"Inventory refresh enqueue failed after {source}. SteamId={steamId}; GameType={(int)gameType}; Reason={reason}; Message={exception.Message}",
+                nameof(SteamTradeSyncService),
+                exception,
+                CancellationToken.None);
+        }
+    }
+
     private async Task PersistWorkerFailureAsync(Exception exception, CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -501,4 +613,9 @@ public class SteamTradeSyncService : BackgroundService
             exception,
             cancellationToken);
     }
+
+    private readonly record struct PendingInventoryRefreshRequest(
+        string SteamId,
+        GameType GameType,
+        string Reason);
 }

@@ -15,6 +15,16 @@ namespace SkinMarket.Pages;
 
 public class InventoryModel : PageModel
 {
+    private static readonly string[] ActiveDeliveryStatuses =
+    [
+        "PendingDelivery",
+        "DeliveryBotPending",
+        "AwaitingBotConfirmation",
+        "DeliveryTradeCreated",
+        "AwaitingBuyerAction",
+        "DeliveryInEscrow"
+    ];
+
     private readonly AppDbContext _dbContext;
     private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
     private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
@@ -62,6 +72,7 @@ public class InventoryModel : PageModel
     public List<InventoryPriceItemRequest> PricePollingItems { get; private set; } = new();
     public List<TradeOperation> RecentOperations { get; private set; } = new();
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, MarketPurchaseRecord> LatestPurchaseRecordsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
     public string? WarningMessage { get; private set; }
     public string? InventorySnapshotWarningMessage { get; private set; }
@@ -71,12 +82,11 @@ public class InventoryModel : PageModel
     public DateTime? InventoryNextAllowedRefreshUtc { get; private set; }
     public bool InventoryRefreshInProgress { get; private set; }
     public bool InventoryRefreshRateLimited { get; private set; }
+    public bool InventoryRefreshForced { get; private set; }
+    public string? InventoryRefreshReason { get; private set; }
     public bool InventorySnapshotStale { get; private set; }
     public bool InventoryIsLoading { get; private set; }
-    public bool CanManualRefreshInventory => !InventoryRefreshInProgress && !InventoryRefreshRateLimited;
-    public int InventoryRefreshCountdownSeconds => InventoryNextAllowedRefreshUtc is null
-        ? 0
-        : Math.Max(0, (int)Math.Ceiling((InventoryNextAllowedRefreshUtc.Value - DateTime.UtcNow).TotalSeconds));
+    public bool InventoryRefreshTradeRelated => SteamInventoryRefreshReasons.IsTradeRelated(InventoryRefreshReason);
     public bool IsTradeUrlConfigured { get; private set; }
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -171,6 +181,12 @@ public class InventoryModel : PageModel
         };
 
         await _tradeOperationService.CreatePendingSaleAsync(appUser, item, cancellationToken);
+        await TryEnqueueInventoryRefreshAsync(
+            appUser.SteamId,
+            selectedGame.Type,
+            SteamInventoryRefreshReasons.UserSoldItem,
+            cancellationToken,
+            "sale request creation");
         SuccessMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Sale request created. Intake trade will start automatically.");
         return RedirectToCurrentGame(selectedGame.Type);
     }
@@ -295,11 +311,23 @@ public class InventoryModel : PageModel
             return RedirectToCurrentGame(Input.GameType);
         }
 
+        var previousOperationStatus = operation.Status;
         var transitionLogs = new List<(string Level, string Message, string Source)>();
         var changed = SteamTradeSyncService.ApplyTradeOperationStatus(operation, status, transitionLogs);
         if (changed)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            if (!string.Equals(previousOperationStatus, "ReceivedByBot", StringComparison.Ordinal) &&
+                string.Equals(operation.Status, "ReceivedByBot", StringComparison.Ordinal))
+            {
+                var selectedGame = _gameCatalog.Get(Input.GameType);
+                await TryEnqueueInventoryRefreshAsync(
+                    appUser.SteamId,
+                    selectedGame.Type,
+                    SteamInventoryRefreshReasons.TradeAccepted,
+                    cancellationToken,
+                    "manual intake status refresh");
+            }
         }
 
         foreach (var entry in transitionLogs)
@@ -501,7 +529,7 @@ public class InventoryModel : PageModel
 
         RecentOperations = await _tradeOperationService.GetRecentOperationsAsync(appUser.Id, CurrentGameType, 10, cancellationToken);
         LatestOperationsByAssetId = await _tradeOperationService.GetLatestOperationsByAssetIdAsync(appUser.Id, CurrentGameType, cancellationToken);
-        await RefreshBuyerDeliveryStatusesAsync(appUser.Id, cancellationToken);
+        await RefreshBuyerDeliveryStatusesAsync(appUser, currentGame, cancellationToken);
         await _appLogService.WriteAsync(
             "Info",
             $"Inventory prerequisites loaded. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; RecentOperations={RecentOperations.Count}; LatestOperationAssets={LatestOperationsByAssetId.Count}",
@@ -525,7 +553,8 @@ public class InventoryModel : PageModel
                 appUser.SteamId,
                 CurrentGameType,
                 SteamInventoryRefreshPriority.Normal,
-                cancellationToken);
+                cancellationToken,
+                reason: SteamInventoryRefreshReasons.InitialLoad);
             ApplyInventoryRefreshStatus(enqueueStatus);
             if (InventoryRefreshRateLimited)
             {
@@ -568,12 +597,20 @@ public class InventoryModel : PageModel
                     appUser.SteamId,
                     CurrentGameType,
                     SteamInventoryRefreshPriority.Normal,
-                    cancellationToken);
+                    cancellationToken,
+                    reason: SteamInventoryRefreshReasons.AutoStale);
                 ApplyInventoryRefreshStatus(enqueueStatus);
                 InventorySnapshotWarningMessage = InventoryRefreshRateLimited
                     ? "Inventory snapshot is stale. Refresh skipped because cooldown is active."
                     : "Inventory snapshot is stale. A background refresh has been queued.";
             }
+        }
+
+        if (InventoryRefreshInProgress)
+        {
+            InventorySnapshotWarningMessage ??= InventoryRefreshTradeRelated
+                ? "Syncing inventory after trade..."
+                : "Updating inventory...";
         }
 
         if (!string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
@@ -587,7 +624,7 @@ public class InventoryModel : PageModel
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
 
-        await AppendDeliveredPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
+        await AppendPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
         var marketHashNames = Items
             .Select(MarketHashNameUtility.ResolvePrimary)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -652,7 +689,7 @@ public class InventoryModel : PageModel
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
 
-        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId);
+        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId, LatestPurchaseRecordsByAssetId);
         PricePollingItems = GroupedItems
             .Select(group =>
             {
@@ -696,8 +733,27 @@ public class InventoryModel : PageModel
         InventoryLastAttemptUtc = status.LastAttemptUtc;
         InventoryRefreshInProgress = status.IsRefreshing;
         InventoryRefreshRateLimited = status.IsRateLimited;
+        InventoryRefreshForced = status.IsForced;
+        InventoryRefreshReason = status.RefreshReason;
         InventoryNextAllowedRefreshUtc = status.NextAllowedRefreshUtc;
         InventoryRefreshLastErrorMessage = status.LastErrorMessage;
+    }
+
+    public string GetInventoryRefreshStatusText()
+    {
+        if (InventoryRefreshInProgress)
+        {
+            return InventoryRefreshTradeRelated
+                ? "Syncing inventory after trade..."
+                : "Updating inventory...";
+        }
+
+        if (InventoryLastSuccessRefreshUtc is null)
+        {
+            return "Loading inventory...";
+        }
+
+        return FormatInventoryLastUpdated();
     }
 
     public string FormatInventoryLastUpdated()
@@ -769,10 +825,45 @@ public class InventoryModel : PageModel
         return appUser;
     }
 
-    private async Task RefreshBuyerDeliveryStatusesAsync(Guid appUserId, CancellationToken cancellationToken)
+    private async Task TryEnqueueInventoryRefreshAsync(
+        string steamId,
+        GameType gameType,
+        string reason,
+        CancellationToken cancellationToken,
+        string source)
+    {
+        try
+        {
+            await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                steamId,
+                gameType,
+                SteamInventoryRefreshPriority.High,
+                cancellationToken,
+                forceFreshness: true,
+                reason: reason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory refresh enqueue failed after {source}. SteamId={steamId}; GameType={(int)gameType}; Reason={reason}; Message={exception.Message}",
+                nameof(InventoryModel),
+                exception,
+                CancellationToken.None);
+        }
+    }
+
+    private async Task RefreshBuyerDeliveryStatusesAsync(
+        AppUser appUser,
+        GameDefinition game,
+        CancellationToken cancellationToken)
     {
         var deliveryItems = await _dbContext.MarketPurchaseRecords
-            .Where(item => item.BuyerAppUserId == appUserId &&
+            .Where(item => item.BuyerAppUserId == appUser.Id &&
                            item.DeliveryTradeOfferId != null &&
                            (item.DeliveryStatus == "DeliveryBotPending" ||
                             item.DeliveryStatus == "AwaitingBotConfirmation" ||
@@ -802,6 +893,7 @@ public class InventoryModel : PageModel
             StringComparer.Ordinal);
         var transitionLogs = new List<(string Level, string Message, string Source)>();
         var changed = false;
+        var deliveredChanged = false;
         foreach (var item in deliveryItems)
         {
             if (string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId) ||
@@ -810,12 +902,28 @@ public class InventoryModel : PageModel
                 continue;
             }
 
-            changed |= SteamTradeSyncService.ApplyDeliveryStatus(item, status, transitionLogs);
+            var previousDeliveryStatus = item.DeliveryStatus;
+            if (SteamTradeSyncService.ApplyDeliveryStatus(item, status, transitionLogs))
+            {
+                changed = true;
+                deliveredChanged |= !string.Equals(previousDeliveryStatus, "Delivered", StringComparison.Ordinal) &&
+                                    string.Equals(item.DeliveryStatus, "Delivered", StringComparison.Ordinal);
+            }
         }
 
         if (changed)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        if (deliveredChanged)
+        {
+            await TryEnqueueInventoryRefreshAsync(
+                appUser.SteamId,
+                game.Type,
+                SteamInventoryRefreshReasons.ItemDelivered,
+                cancellationToken,
+                "buyer delivery status refresh");
         }
 
         foreach (var entry in transitionLogs)
@@ -824,7 +932,7 @@ public class InventoryModel : PageModel
         }
     }
 
-    private async Task AppendDeliveredPurchaseFallbackItemsAsync(
+    private async Task AppendPurchaseFallbackItemsAsync(
         Guid appUserId,
         GameDefinition game,
         List<SteamInventoryItemDto> items,
@@ -833,30 +941,33 @@ public class InventoryModel : PageModel
         var visibleKeys = new HashSet<string>(
             items.Select(BuildInventoryFallbackKey),
             StringComparer.Ordinal);
-        var deliveredPurchases = await _dbContext.MarketPurchaseRecords
+        var purchases = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
             .Where(item => item.BuyerAppUserId == appUserId &&
                            item.AppId == game.SteamAppId &&
                            item.ContextId == game.SteamContextId.ToString() &&
-                           item.DeliveryStatus == "Delivered" &&
-                           item.DeliveredAtUtc != null &&
-                           item.DeliveredAtUtc >= DateTime.UtcNow.AddDays(-14))
-            .OrderByDescending(item => item.DeliveredAtUtc)
-            .Take(20)
+                           ((item.DeliveryStatus != null && ActiveDeliveryStatuses.Contains(item.DeliveryStatus)) ||
+                            (item.DeliveryStatus == "Delivered" &&
+                             item.DeliveredAtUtc != null &&
+                             item.DeliveredAtUtc >= DateTime.UtcNow.AddDays(-14))))
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .Take(40)
             .ToListAsync(cancellationToken);
 
-        foreach (var purchase in deliveredPurchases)
+        foreach (var purchase in purchases)
         {
             var key = BuildInventoryFallbackKey(purchase.ClassId, purchase.InstanceId, purchase.MarketHashName, purchase.ItemName);
-            if (!visibleKeys.Add(key))
+            var isActiveDelivery = IsActiveDeliveryStatus(purchase.DeliveryStatus);
+            if (!isActiveDelivery && !visibleKeys.Add(key))
             {
                 continue;
             }
 
+            var syntheticAssetId = isActiveDelivery ? $"incoming:{purchase.Id}" : $"delivered:{purchase.Id}";
             items.Add(new SteamInventoryItemDto
             {
                 GameType = purchase.GameType,
-                AssetId = $"delivered:{purchase.Id}",
+                AssetId = syntheticAssetId,
                 ClassId = purchase.ClassId,
                 InstanceId = purchase.InstanceId,
                 Name = purchase.ItemName,
@@ -866,6 +977,7 @@ public class InventoryModel : PageModel
                 Tradable = false,
                 Marketable = false
             });
+            LatestPurchaseRecordsByAssetId[syntheticAssetId] = purchase;
         }
     }
 
@@ -882,16 +994,6 @@ public class InventoryModel : PageModel
             "ReceivedByBot",
             "InEscrow"
         };
-        var activeDeliveryStatuses = new[]
-        {
-            "PendingDelivery",
-            "DeliveryBotPending",
-            "AwaitingBotConfirmation",
-            "DeliveryTradeCreated",
-            "AwaitingBuyerAction",
-            "DeliveryInEscrow"
-        };
-
         return await _dbContext.TradeOperations
                    .AsNoTracking()
                    .AnyAsync(operation => operation.AppUserId == appUserId && activeIntakeStatuses.Contains(operation.Status), cancellationToken) ||
@@ -899,7 +1001,7 @@ public class InventoryModel : PageModel
                    .AsNoTracking()
                    .AnyAsync(item => item.BuyerAppUserId == appUserId &&
                                      item.DeliveryStatus != null &&
-                                     activeDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
+                                     ActiveDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
     }
 
     private static string BuildInventorySample(IEnumerable<SteamInventoryItemDto> items)
@@ -951,7 +1053,8 @@ public class InventoryModel : PageModel
 
     private static List<GroupedInventoryItem> BuildGroupedItems(
         IReadOnlyCollection<SteamInventoryItemDto> items,
-        IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId)
+        IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId,
+        IReadOnlyDictionary<string, MarketPurchaseRecord> latestPurchasesByAssetId)
     {
         return items
             .Where(item =>
@@ -987,6 +1090,17 @@ public class InventoryModel : PageModel
                 var blockedAssetIds = new HashSet<string>(
                     blockedOperations.Select(operation => operation.AssetId),
                     StringComparer.Ordinal);
+                var purchaseStatuses = entries
+                    .Select(item => latestPurchasesByAssetId.GetValueOrDefault(item.AssetId))
+                    .Where(purchase => purchase is not null &&
+                                       !string.IsNullOrWhiteSpace(purchase.DeliveryStatus))
+                    .Cast<MarketPurchaseRecord>()
+                    .ToList();
+                var purchaseAssetIds = new HashSet<string>(
+                    entries
+                        .Where(item => latestPurchasesByAssetId.ContainsKey(item.AssetId))
+                        .Select(item => item.AssetId),
+                    StringComparer.Ordinal);
 
                 var statusItems = blockedOperations
                     .GroupBy(operation => operation!.Status, StringComparer.Ordinal)
@@ -1000,9 +1114,18 @@ public class InventoryModel : PageModel
                     .ThenBy(item => item.Status, StringComparer.Ordinal)
                     .ToList();
 
+                statusItems.AddRange(purchaseStatuses
+                    .GroupBy(purchase => purchase.DeliveryStatus!, StringComparer.Ordinal)
+                    .Select(statusGroup => new GroupedInventoryStatusItem
+                    {
+                        Status = statusGroup.Key,
+                        Quantity = statusGroup.Count()
+                    }));
+
                 var tradeProtectedCount = entries.Count(item =>
                     item.Tradable == false &&
-                    !blockedAssetIds.Contains(item.AssetId));
+                    !blockedAssetIds.Contains(item.AssetId) &&
+                    !purchaseAssetIds.Contains(item.AssetId));
                 if (tradeProtectedCount > 0)
                 {
                     statusItems.Add(new GroupedInventoryStatusItem
@@ -1019,7 +1142,8 @@ public class InventoryModel : PageModel
 
                 var readyCount = entries.Count(item =>
                     item.Tradable != false &&
-                    !blockedAssetIds.Contains(item.AssetId));
+                    !blockedAssetIds.Contains(item.AssetId) &&
+                    !purchaseAssetIds.Contains(item.AssetId));
                 if (readyCount > 0)
                 {
                     statusItems.Insert(0, new GroupedInventoryStatusItem
@@ -1053,6 +1177,12 @@ public class InventoryModel : PageModel
                     CreateTradeStatus = createTradeOperation?.Status,
                     AwaitingUserTradeOfferId = awaitingUserOperation?.TradeOfferId,
                     HasTradeProtected = tradeProtectedCount > 0,
+                    HasIncomingDelivery = purchaseStatuses.Any(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus)),
+                    IncomingDeliveryStatus = purchaseStatuses
+                        .Where(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus))
+                        .OrderByDescending(purchase => purchase.UpdatedAtUtc)
+                        .Select(purchase => purchase.DeliveryStatus)
+                        .FirstOrDefault(),
                     HasWaitingForCredit = entries
                         .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
                         .Any(operation => operation is not null &&
@@ -1077,6 +1207,11 @@ public class InventoryModel : PageModel
         return string.Equals(status, "Credited", StringComparison.Ordinal);
     }
 
+    private static bool IsActiveDeliveryStatus(string? status)
+    {
+        return status is not null && ActiveDeliveryStatuses.Contains(status);
+    }
+
     private static int GetInventoryStatusOrder(string status)
     {
         return status switch
@@ -1090,6 +1225,12 @@ public class InventoryModel : PageModel
             "TradeProtected" => 6,
             "ReceivedByBot" => 7,
             "Credited" => 8,
+            "PendingDelivery" => 9,
+            "DeliveryBotPending" => 10,
+            "DeliveryTradeCreated" => 11,
+            "AwaitingBuyerAction" => 12,
+            "DeliveryInEscrow" => 13,
+            "Delivered" => 14,
             _ => 20
         };
     }

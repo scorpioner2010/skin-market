@@ -13,6 +13,7 @@ public class MarketPurchaseService : IMarketPurchaseService
     private readonly ISteamBotInventoryClient _steamBotInventoryClient;
     private readonly IMarketPricingService _marketPricingService;
     private readonly IGameCatalog _gameCatalog;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
     private readonly SteamBotOptions _steamBotOptions;
     private readonly IAppLogService _appLogService;
 
@@ -21,6 +22,7 @@ public class MarketPurchaseService : IMarketPurchaseService
         ISteamBotInventoryClient steamBotInventoryClient,
         IMarketPricingService marketPricingService,
         IGameCatalog gameCatalog,
+        ISteamInventoryRefreshService steamInventoryRefreshService,
         IOptions<SteamBotOptions> steamBotOptions,
         IAppLogService appLogService)
     {
@@ -28,6 +30,7 @@ public class MarketPurchaseService : IMarketPurchaseService
         _steamBotInventoryClient = steamBotInventoryClient;
         _marketPricingService = marketPricingService;
         _gameCatalog = gameCatalog;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
         _steamBotOptions = steamBotOptions.Value;
         _appLogService = appLogService;
     }
@@ -189,6 +192,11 @@ public class MarketPurchaseService : IMarketPurchaseService
             $"Market purchase finished. BuyerAppUserId={buyerAppUserId}; PurchasedAssetId={inventoryItem.AssetId}; SourceTradeOperationId={sourceOperation?.Id.ToString() ?? "<null>"}; Price={price:0.##}; DeliveryStatus=PendingDelivery",
             nameof(MarketPurchaseService),
             cancellationToken: cancellationToken);
+        await TryEnqueueInventoryRefreshAsync(
+            buyer.SteamId,
+            game.Type,
+            SteamInventoryRefreshReasons.UserBoughtItem,
+            cancellationToken);
 
         return new MarketPurchaseResult
         {
@@ -238,6 +246,37 @@ public class MarketPurchaseService : IMarketPurchaseService
     {
         return sourceOperationByAssetId.TryGetValue(item.AssetId, out var sourceOperation) &&
                sourceOperation.AppUserId == buyerAppUserId;
+    }
+
+    private async Task TryEnqueueInventoryRefreshAsync(
+        string steamId,
+        GameType gameType,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                steamId,
+                gameType,
+                SteamInventoryRefreshPriority.High,
+                cancellationToken,
+                forceFreshness: true,
+                reason: reason);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            await _appLogService.WriteAsync(
+                "Warning",
+                $"Inventory refresh enqueue failed after market purchase. SteamId={steamId}; GameType={(int)gameType}; Reason={reason}; Message={exception.Message}",
+                nameof(MarketPurchaseService),
+                exception,
+                CancellationToken.None);
+        }
     }
 
     private static bool MatchesRequestGroup(SteamInventoryItemDto item, MarketPurchaseRequest request)

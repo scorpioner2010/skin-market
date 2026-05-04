@@ -12,7 +12,12 @@
         "TradeCreated",
         "AwaitingUserAction",
         "TradeAcceptedPendingReceipt",
-        "InEscrow"
+        "InEscrow",
+        "PendingDelivery",
+        "DeliveryBotPending",
+        "DeliveryTradeCreated",
+        "AwaitingBuyerAction",
+        "DeliveryInEscrow"
     };
     var waitingForCreditStatuses = new HashSet<string>(StringComparer.Ordinal)
     {
@@ -24,8 +29,6 @@
     var waitingForCreditCount = Model.GroupedItems.Count(item =>
         item.HasWaitingForCredit ||
         item.StatusItems.Any(statusItem => !statusItem.IsReady && waitingForCreditStatuses.Contains(statusItem.Status)));
-    var refreshDisabled = !Model.CanManualRefreshInventory;
-    var refreshCountdownSeconds = Model.InventoryRefreshCountdownSeconds;
 }
 
 <div class="py-4">
@@ -62,31 +65,12 @@
                 <div class="inventory-refresh-controls"
                      data-inventory-refresh-root
                      data-game-type="@((int)Model.CurrentGameType)"
-                     data-next-allowed-utc="@Model.InventoryNextAllowedRefreshUtc?.ToString("O")"
-                     data-countdown-seconds="@refreshCountdownSeconds">
-                    <button type="button"
-                            class="btn app-button-secondary"
-                            data-inventory-refresh-button
-                            disabled="@refreshDisabled">
-                        Refresh Inventory
-                    </button>
+                     data-last-success-utc="@Model.InventoryLastSuccessRefreshUtc?.ToString("O")"
+                     data-refreshing="@Model.InventoryRefreshInProgress.ToString().ToLowerInvariant()"
+                     data-refresh-reason="@Model.InventoryRefreshReason">
                     <span class="inventory-refresh-status" data-inventory-refresh-status>
-                        @Model.FormatInventoryLastUpdated()
+                        @Model.GetInventoryRefreshStatusText()
                     </span>
-                    @if (Model.InventoryRefreshInProgress)
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-countdown>Refresh in progress</span>
-                    }
-                    else if (refreshCountdownSeconds > 0)
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-countdown>
-                            Refresh available in @refreshCountdownSeconds s
-                        </span>
-                    }
-                    else
-                    {
-                        <span class="compact-badge compact-badge-neutral" data-inventory-refresh-countdown></span>
-                    }
                 </div>
             }
         </div>
@@ -146,7 +130,7 @@
         else if (Model.InventoryIsLoading)
         {
             <div class="empty-state">
-                <h2>Inventory is loading</h2>
+                <h2>Loading inventory...</h2>
                 <p>The first inventory snapshot is being refreshed in the background.</p>
             </div>
         }
@@ -306,6 +290,10 @@
                                         {
                                             <span class="compact-badge compact-badge-neutral">@L["Inventory_WaitingForCredit"]</span>
                                         }
+                                        else if (item.HasIncomingDelivery)
+                                        {
+                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, item.IncomingDeliveryStatus ?? "PendingDelivery")</span>
+                                        }
                                         else if (item.HasTradeProtected)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "TradeProtected")</span>
@@ -339,14 +327,20 @@
                 return;
             }
 
-            const button = root.querySelector('[data-inventory-refresh-button]');
             const statusElement = root.querySelector('[data-inventory-refresh-status]');
-            const countdownElement = root.querySelector('[data-inventory-refresh-countdown]');
             const requestBody = {
                 gameType: Number(root.dataset.gameType || @((int)Model.CurrentGameType))
             };
-            let nextAllowedUtc = root.dataset.nextAllowedUtc ? new Date(root.dataset.nextAllowedUtc) : null;
-            let isRefreshing = @Model.InventoryRefreshInProgress.ToString().ToLowerInvariant();
+            const tradeRefreshReasons = new Set([
+                'TradeCreated',
+                'TradeAccepted',
+                'UserSoldItem',
+                'UserBoughtItem',
+                'ItemDelivered',
+                'ItemCredited'
+            ]);
+            let lastSuccessUtc = root.dataset.lastSuccessUtc || null;
+            let isRefreshing = root.dataset.refreshing === 'true';
             let statusPollTimer = null;
 
             const read = (entry, camelName, pascalName) => entry?.[camelName] ?? entry?.[pascalName] ?? null;
@@ -387,49 +381,35 @@
             };
 
             const render = (status) => {
+                const previousLastSuccessUtc = lastSuccessUtc;
+                const wasRefreshing = isRefreshing;
                 const lastSuccessValue = read(status, 'lastSuccessRefreshUtc', 'LastSuccessRefreshUtc');
-                const nextAllowedValue = read(status, 'nextAllowedRefreshUtc', 'NextAllowedRefreshUtc');
+                const refreshReason = read(status, 'refreshReason', 'RefreshReason');
                 isRefreshing = Boolean(read(status, 'isRefreshing', 'IsRefreshing'));
-                nextAllowedUtc = nextAllowedValue ? new Date(nextAllowedValue) : null;
+                lastSuccessUtc = lastSuccessValue || null;
 
                 if (statusElement) {
                     if (isRefreshing) {
-                        statusElement.textContent = 'Inventory refresh in progress...';
+                        statusElement.textContent = tradeRefreshReasons.has(refreshReason)
+                            ? 'Syncing inventory after trade...'
+                            : 'Updating inventory...';
                     } else if (lastSuccessValue) {
                         statusElement.textContent = `Inventory last updated: ${formatAge(new Date(lastSuccessValue))} ago.`;
                     } else {
-                        statusElement.textContent = 'Inventory is loading.';
+                        statusElement.textContent = 'Loading inventory...';
                     }
                 }
 
-                updateCountdown();
-            };
-
-            const updateCountdown = () => {
-                const secondsRemaining = nextAllowedUtc
-                    ? Math.max(0, Math.ceil((nextAllowedUtc.getTime() - Date.now()) / 1000))
-                    : 0;
-
-                if (button) {
-                    button.disabled = isRefreshing || secondsRemaining > 0;
-                }
-
-                if (!countdownElement) {
-                    return;
-                }
-
-                if (isRefreshing) {
-                    countdownElement.textContent = 'Refresh in progress';
-                } else if (secondsRemaining > 0) {
-                    countdownElement.textContent = `Refresh available in ${secondsRemaining}s`;
-                } else {
-                    countdownElement.textContent = '';
+                if (!isRefreshing &&
+                    lastSuccessValue &&
+                    (!previousLastSuccessUtc || (wasRefreshing && previousLastSuccessUtc !== lastSuccessValue))) {
+                    window.setTimeout(() => window.location.reload(), 250);
                 }
             };
 
             const scheduleStatusPoll = () => {
                 window.clearTimeout(statusPollTimer);
-                if (!isRefreshing && (!nextAllowedUtc || nextAllowedUtc <= new Date())) {
+                if (!isRefreshing && lastSuccessUtc) {
                     return;
                 }
 
@@ -440,20 +420,9 @@
                     } finally {
                         scheduleStatusPoll();
                     }
-                }, 10000);
+                }, 3000);
             };
 
-            button?.addEventListener('click', async () => {
-                button.disabled = true;
-                try {
-                    render(await fetchStatus('/api/inventory/refresh'));
-                    scheduleStatusPoll();
-                } catch {
-                    updateCountdown();
-                }
-            });
-
-            window.setInterval(updateCountdown, 1000);
             scheduleStatusPoll();
         })();
 
