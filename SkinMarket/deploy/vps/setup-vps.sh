@@ -2,7 +2,9 @@
 set -euo pipefail
 
 APP_ROOT="/var/www/xmania"
+REPO_DIR="${APP_ROOT}/SkinMarket"
 PUBLISH_DIR="${APP_ROOT}/publish"
+RELEASES_DIR="${APP_ROOT}/releases"
 LOG_DIR="/var/log/xmania"
 ENV_DIR="/etc/xmania"
 NUGET_CONFIG="/root/.nuget/NuGet/NuGet.Config"
@@ -77,12 +79,13 @@ else
   echo "User ${APP_USER} already exists."
 fi
 
-mkdir -p "${APP_ROOT}" "${PUBLISH_DIR}" "${LOG_DIR}" "${ENV_DIR}"
+mkdir -p "${APP_ROOT}" "${PUBLISH_DIR}" "${RELEASES_DIR}" "${LOG_DIR}" "${ENV_DIR}"
 chown -R "${APP_USER}:www-data" "${APP_ROOT}" "${LOG_DIR}"
 chmod 750 "${APP_ROOT}" "${LOG_DIR}"
 chmod 755 "${PUBLISH_DIR}"
+chmod 755 "${RELEASES_DIR}"
 chmod 750 "${ENV_DIR}"
-git config --global --add safe.directory "${APP_ROOT}/SkinMarket" || true
+git config --global --add safe.directory "${REPO_DIR}" || true
 
 if [[ ! -f "${ENV_DIR}/xmania.env" ]]; then
   echo "Environment file is not present yet: ${ENV_DIR}/xmania.env"
@@ -100,16 +103,17 @@ cat <<EOF
 VPS setup complete.
 
 Next steps:
-1. Clone the repo into ${APP_ROOT}/SkinMarket if it is not already there.
+1. Clone the repo into ${REPO_DIR} if it is not already there.
 2. Copy deploy/vps/xmania.env.example to ${ENV_DIR}/xmania.env and fill secrets from Render.
 3. Install service files:
-   sudo cp ${APP_ROOT}/SkinMarket/deploy/vps/xmania-web.service /etc/systemd/system/
-   sudo cp ${APP_ROOT}/SkinMarket/deploy/vps/xmania-steam-bot.service /etc/systemd/system/
+   sudo cp ${REPO_DIR}/deploy/vps/xmania-web.service /etc/systemd/system/
+   sudo cp ${REPO_DIR}/deploy/vps/xmania-steam-bot.service /etc/systemd/system/
    sudo systemctl daemon-reload
 4. Install nginx config:
-   sudo cp ${APP_ROOT}/SkinMarket/deploy/vps/nginx-xmania.conf /etc/nginx/sites-available/xmania
+   sudo cp ${REPO_DIR}/deploy/vps/nginx-xmania.conf /etc/nginx/sites-available/xmania
    sudo ln -s /etc/nginx/sites-available/xmania /etc/nginx/sites-enabled/xmania
    sudo nginx -t && sudo systemctl reload nginx
 5. Deploy:
-   sudo bash ${APP_ROOT}/SkinMarket/deploy/vps/deploy-app.sh
+   cd ${REPO_DIR}
+   sudo bash deploy/vps/deploy-app.sh
 EOF

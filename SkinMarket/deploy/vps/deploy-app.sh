@@ -94,8 +94,11 @@ run_migrations_if_configured() {
 restart_if_present() {
   local service_name="$1"
   if systemctl list-unit-files --no-legend "${service_name}" 2>/dev/null | grep -q "${service_name}"; then
+    echo
+    echo "Restarting ${service_name}..."
     systemctl restart "${service_name}"
-    systemctl --no-pager --full status "${service_name}" || true
+    echo "Status for ${service_name}:"
+    systemctl status "${service_name}" --no-pager -l || true
   else
     echo "Systemd service not installed, skipping restart: ${service_name}"
   fi
@@ -130,11 +133,13 @@ dotnet publish "${PROJECT_FILE}" --configuration Release --no-build --output "${
 
 if [[ -d "${BOT_DIR}" && -f "${BOT_DIR}/package.json" ]]; then
   echo "Installing bot-service dependencies..."
+  pushd "${BOT_DIR}" >/dev/null
   if [[ -f "${BOT_DIR}/package-lock.json" ]]; then
-    npm ci --prefix "${BOT_DIR}"
+    npm ci
   else
-    npm install --prefix "${BOT_DIR}"
+    npm install
   fi
+  popd >/dev/null
 else
   echo "No bot-service package.json found; skipping bot dependency install."
 fi
