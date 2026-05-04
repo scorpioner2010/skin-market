@@ -2,7 +2,8 @@
 set -euo pipefail
 
 APP_ROOT="/var/www/xmania"
-REPO_DIR="${APP_ROOT}/SkinMarket"
+REPO_DIR="${APP_ROOT}"
+PROJECT_DIR="${APP_ROOT}/SkinMarket"
 PUBLISH_DIR="${APP_ROOT}/publish"
 RELEASES_DIR="${APP_ROOT}/releases"
 LOG_DIR="/var/log/xmania"
@@ -12,7 +13,7 @@ APP_USER="xmania"
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    echo "Run this script as root: sudo bash deploy/vps/setup-vps.sh"
+    echo "Run this script as root: sudo bash SkinMarket/deploy/vps/setup-vps.sh"
     exit 1
   fi
 }
@@ -89,7 +90,7 @@ git config --global --add safe.directory "${REPO_DIR}" || true
 
 if [[ ! -f "${ENV_DIR}/xmania.env" ]]; then
   echo "Environment file is not present yet: ${ENV_DIR}/xmania.env"
-  echo "Create it from deploy/vps/xmania.env.example after cloning the repo."
+  echo "Create it from ${PROJECT_DIR}/deploy/vps/xmania.env.example after cloning the repo."
 else
   chmod 640 "${ENV_DIR}/xmania.env"
   chown root:"${APP_USER}" "${ENV_DIR}/xmania.env"
@@ -103,17 +104,19 @@ cat <<EOF
 VPS setup complete.
 
 Next steps:
-1. Clone the repo into ${REPO_DIR} if it is not already there.
-2. Copy deploy/vps/xmania.env.example to ${ENV_DIR}/xmania.env and fill secrets from Render.
+1. Clone the repo directly into ${REPO_DIR} if it is not already there:
+   git clone https://github.com/scorpioner2010/skin-market.git ${REPO_DIR}
+2. Copy ${PROJECT_DIR}/deploy/vps/xmania.env.example to ${ENV_DIR}/xmania.env and fill secrets from Render.
 3. Install service files:
-   sudo cp ${REPO_DIR}/deploy/vps/xmania-web.service /etc/systemd/system/
-   sudo cp ${REPO_DIR}/deploy/vps/xmania-steam-bot.service /etc/systemd/system/
+   sudo cp ${PROJECT_DIR}/deploy/vps/xmania-web.service /etc/systemd/system/
+   sudo cp ${PROJECT_DIR}/deploy/vps/xmania-steam-bot.service /etc/systemd/system/
    sudo systemctl daemon-reload
 4. Install nginx config:
-   sudo cp ${REPO_DIR}/deploy/vps/nginx-xmania.conf /etc/nginx/sites-available/xmania
+   Only do this for the first nginx install. Do not overwrite a live Certbot HTTPS config unless you plan to rerun Certbot.
+   sudo cp ${PROJECT_DIR}/deploy/vps/nginx-xmania.conf /etc/nginx/sites-available/xmania
    sudo ln -s /etc/nginx/sites-available/xmania /etc/nginx/sites-enabled/xmania
    sudo nginx -t && sudo systemctl reload nginx
 5. Deploy:
    cd ${REPO_DIR}
-   sudo bash deploy/vps/deploy-app.sh
+   sudo bash SkinMarket/deploy/vps/deploy-app.sh
 EOF

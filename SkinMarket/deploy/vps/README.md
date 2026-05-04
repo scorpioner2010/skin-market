@@ -1,19 +1,19 @@
 # SkinMarket Vultr VPS Deployment
 
-SkinMarket was migrated from Render to a Vultr Ubuntu VPS because Render returned HTTP 429/null for Steam inventory requests while the Vultr VPS returned HTTP 200 OK for the same Steam inventory URL.
-
-Current test domain:
+SkinMarket runs on a Vultr Ubuntu VPS at the current HTTPS test domain:
 
 - `https://70-34-255-46.sslip.io`
 
-HTTPS is required for the Unity WebGL browser integration. The game may fail in browsers when served over plain HTTP.
+HTTPS is required for Unity WebGL browser features. Use the HTTPS domain when testing the Unity WebGL game in a browser.
 
 ## VPS Structure
 
 - App root: `/var/www/xmania`
-- Git repository root: `/var/www/xmania/SkinMarket`
-- Main ASP.NET project file: `/var/www/xmania/SkinMarket/SkinMarket.csproj`
+- Git repository root: `/var/www/xmania`
+- ASP.NET project folder: `/var/www/xmania/SkinMarket`
+- ASP.NET project file: `/var/www/xmania/SkinMarket/SkinMarket.csproj`
 - Bot service folder: `/var/www/xmania/SkinMarket/bot-service`
+- Deploy files: `/var/www/xmania/SkinMarket/deploy/vps`
 - Publish symlink/output root: `/var/www/xmania/publish`
 - Releases folder: `/var/www/xmania/releases`
 - Env file: `/etc/xmania/xmania.env`
@@ -21,34 +21,31 @@ HTTPS is required for the Unity WebGL browser integration. The game may fail in 
 - Bot systemd service: `xmania-steam-bot.service`
 - Nginx site config: `/etc/nginx/sites-available/xmania`
 
-## Prerequisites
-
-- Ubuntu 24.04 LTS x64
-- Root or sudo access
-- Disable Render Steam workers before enabling VPS workers so two bots/workers do not process the same Steam work.
-
 ## Clone The Repo
 
-The repository must be cloned into `/var/www/xmania/SkinMarket`, not directly into `/var/www/xmania`.
+Clone the repository directly into `/var/www/xmania`.
 
 ```bash
-sudo mkdir -p /var/www/xmania
-sudo chown -R "$USER":www-data /var/www/xmania
-git clone <your-repo-url> /var/www/xmania/SkinMarket
+sudo mkdir -p /var/www
+sudo git clone https://github.com/scorpioner2010/skin-market.git /var/www/xmania
 ```
+
+Do not clone into `/var/www/xmania/SkinMarket`; `SkinMarket` is the ASP.NET project folder inside the repository.
 
 ## Run VPS Setup
 
 ```bash
-cd /var/www/xmania/SkinMarket
-sudo bash deploy/vps/setup-vps.sh
+cd /var/www/xmania
+sudo bash SkinMarket/deploy/vps/setup-vps.sh
 ```
 
-The setup script installs required packages, installs .NET SDK 8 if missing, fixes `/root/.nuget/NuGet/NuGet.Config` if it is missing or invalid, creates `/var/www/xmania`, `/var/www/xmania/publish`, `/var/www/xmania/releases`, `/var/log/xmania`, and prepares the `xmania` system user.
+The setup script installs required packages, installs .NET SDK 8 if missing, fixes `/root/.nuget/NuGet/NuGet.Config` if it is missing or invalid, creates `/var/www/xmania`, `/var/www/xmania/publish`, `/var/www/xmania/releases`, `/var/log/xmania`, `/etc/xmania`, and prepares the `xmania` system user.
+
+The setup script does not overwrite an existing `/etc/xmania/xmania.env`.
 
 ## Configure Environment
 
-Do not overwrite an existing `/etc/xmania/xmania.env` on a running VPS.
+Only create `/etc/xmania/xmania.env` when it does not already exist.
 
 ```bash
 sudo cp /var/www/xmania/SkinMarket/deploy/vps/xmania.env.example /etc/xmania/xmania.env
@@ -57,21 +54,7 @@ sudo chown root:xmania /etc/xmania/xmania.env
 sudo chmod 640 /etc/xmania/xmania.env
 ```
 
-Copy the Render environment variables into `/etc/xmania/xmania.env`, especially:
-
-- `DATABASE_URL` or `ConnectionStrings__DefaultConnection`
-- `STEAM_API_KEY`
-- `STEAM_BOT_ENABLED`
-- `STEAM_BOT_USERNAME`
-- `STEAM_BOT_PASSWORD`
-- `STEAM_BOT_STEAM_ID`
-- `STEAM_BOT_TRADE_URL`
-- `STEAM_BOT_SHARED_SECRET`
-- `STEAM_BOT_IDENTITY_SECRET`
-- `STEAM_BOT_SERVICE_URL=http://127.0.0.1:5174`
-- `STEAM_BOT_SERVICE_PORT=5174`
-
-The ASP.NET app also supports the `SteamBot__...` and `SteamApi__ApiKey` keys included in the template.
+Copy the production values into `/etc/xmania/xmania.env`. Do not commit real env values or secrets.
 
 ## Install Systemd Services
 
@@ -83,24 +66,31 @@ sudo systemctl enable xmania-web
 sudo systemctl enable xmania-steam-bot
 ```
 
-Bot service details:
+The web service runs `/var/www/xmania/publish/SkinMarket.dll`.
 
-- Package path: `/var/www/xmania/SkinMarket/bot-service/package.json`
+The bot service uses:
+
+- Working directory: `/var/www/xmania/SkinMarket/bot-service`
 - Start command: `npm start`
-- Node entrypoint: `node src/server.js`
-- Default port: `5174`
-- Health endpoint: `http://127.0.0.1:5174/healthz`
+- Env file: `/etc/xmania/xmania.env`
 
-## Configure Nginx
+## Nginx And HTTPS
+
+The repository includes an initial Nginx config at:
 
 ```bash
-sudo cp /var/www/xmania/SkinMarket/deploy/vps/nginx-xmania.conf /etc/nginx/sites-available/xmania
-sudo ln -s /etc/nginx/sites-available/xmania /etc/nginx/sites-enabled/xmania
-sudo nginx -t
-sudo systemctl reload nginx
+/var/www/xmania/SkinMarket/deploy/vps/nginx-xmania.conf
 ```
 
-The included config uses `server_name 70-34-255-46.sslip.io;` and proxies to `http://127.0.0.1:5000` with websocket upgrade headers. When switching to a real domain, update `server_name`, reload nginx, then issue a new certificate for that domain.
+It proxies to `http://127.0.0.1:5000` and includes websocket upgrade headers.
+
+Do not overwrite the live Nginx config after Certbot has modified it unless you plan to rerun Certbot. Overwriting `/etc/nginx/sites-available/xmania` with the repo copy can remove the live HTTPS server block and redirect rules.
+
+Certbot was used for the current test domain:
+
+```bash
+sudo certbot --nginx -d 70-34-255-46.sslip.io --email <email> --agree-tos --redirect
+```
 
 If the default Nginx site conflicts:
 
@@ -110,59 +100,38 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-## Configure HTTPS
+## Deploy After Each Commit
 
-Certbot was used for the current test domain:
-
-```bash
-sudo certbot --nginx -d 70-34-255-46.sslip.io --email <email> --agree-tos --redirect
-```
-
-Certbot modifies the Nginx site to add the TLS server block and HTTP-to-HTTPS redirect. Keep those generated certificate lines on the VPS.
-
-## Deploy After Each New Commit
+Normal deployment after pulling a committed change:
 
 ```bash
-cd /var/www/xmania/SkinMarket
+ssh root@70.34.255.46
+cd /var/www/xmania
 git pull
-bash deploy/vps/deploy-app.sh
+bash SkinMarket/deploy/vps/deploy-app.sh
 ```
 
-Run the deploy script as root. If you are not already root, use `sudo bash deploy/vps/deploy-app.sh`.
-
-The deploy script runs `git pull --ff-only` inside `/var/www/xmania/SkinMarket`, restores, builds, publishes `/var/www/xmania/SkinMarket/SkinMarket.csproj` to `/var/www/xmania/releases/<timestamp>`, points `/var/www/xmania/publish` to that release, installs bot dependencies from `/var/www/xmania/SkinMarket/bot-service`, applies EF Core migrations when a database connection string is configured, and restarts both services.
+The deploy script runs `git pull --ff-only` inside `/var/www/xmania`, restores, builds, publishes `/var/www/xmania/SkinMarket/SkinMarket.csproj` to `/var/www/xmania/releases/<timestamp>`, updates `/var/www/xmania/publish`, installs bot dependencies from `/var/www/xmania/SkinMarket/bot-service`, applies EF Core migrations when a database connection string is configured, and restarts both services.
 
 ## Useful Checks
 
 ```bash
 systemctl status xmania-web --no-pager -l
 systemctl status xmania-steam-bot --no-pager -l
+curl -i https://70-34-255-46.sslip.io
 journalctl -u xmania-web -f
 journalctl -u xmania-steam-bot -f
-curl -i http://127.0.0.1:5000
-curl -i https://70-34-255-46.sslip.io
 ```
 
-If the browser cannot open the site, check the firewall:
+Additional checks:
 
 ```bash
+curl -i http://127.0.0.1:5000
+curl -i http://127.0.0.1:5174/healthz
 sudo ufw status
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 ```
-
-Additional diagnostics:
-
-```bash
-dotnet --version
-node -v
-npm -v
-systemctl status nginx --no-pager -l
-curl -i http://127.0.0.1:5174/healthz
-curl -i "https://steamcommunity.com/inventory/76561198741807571/730/2?l=english&count=2000"
-```
-
-Expected Steam diagnostic from the Vultr VPS is HTTP 200 OK with `success: 1`.
 
 ## Rollback
 
@@ -174,10 +143,10 @@ sudo ln -sfnT /var/www/xmania/releases/<previous-timestamp> /var/www/xmania/publ
 sudo systemctl restart xmania-web
 ```
 
-If the bot code changed and you need to roll back the repo too:
+If the bot code changed and the repository must be rolled back too:
 
 ```bash
-cd /var/www/xmania/SkinMarket
+cd /var/www/xmania
 git log --oneline -5
 sudo git checkout <previous-commit>
 sudo npm ci --prefix /var/www/xmania/SkinMarket/bot-service

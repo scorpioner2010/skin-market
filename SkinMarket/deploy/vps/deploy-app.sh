@@ -2,20 +2,21 @@
 set -euo pipefail
 
 APP_ROOT="/var/www/xmania"
-REPO_DIR="${APP_ROOT}/SkinMarket"
-PROJECT_FILE="${REPO_DIR}/SkinMarket.csproj"
+REPO_DIR="${APP_ROOT}"
+PROJECT_DIR="${APP_ROOT}/SkinMarket"
+PROJECT_FILE="${PROJECT_DIR}/SkinMarket.csproj"
+BOT_DIR="${PROJECT_DIR}/bot-service"
 PUBLISH_DIR="${APP_ROOT}/publish"
 RELEASES_DIR="${APP_ROOT}/releases"
 ENV_FILE="/etc/xmania/xmania.env"
 NUGET_CONFIG="/root/.nuget/NuGet/NuGet.Config"
 APP_USER="xmania"
-BOT_DIR="${REPO_DIR}/bot-service"
 TIMESTAMP="$(date +%Y%m%d%H%M%S)"
 RELEASE_DIR="${RELEASES_DIR}/${TIMESTAMP}"
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
-    echo "Run this script as root: sudo bash deploy/vps/deploy-app.sh"
+    echo "Run this script as root: sudo bash SkinMarket/deploy/vps/deploy-app.sh"
     exit 1
   fi
 }
@@ -68,7 +69,7 @@ has_database_config() {
 }
 
 run_migrations_if_configured() {
-  if [[ ! -d "${REPO_DIR}/Migrations" ]]; then
+  if [[ ! -d "${PROJECT_DIR}/Migrations" ]]; then
     echo "No EF Core Migrations directory found; skipping database update."
     return
   fi
@@ -93,14 +94,23 @@ run_migrations_if_configured() {
 
 restart_if_present() {
   local service_name="$1"
-  if systemctl list-unit-files --no-legend "${service_name}" 2>/dev/null | grep -q "${service_name}"; then
+  local service_unit="${service_name}.service"
+  if systemctl list-unit-files --no-legend "${service_unit}" 2>/dev/null | grep -q "${service_unit}"; then
     echo
     echo "Restarting ${service_name}..."
     systemctl restart "${service_name}"
-    echo "Status for ${service_name}:"
-    systemctl status "${service_name}" --no-pager -l || true
   else
-    echo "Systemd service not installed, skipping restart: ${service_name}"
+    echo "Systemd service not installed, skipping restart: ${service_unit}"
+  fi
+}
+
+print_service_status() {
+  local service_name="$1"
+  local service_unit="${service_name}.service"
+  if systemctl list-unit-files --no-legend "${service_unit}" 2>/dev/null | grep -q "${service_unit}"; then
+    echo
+    echo "systemctl status ${service_name} --no-pager -l"
+    systemctl status "${service_name}" --no-pager -l || true
   fi
 }
 
@@ -156,19 +166,25 @@ ln -sfnT "${RELEASE_DIR}" "${PUBLISH_DIR}"
 chown -R "${APP_USER}:www-data" "${APP_ROOT}"
 
 echo "Restarting services..."
-restart_if_present "xmania-steam-bot.service"
-restart_if_present "xmania-web.service"
+restart_if_present "xmania-web"
+restart_if_present "xmania-steam-bot"
+
+echo
+echo "Service status:"
+print_service_status "xmania-web"
+print_service_status "xmania-steam-bot"
 
 cat <<EOF
 
 Deploy complete.
 
 Useful checks:
-  systemctl status xmania-web
-  systemctl status xmania-steam-bot
+  systemctl status xmania-web --no-pager -l
+  systemctl status xmania-steam-bot --no-pager -l
   journalctl -u xmania-web -f
   journalctl -u xmania-steam-bot -f
   curl -i http://127.0.0.1:5000
+  curl -i https://70-34-255-46.sslip.io
   curl -i "https://steamcommunity.com/inventory/76561198741807571/730/2?l=english&count=2000"
 
 Rollback to the previous release:
