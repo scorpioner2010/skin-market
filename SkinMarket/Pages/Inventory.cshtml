@@ -303,18 +303,6 @@
                                         {
                                             <span class="compact-badge compact-badge-neutral">@L["Inventory_WaitingForCredit"]</span>
                                         }
-                                        else if (action.Kind == InventoryItemActionKinds.DeliveryPending)
-                                        {
-                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, item.IncomingDeliveryStatus ?? "PendingDelivery")</span>
-                                        }
-                                        else if (action.Kind == InventoryItemActionKinds.AwaitingBuyerAcceptance)
-                                        {
-                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_AwaitingBuyerAcceptance"]</span>
-                                        }
-                                        else if (action.Kind == InventoryItemActionKinds.Delivered)
-                                        {
-                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "Delivered")</span>
-                                        }
                                         else if (action.Kind == InventoryItemActionKinds.TradeProtected)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "TradeProtected")</span>

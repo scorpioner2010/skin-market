@@ -1,0 +1,11 @@
+{
+  "processStartedAt": "2026-05-07T03:50:11.403Z",
+  "stateUpdatedAt": "2026-05-07T03:50:12.477Z",
+  "serviceState": "Ready",
+  "lastError": null,
+  "lastErrorAt": null,
+  "lastDisconnectReason": null,
+  "lastDisconnectAt": null,
+  "lastReadyAt": "2026-05-07T03:50:12.477Z",
+  "recoveredFromErrorAt": null
+}

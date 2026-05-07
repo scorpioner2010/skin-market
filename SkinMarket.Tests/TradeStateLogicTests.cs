@@ -12,7 +12,7 @@ public class TradeStateLogicTests
     public void SellerPendingOperation_ShowsGlobalPanelStateWithoutTradeOffer()
     {
         var operation = Operation("asset-1", "Pending", tradeOfferId: null);
-        var groups = BuildGroups([Item("asset-1")], [operation], []);
+        var groups = BuildGroups([Item("asset-1")], [operation]);
 
         var action = Assert.Single(groups).ActionDecision;
         Assert.Equal(InventoryItemActionKinds.CreatingTradeOffer, action.Kind);
@@ -26,7 +26,7 @@ public class TradeStateLogicTests
     public void BotPendingOperation_StillShowsCreatingOfferAction()
     {
         var operation = Operation("asset-1", "BotPending");
-        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation], []));
+        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation]));
 
         Assert.Equal(InventoryItemActionKinds.CreatingTradeOffer, group.ActionDecision.Kind);
         Assert.Equal("BotPending", group.ActionDecision.Status);
@@ -36,7 +36,7 @@ public class TradeStateLogicTests
     public void AwaitingUserActionWithOffer_ShowsSellerAcceptanceAction()
     {
         var operation = Operation("asset-1", "AwaitingUserAction", "123456");
-        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation], []));
+        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation]));
 
         Assert.Equal(InventoryItemActionKinds.AwaitingSellerAcceptance, group.ActionDecision.Kind);
         Assert.Equal("123456", group.ActionDecision.TradeOfferId);
@@ -47,7 +47,7 @@ public class TradeStateLogicTests
     public void ReceivedByBotSale_ShowsWaitingForCredit()
     {
         var operation = Operation("asset-1", "ReceivedByBot", "123456");
-        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation], []));
+        var group = Assert.Single(BuildGroups([Item("asset-1")], [operation]));
 
         Assert.Equal(InventoryItemActionKinds.WaitingForCredit, group.ActionDecision.Kind);
     }
@@ -56,29 +56,40 @@ public class TradeStateLogicTests
     public void CreditedSellerSale_RemovesStaleInventoryItemFromPendingSaleDisplay()
     {
         var operation = Operation("asset-1", "Credited");
-        var groups = BuildGroups([Item("asset-1")], [operation], []);
+        var groups = BuildGroups([Item("asset-1")], [operation]);
 
         Assert.Empty(groups);
     }
 
     [Fact]
-    public void BuyerDeliveredFallback_DoesNotBecomePendingSale()
+    public void DeliveredPurchaseWithoutSteamSnapshotItem_DoesNotCreateInventoryRow()
     {
         var purchase = Purchase("delivered:purchase-1", "Delivered");
-        var group = Assert.Single(BuildGroups([Item("delivered:purchase-1", tradable: false)], [], [purchase]));
+        var groups = BuildGroups([], [], [purchase]);
 
-        Assert.Equal(InventoryItemActionKinds.Delivered, group.ActionDecision.Kind);
-        Assert.Contains(group.StatusItems, item => item.Status == "Delivered" && item.Quantity == 1);
+        Assert.Empty(groups);
     }
 
     [Fact]
-    public void BuyerDeliveredLiveTradableItem_CanBeSold()
+    public void DeliveredPurchaseWithMatchingTradableSteamSnapshotItem_CanBeSold()
     {
         var purchase = Purchase("asset-1", "Delivered");
         var group = Assert.Single(BuildGroups([Item("asset-1")], [], [purchase]));
 
         Assert.Equal(InventoryItemActionKinds.Sell, group.ActionDecision.Kind);
         Assert.Equal("asset-1", group.SellAssetId);
+        Assert.DoesNotContain(group.StatusItems, item => string.Equals(item.Status, "Delivered", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void DeliveredPurchaseWithMatchingTradeLockedSteamSnapshotItem_IsTradeProtected()
+    {
+        var purchase = Purchase("asset-1", "Delivered");
+        var group = Assert.Single(BuildGroups([Item("asset-1", tradable: false)], [], [purchase]));
+
+        Assert.Equal(InventoryItemActionKinds.TradeProtected, group.ActionDecision.Kind);
+        Assert.Contains(group.StatusItems, item => item.Status == "TradeProtected" && item.Quantity == 1);
+        Assert.DoesNotContain(group.StatusItems, item => string.Equals(item.Status, "Delivered", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -110,13 +121,58 @@ public class TradeStateLogicTests
 
         var groups = BuildGroups(items, operations, purchases);
         var group = Assert.Single(groups, item => item.AssetIds.Contains("asset-ready"));
-        var deliveredGroup = Assert.Single(groups, item => item.AssetIds.Contains("delivered:purchase-1"));
+        var tradeProtectedGroup = Assert.Single(groups, item => item.AssetIds.Contains("delivered:purchase-1"));
 
         Assert.Equal(InventoryItemActionKinds.CreatingTradeOffer, group.ActionDecision.Kind);
         Assert.Contains(group.StatusItems, item => item.IsReady && item.Quantity == 1);
         Assert.Contains(group.StatusItems, item => item.Status == "Pending" && item.Quantity == 1);
-        Assert.Equal(InventoryItemActionKinds.Delivered, deliveredGroup.ActionDecision.Kind);
-        Assert.Contains(deliveredGroup.StatusItems, item => item.Status == "Delivered" && item.Quantity == 1);
+        Assert.Equal(InventoryItemActionKinds.TradeProtected, tradeProtectedGroup.ActionDecision.Kind);
+        Assert.Contains(tradeProtectedGroup.StatusItems, item => item.Status == "TradeProtected" && item.Quantity == 1);
+        Assert.DoesNotContain(groups, item => string.Equals(item.ActionDecision.Kind, "Delivered", StringComparison.Ordinal));
+        Assert.DoesNotContain(groups.SelectMany(item => item.StatusItems), item => string.Equals(item.Status, "Delivered", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void InventoryRows_NeverUseBuyerDeliveryActionKinds()
+    {
+        var purchases = new[]
+        {
+            Purchase("asset-1", "PendingDelivery"),
+            Purchase("asset-2", "AwaitingBuyerAction"),
+            Purchase("asset-3", "Delivered")
+        };
+        var groups = BuildGroups(
+            [Item("asset-1"), Item("asset-2", tradable: false), Item("asset-3")],
+            [],
+            purchases);
+
+        Assert.DoesNotContain(groups, item => item.ActionDecision.Kind is "DeliveryPending" or "AwaitingBuyerAcceptance" or "Delivered");
+        Assert.DoesNotContain(groups.SelectMany(item => item.StatusItems), item =>
+            item.Status is "PendingDelivery" or "AwaitingBuyerAction" or "Delivered");
+    }
+
+    [Fact]
+    public void TradeFlowPolicy_OnlyMarksActiveTradeFlows()
+    {
+        Assert.True(TradeFlowStatusPolicy.IsActiveIntakeStatus("Pending"));
+        Assert.True(TradeFlowStatusPolicy.IsActiveIntakeStatus("AwaitingUserAction"));
+        Assert.True(TradeFlowStatusPolicy.IsActiveIntakeStatus("ReceivedByBot"));
+        Assert.False(TradeFlowStatusPolicy.IsActiveIntakeStatus("Credited"));
+        Assert.False(TradeFlowStatusPolicy.IsActiveIntakeStatus("Failed"));
+        Assert.False(TradeFlowStatusPolicy.IsActiveIntakeStatus("Canceled"));
+
+        Assert.True(TradeFlowStatusPolicy.IsActiveDelivery(Purchase("asset-1", "PendingDelivery")));
+        Assert.True(TradeFlowStatusPolicy.IsActiveDelivery(Purchase("asset-1", "AwaitingBuyerAction")));
+        Assert.True(TradeFlowStatusPolicy.IsActiveDelivery(Purchase("asset-1", "DeliveryInEscrow")));
+        Assert.False(TradeFlowStatusPolicy.IsActiveDelivery(Purchase("asset-1", "Delivered")));
+        Assert.False(TradeFlowStatusPolicy.IsActiveDelivery(Purchase("asset-1", "DeliveryFailed")));
+
+        var awaitingBotWithoutOffer = Purchase("asset-1", "AwaitingBotConfirmation");
+        var awaitingBotWithOffer = Purchase("asset-1", "AwaitingBotConfirmation");
+        awaitingBotWithOffer.DeliveryTradeOfferId = "123456";
+
+        Assert.False(TradeFlowStatusPolicy.IsActiveDelivery(awaitingBotWithoutOffer));
+        Assert.True(TradeFlowStatusPolicy.IsActiveDelivery(awaitingBotWithOffer));
     }
 
     [Fact]
@@ -146,7 +202,7 @@ public class TradeStateLogicTests
     [Fact]
     public void UnknownInventoryState_IsDiagnosticNotPendingSale()
     {
-        var group = Assert.Single(BuildGroups([Item("asset-1", tradable: null)], [], []));
+        var group = Assert.Single(BuildGroups([Item("asset-1", tradable: null)], []));
 
         Assert.Equal(InventoryItemActionKinds.UnknownState, group.ActionDecision.Kind);
         Assert.True(group.ActionDecision.IsUnknown);
@@ -156,12 +212,11 @@ public class TradeStateLogicTests
     private static List<GroupedInventoryItem> BuildGroups(
         IReadOnlyCollection<SteamInventoryItemDto> items,
         IReadOnlyCollection<TradeOperation> operations,
-        IReadOnlyCollection<MarketPurchaseRecord> purchases)
+        IReadOnlyCollection<MarketPurchaseRecord>? purchases = null)
     {
         return InventoryModel.BuildGroupedItems(
             items,
             operations.ToDictionary(item => item.AssetId, item => item, StringComparer.Ordinal),
-            purchases.ToDictionary(item => item.AssetId, item => item, StringComparer.Ordinal),
             isTradeUrlConfigured: true);
     }
 

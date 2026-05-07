@@ -8,9 +8,6 @@ public static class InventoryItemActionKinds
     public const string AwaitingSellerAcceptance = "AwaitingSellerAcceptance";
     public const string AwaitingBotConfirmation = "AwaitingBotConfirmation";
     public const string WaitingForCredit = "WaitingForCredit";
-    public const string DeliveryPending = "DeliveryPending";
-    public const string AwaitingBuyerAcceptance = "AwaitingBuyerAcceptance";
-    public const string Delivered = "Delivered";
     public const string TradeProtected = "TradeProtected";
     public const string FailedRetry = "FailedRetry";
     public const string UnknownState = "UnknownState";

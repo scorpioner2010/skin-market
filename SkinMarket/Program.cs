@@ -626,41 +626,19 @@ app.MapGet("/api/sales/status", async (
         });
     }
 
-    var statusesToPoll = new[]
-    {
-        "Pending",
-        "BotPending",
-        "AwaitingBotConfirmation",
-        "TradeCreated",
-        "AwaitingUserAction",
-        "TradeAcceptedPendingReceipt",
-        "ReceivedByBot",
-        "InEscrow"
-    };
-
     var syncOperations = await dbContext.TradeOperations
         .Where(operation =>
             operation.AppUserId == appUser.Id &&
             operation.TradeOfferId != null &&
-            statusesToPoll.Contains(operation.Status))
+            TradeFlowStatusPolicy.ActiveIntakeStatuses.Contains(operation.Status))
         .ToListAsync(cancellationToken);
-
-    var deliveryStatusesToPoll = new[]
-    {
-        "PendingDelivery",
-        "DeliveryBotPending",
-        "AwaitingBotConfirmation",
-        "DeliveryTradeCreated",
-        "AwaitingBuyerAction",
-        "DeliveryInEscrow"
-    };
 
     var syncDeliveries = await dbContext.MarketPurchaseRecords
         .Where(item =>
             item.BuyerAppUserId == appUser.Id &&
             item.DeliveryTradeOfferId != null &&
             item.DeliveryStatus != null &&
-            deliveryStatusesToPoll.Contains(item.DeliveryStatus))
+            TradeFlowStatusPolicy.ActiveDeliveryStatuses.Contains(item.DeliveryStatus))
         .ToListAsync(cancellationToken);
 
     var statusRequests = syncOperations
@@ -768,7 +746,7 @@ app.MapGet("/api/sales/status", async (
         .AsNoTracking()
         .Where(operation =>
             operation.AppUserId == appUser.Id &&
-            statusesToPoll.Contains(operation.Status))
+            TradeFlowStatusPolicy.ActiveIntakeStatuses.Contains(operation.Status))
         .OrderByDescending(operation => operation.UpdatedAtUtc)
         .Select(operation => new
         {
@@ -793,7 +771,8 @@ app.MapGet("/api/sales/status", async (
         .Where(item =>
             item.BuyerAppUserId == appUser.Id &&
             item.DeliveryStatus != null &&
-            deliveryStatusesToPoll.Contains(item.DeliveryStatus))
+            TradeFlowStatusPolicy.ActiveDeliveryStatuses.Contains(item.DeliveryStatus) &&
+            (item.DeliveryStatus != "AwaitingBotConfirmation" || item.DeliveryTradeOfferId != null))
         .OrderByDescending(item => item.UpdatedAtUtc)
         .Select(item => new
         {

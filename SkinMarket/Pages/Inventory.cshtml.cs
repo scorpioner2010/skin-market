@@ -15,16 +15,6 @@ namespace SkinMarket.Pages;
 
 public class InventoryModel : PageModel
 {
-    private static readonly string[] ActiveDeliveryStatuses =
-    [
-        "PendingDelivery",
-        "DeliveryBotPending",
-        "AwaitingBotConfirmation",
-        "DeliveryTradeCreated",
-        "AwaitingBuyerAction",
-        "DeliveryInEscrow"
-    ];
-
     private readonly AppDbContext _dbContext;
     private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
     private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
@@ -72,7 +62,6 @@ public class InventoryModel : PageModel
     public List<InventoryPriceItemRequest> PricePollingItems { get; private set; } = new();
     public List<TradeOperation> RecentOperations { get; private set; } = new();
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
-    public Dictionary<string, MarketPurchaseRecord> LatestPurchaseRecordsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
     public string? WarningMessage { get; private set; }
     public string? InventorySnapshotWarningMessage { get; private set; }
@@ -474,32 +463,21 @@ public class InventoryModel : PageModel
             });
         }
 
-        var statusesToPoll = new[]
-        {
-            "Pending",
-            "BotPending",
-            "AwaitingBotConfirmation",
-            "TradeCreated",
-            "AwaitingUserAction",
-            "TradeAcceptedPendingReceipt",
-            "ReceivedByBot",
-            "InEscrow"
-        };
-
         var operations = await _dbContext.TradeOperations
             .AsNoTracking()
             .Where(operation =>
                 operation.AppUserId == appUser.Id &&
-                statusesToPoll.Contains(operation.Status))
+                TradeFlowStatusPolicy.ActiveIntakeStatuses.Contains(operation.Status))
             .OrderByDescending(operation => operation.UpdatedAtUtc)
             .Select(operation => new
             {
                 id = operation.Id,
+                flow = "intake",
                 assetId = operation.AssetId,
                 itemName = operation.ItemName,
                 status = operation.Status,
                 statusText = UiTextLocalizer.LocalizeStatus(_localizer, operation.Status),
-                detailText = BuildSaleStatusDetail(operation.Status, operation.TradeOfferId),
+                detailText = global::SaleStatusApiText.DescribeStatus("intake", operation.Status, operation.TradeOfferId),
                 tradeOfferId = operation.TradeOfferId,
                 steamOfferUrl = BuildSteamOfferUrl(operation.TradeOfferId),
                 accountTradeOffersUrl = BuildAccountTradeOffersUrl(),
@@ -509,10 +487,38 @@ public class InventoryModel : PageModel
             })
             .ToListAsync(cancellationToken);
 
+        var deliveries = await _dbContext.MarketPurchaseRecords
+            .AsNoTracking()
+            .Where(item =>
+                item.BuyerAppUserId == appUser.Id &&
+                item.DeliveryStatus != null &&
+                TradeFlowStatusPolicy.ActiveDeliveryStatuses.Contains(item.DeliveryStatus) &&
+                (item.DeliveryStatus != "AwaitingBotConfirmation" || item.DeliveryTradeOfferId != null))
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .Select(item => new
+            {
+                id = item.Id,
+                flow = "delivery",
+                assetId = item.AssetId,
+                itemName = item.ItemName,
+                status = item.DeliveryStatus!,
+                statusText = UiTextLocalizer.LocalizeStatus(_localizer, item.DeliveryStatus),
+                detailText = global::SaleStatusApiText.DescribeStatus("delivery", item.DeliveryStatus, item.DeliveryTradeOfferId),
+                tradeOfferId = item.DeliveryTradeOfferId,
+                steamOfferUrl = BuildSteamOfferUrl(item.DeliveryTradeOfferId),
+                accountTradeOffersUrl = BuildAccountTradeOffersUrl(),
+                canCancel = false,
+                creditAmount = 0m,
+                updatedAtUtc = item.UpdatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
         return new JsonResult(new
         {
             success = true,
-            operations
+            operations = operations.Concat(deliveries)
+                .OrderByDescending(item => item.updatedAtUtc)
+                .ToList()
         });
     }
 
@@ -667,7 +673,6 @@ public class InventoryModel : PageModel
             nameof(InventoryModel),
             cancellationToken: cancellationToken);
 
-        await AppendPurchaseFallbackItemsAsync(appUser.Id, currentGame, Items, cancellationToken);
         var marketHashNames = Items
             .Select(MarketHashNameUtility.ResolvePrimary)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -732,7 +737,7 @@ public class InventoryModel : PageModel
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
 
-        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId, LatestPurchaseRecordsByAssetId, IsTradeUrlConfigured);
+        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId, IsTradeUrlConfigured);
         await LogUnknownInventoryActionStatesAsync(appUser.Id, currentGame, GroupedItems, cancellationToken);
         PricePollingItems = GroupedItems
             .Select(group =>
@@ -976,76 +981,21 @@ public class InventoryModel : PageModel
         }
     }
 
-    private async Task AppendPurchaseFallbackItemsAsync(
-        Guid appUserId,
-        GameDefinition game,
-        List<SteamInventoryItemDto> items,
-        CancellationToken cancellationToken)
-    {
-        var visibleKeys = new HashSet<string>(
-            items.Select(BuildInventoryFallbackKey),
-            StringComparer.Ordinal);
-        var purchases = await _dbContext.MarketPurchaseRecords
-            .AsNoTracking()
-            .Where(item => item.BuyerAppUserId == appUserId &&
-                           item.AppId == game.SteamAppId &&
-                           item.ContextId == game.SteamContextId.ToString() &&
-                           ((item.DeliveryStatus != null && ActiveDeliveryStatuses.Contains(item.DeliveryStatus)) ||
-                            (item.DeliveryStatus == "Delivered" &&
-                             item.DeliveredAtUtc != null &&
-                             item.DeliveredAtUtc >= DateTime.UtcNow.AddDays(-14))))
-            .OrderByDescending(item => item.UpdatedAtUtc)
-            .Take(40)
-            .ToListAsync(cancellationToken);
-
-        foreach (var purchase in purchases)
-        {
-            var key = BuildInventoryFallbackKey(purchase.ClassId, purchase.InstanceId, purchase.MarketHashName, purchase.ItemName);
-            var isActiveDelivery = IsActiveDeliveryStatus(purchase.DeliveryStatus);
-            if (!isActiveDelivery && !visibleKeys.Add(key))
-            {
-                continue;
-            }
-
-            var syntheticAssetId = isActiveDelivery ? $"incoming:{purchase.Id}" : $"delivered:{purchase.Id}";
-            items.Add(new SteamInventoryItemDto
-            {
-                GameType = purchase.GameType,
-                AssetId = syntheticAssetId,
-                ClassId = purchase.ClassId,
-                InstanceId = purchase.InstanceId,
-                Name = purchase.ItemName,
-                MarketHashName = purchase.MarketHashName,
-                MarketName = purchase.MarketHashName,
-                IconUrl = purchase.IconUrl,
-                Tradable = false,
-                Marketable = false
-            });
-            LatestPurchaseRecordsByAssetId[syntheticAssetId] = purchase;
-        }
-    }
-
     private async Task<bool> HasActiveTradeFlowAsync(Guid appUserId, CancellationToken cancellationToken)
     {
-        var activeIntakeStatuses = new[]
-        {
-            "Pending",
-            "BotPending",
-            "AwaitingBotConfirmation",
-            "TradeCreated",
-            "AwaitingUserAction",
-            "TradeAcceptedPendingReceipt",
-            "ReceivedByBot",
-            "InEscrow"
-        };
         return await _dbContext.TradeOperations
                    .AsNoTracking()
-                   .AnyAsync(operation => operation.AppUserId == appUserId && activeIntakeStatuses.Contains(operation.Status), cancellationToken) ||
+                   .AnyAsync(
+                       operation => operation.AppUserId == appUserId &&
+                                    TradeFlowStatusPolicy.ActiveIntakeStatuses.Contains(operation.Status),
+                       cancellationToken) ||
                await _dbContext.MarketPurchaseRecords
                    .AsNoTracking()
                    .AnyAsync(item => item.BuyerAppUserId == appUserId &&
                                      item.DeliveryStatus != null &&
-                                     ActiveDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
+                                     TradeFlowStatusPolicy.ActiveDeliveryStatuses.Contains(item.DeliveryStatus) &&
+                                     (item.DeliveryStatus != "AwaitingBotConfirmation" || item.DeliveryTradeOfferId != null),
+                       cancellationToken);
     }
 
     private static string BuildInventorySample(IEnumerable<SteamInventoryItemDto> items)
@@ -1056,21 +1006,6 @@ public class InventoryModel : PageModel
             .ToList();
 
         return sample.Count == 0 ? "<none>" : string.Join(" | ", sample);
-    }
-
-    private static string BuildInventoryFallbackKey(SteamInventoryItemDto item)
-    {
-        return BuildInventoryFallbackKey(item.ClassId, item.InstanceId, MarketHashNameUtility.ResolvePrimary(item), item.Name);
-    }
-
-    private static string BuildInventoryFallbackKey(string classId, string instanceId, string? marketHashName, string itemName)
-    {
-        return string.Join(
-            "|",
-            classId,
-            instanceId,
-            MarketHashNameUtility.Normalize(marketHashName) ?? string.Empty,
-            itemName.Trim());
     }
 
     private static string BuildManualStatusMessage(TradeOperation operation, SteamTradeOfferStatusResult status)
@@ -1118,7 +1053,6 @@ public class InventoryModel : PageModel
     internal static List<GroupedInventoryItem> BuildGroupedItems(
         IReadOnlyCollection<SteamInventoryItemDto> items,
         IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId,
-        IReadOnlyDictionary<string, MarketPurchaseRecord> latestPurchasesByAssetId,
         bool isTradeUrlConfigured)
     {
         return items
@@ -1158,18 +1092,6 @@ public class InventoryModel : PageModel
                 var blockedAssetIds = new HashSet<string>(
                     blockedOperations.Select(operation => operation.AssetId),
                     StringComparer.Ordinal);
-                var purchaseStatuses = entries
-                    .Select(item => latestPurchasesByAssetId.GetValueOrDefault(item.AssetId))
-                    .Where(purchase => purchase is not null &&
-                                       !string.IsNullOrWhiteSpace(purchase.DeliveryStatus))
-                    .Cast<MarketPurchaseRecord>()
-                    .ToList();
-                var purchaseAssetIds = new HashSet<string>(
-                    entries
-                        .Where(item => latestPurchasesByAssetId.ContainsKey(item.AssetId))
-                        .Select(item => item.AssetId),
-                    StringComparer.Ordinal);
-
                 var statusItems = blockedOperations
                     .GroupBy(operation => operation!.Status, StringComparer.Ordinal)
                     .Select(statusGroup => new GroupedInventoryStatusItem
@@ -1182,18 +1104,9 @@ public class InventoryModel : PageModel
                     .ThenBy(item => item.Status, StringComparer.Ordinal)
                     .ToList();
 
-                statusItems.AddRange(purchaseStatuses
-                    .GroupBy(purchase => purchase.DeliveryStatus!, StringComparer.Ordinal)
-                    .Select(statusGroup => new GroupedInventoryStatusItem
-                    {
-                        Status = statusGroup.Key,
-                        Quantity = statusGroup.Count()
-                    }));
-
                 var tradeProtectedCount = entries.Count(item =>
                     item.Tradable == false &&
-                    !blockedAssetIds.Contains(item.AssetId) &&
-                    !purchaseAssetIds.Contains(item.AssetId));
+                    !blockedAssetIds.Contains(item.AssetId));
                 if (tradeProtectedCount > 0)
                 {
                     statusItems.Add(new GroupedInventoryStatusItem
@@ -1210,8 +1123,7 @@ public class InventoryModel : PageModel
 
                 var readyCount = entries.Count(item =>
                     item.Tradable != false &&
-                    !blockedAssetIds.Contains(item.AssetId) &&
-                    !purchaseAssetIds.Contains(item.AssetId));
+                    !blockedAssetIds.Contains(item.AssetId));
                 if (readyCount > 0)
                 {
                     statusItems.Insert(0, new GroupedInventoryStatusItem
@@ -1248,13 +1160,6 @@ public class InventoryModel : PageModel
                     ActiveTradeStatus = activeTradeOperation?.Status,
                     ActiveTradeOfferId = activeTradeOperation?.TradeOfferId,
                     HasTradeProtected = tradeProtectedCount > 0,
-                    HasIncomingDelivery = purchaseStatuses.Any(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus)),
-                    HasDeliveredPurchase = purchaseStatuses.Any(purchase => string.Equals(purchase.DeliveryStatus, "Delivered", StringComparison.Ordinal)),
-                    IncomingDeliveryStatus = purchaseStatuses
-                        .Where(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus))
-                        .OrderByDescending(purchase => purchase.UpdatedAtUtc)
-                        .Select(purchase => purchase.DeliveryStatus)
-                        .FirstOrDefault(),
                     HasWaitingForCredit = entries
                         .Select(item => latestOperationsByAssetId.GetValueOrDefault(item.AssetId))
                         .Any(operation => operation is not null &&
@@ -1282,7 +1187,7 @@ public class InventoryModel : PageModel
             .Where(item => item.ActionDecision.IsUnknown)
             .Take(20)
             .Select(item =>
-                $"GroupKey={item.GroupKey}; RepresentativeAssetId={item.RepresentativeAssetId}; AssetIds={string.Join("|", item.AssetIds)}; ItemName={TruncateForLog(item.ItemName, 80)}; ActiveTradeStatus={item.ActiveTradeStatus ?? "<null>"}; IncomingDeliveryStatus={item.IncomingDeliveryStatus ?? "<null>"}; HasTradeProtected={item.HasTradeProtected}; HasDeliveredPurchase={item.HasDeliveredPurchase}; Reason={item.ActionDecision.DiagnosticReason}")
+                $"GroupKey={item.GroupKey}; RepresentativeAssetId={item.RepresentativeAssetId}; AssetIds={string.Join("|", item.AssetIds)}; ItemName={TruncateForLog(item.ItemName, 80)}; ActiveTradeStatus={item.ActiveTradeStatus ?? "<null>"}; HasTradeProtected={item.HasTradeProtected}; Reason={item.ActionDecision.DiagnosticReason}")
             .ToList();
 
         if (unknownItems.Count == 0)
@@ -1307,11 +1212,6 @@ public class InventoryModel : PageModel
         return string.Equals(status, "Credited", StringComparison.Ordinal);
     }
 
-    private static bool IsActiveDeliveryStatus(string? status)
-    {
-        return status is not null && ActiveDeliveryStatuses.Contains(status);
-    }
-
     private static int GetInventoryStatusOrder(string status)
     {
         return status switch
@@ -1325,12 +1225,6 @@ public class InventoryModel : PageModel
             "TradeProtected" => 6,
             "ReceivedByBot" => 7,
             "Credited" => 8,
-            "PendingDelivery" => 9,
-            "DeliveryBotPending" => 10,
-            "DeliveryTradeCreated" => 11,
-            "AwaitingBuyerAction" => 12,
-            "DeliveryInEscrow" => 13,
-            "Delivered" => 14,
             _ => 20
         };
     }
