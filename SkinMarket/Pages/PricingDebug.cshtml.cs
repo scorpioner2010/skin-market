@@ -16,6 +16,7 @@ public class PricingDebugModel : PageModel
     private readonly ISteamMarketPriceService _steamMarketPriceService;
     private readonly ICsFloatPriceService _csFloatPriceService;
     private readonly ISkinportPricingService _skinportPricingService;
+    private readonly IDMarketPricingService _dMarketPricingService;
     private readonly IGameCatalog _gameCatalog;
     private readonly AppRuntimeState _runtimeState;
 
@@ -26,6 +27,7 @@ public class PricingDebugModel : PageModel
         ISteamMarketPriceService steamMarketPriceService,
         ICsFloatPriceService csFloatPriceService,
         ISkinportPricingService skinportPricingService,
+        IDMarketPricingService dMarketPricingService,
         IGameCatalog gameCatalog,
         AppRuntimeState runtimeState)
     {
@@ -35,6 +37,7 @@ public class PricingDebugModel : PageModel
         _steamMarketPriceService = steamMarketPriceService;
         _csFloatPriceService = csFloatPriceService;
         _skinportPricingService = skinportPricingService;
+        _dMarketPricingService = dMarketPricingService;
         _gameCatalog = gameCatalog;
         _runtimeState = runtimeState;
     }
@@ -75,6 +78,9 @@ public class PricingDebugModel : PageModel
             var skinportResult = string.IsNullOrWhiteSpace(marketHashName)
                 ? new PriceSourceResult { Source = "Skinport", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
                 : await _skinportPricingService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
+            var dMarketResult = string.IsNullOrWhiteSpace(marketHashName)
+                ? new PriceSourceResult { Source = "DMarket", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
+                : await _dMarketPricingService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
             var finalResult = await _itemPriceResolver.ResolveAsync(item, cancellationToken);
 
             var diagnosticsResult = new ItemPriceDiagnosticsResult
@@ -91,11 +97,16 @@ public class PricingDebugModel : PageModel
                 CsFloatStatus = csFloatResult.Status,
                 SkinportPrice = skinportResult.Price,
                 SkinportStatus = skinportResult.Status,
+                DMarketPrice = dMarketResult.Price,
+                DMarketStatus = dMarketResult.Status,
                 SteamError = steamResult.ErrorMessage,
                 CsFloatError = csFloatResult.ErrorMessage,
                 SkinportError = skinportResult.ErrorMessage,
+                DMarketError = dMarketResult.ErrorMessage,
                 FinalPrice = finalResult.Price,
                 FinalSource = finalResult.Source,
+                FinalPriceType = finalResult.PriceType,
+                ConfidenceScore = finalResult.ConfidenceScore,
                 FinalStatus = finalResult.Status,
                 FailureReason = finalResult.FailureReason
             };

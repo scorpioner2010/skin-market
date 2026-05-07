@@ -4,6 +4,12 @@ namespace SkinMarket.Models;
 
 public class CsFloatListingDto
 {
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("price")]
+    public int? Price { get; set; }
+
     [JsonPropertyName("item")]
     public CsFloatItemDto? Item { get; set; }
 }

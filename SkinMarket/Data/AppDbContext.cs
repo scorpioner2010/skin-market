@@ -113,11 +113,24 @@ public class AppDbContext : DbContext
         {
             entity.HasKey(snapshot => snapshot.Id);
             entity.Property(snapshot => snapshot.MarketHashName).IsRequired().HasMaxLength(300);
+            entity.Property(snapshot => snapshot.VariantKey).HasMaxLength(100);
             entity.Property(snapshot => snapshot.Currency).IsRequired().HasMaxLength(10);
             entity.Property(snapshot => snapshot.Source).IsRequired().HasMaxLength(50);
+            entity.Property(snapshot => snapshot.SourceItemId).HasMaxLength(100);
+            entity.Property(snapshot => snapshot.PriceType).IsRequired().HasMaxLength(50);
+            entity.Property(snapshot => snapshot.Price).HasPrecision(18, 2);
+            entity.Property(snapshot => snapshot.PriceUsd).HasPrecision(18, 2);
+            entity.Property(snapshot => snapshot.OriginalPrice).HasPrecision(18, 4);
+            entity.Property(snapshot => snapshot.FxRate).HasPrecision(18, 8);
+            entity.Property(snapshot => snapshot.BestBidUsd).HasPrecision(18, 2);
+            entity.Property(snapshot => snapshot.BestAskUsd).HasPrecision(18, 2);
+            entity.Property(snapshot => snapshot.ConfidenceScore).HasPrecision(5, 4);
             entity.Property(snapshot => snapshot.Status).IsRequired().HasMaxLength(50);
             entity.Property(snapshot => snapshot.FailureReason).HasMaxLength(500);
-            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency }).IsUnique();
+            entity.Property(snapshot => snapshot.RawPayloadHash).HasMaxLength(128);
+            entity.Property(snapshot => snapshot.ProvenanceJson).HasMaxLength(4000);
+            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency, snapshot.Source, snapshot.PriceType }).IsUnique();
+            entity.HasIndex(snapshot => snapshot.ExpiresAtUtc);
         });
 
         modelBuilder.Entity<ServiceItem>(entity =>

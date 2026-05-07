@@ -17,7 +17,9 @@ public class GameCatalog : IGameCatalog
             SteamContextId = 2,
             SupportsInventory = true,
             SupportsSteamMarketPricing = true,
-            SupportsSkinportPricing = true
+            SupportsSkinportPricing = true,
+            SupportsDMarketPricing = true,
+            DMarketGameId = "a8db"
         },
         new GameDefinition
         {
@@ -29,7 +31,9 @@ public class GameCatalog : IGameCatalog
             SteamContextId = 2,
             SupportsInventory = true,
             SupportsSteamMarketPricing = true,
-            SupportsSkinportPricing = false
+            SupportsSkinportPricing = true,
+            SupportsDMarketPricing = true,
+            DMarketGameId = "9a92"
         }
     ];
 

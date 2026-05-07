@@ -1,0 +1,46 @@
+@model IReadOnlyList<SkinMarket.Pages.Admin.PriceDiagnosticsModel.PriceIssueItem>
+@{
+    string FormatLocal(DateTime value) => value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
+}
+
+@if (Model.Count == 0)
+{
+    <div class="empty-state compact">
+        <h3>No items in this group.</h3>
+    </div>
+}
+else
+{
+    <div class="market-table-shell admin-table-shell admin-log-shell">
+        <div class="market-table-list admin-log-table">
+            <div class="market-table-row market-table-header admin-log-row">
+                <div class="market-table-cell market-table-item-cell">Item</div>
+                <div class="market-table-cell">Source</div>
+                <div class="market-table-cell">Updated</div>
+                <div class="market-table-cell">Details</div>
+            </div>
+            @foreach (var item in Model)
+            {
+                <article class="market-table-row admin-log-row">
+                    <div class="market-table-cell market-table-item-cell" data-label="Item">
+                        <div class="market-table-copy">
+                            <strong class="break-value">@item.MarketHashName</strong>
+                            <div class="card-subtitle">AppId @item.AppId</div>
+                        </div>
+                    </div>
+                    <div class="market-table-cell" data-label="Source">
+                        <span class="compact-badge compact-badge-neutral">@item.Source / @item.PriceType</span>
+                    </div>
+                    <div class="market-table-cell" data-label="Updated">
+                        <span>@FormatLocal(item.UpdatedAtUtc)</span>
+                    </div>
+                    <div class="market-table-cell admin-log-details" data-label="Details">
+                        <span><strong>Expires:</strong> @FormatLocal(item.ExpiresAtUtc)</span>
+                        <span><strong>Confidence:</strong> @item.ConfidenceScore.ToString("0.00")</span>
+                        <span><strong>Failure:</strong> <span class="break-value">@(item.FailureReason ?? "None")</span></span>
+                    </div>
+                </article>
+            }
+        </div>
+    </div>
+}

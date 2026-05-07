@@ -125,8 +125,50 @@ public class InventoryModel : PageModel
             "CSFloat" => "CSFloat",
             "Skinport" => "Skinport",
             "Steam" => "Steam",
+            "DMarket" => "DMarket",
             _ => "Unavailable"
         };
+    }
+
+    public string GetPriceDisplayText(ItemPriceResolutionResult? price)
+    {
+        if (price?.Status == "Refreshing")
+        {
+            return "Refreshing...";
+        }
+
+        if (price?.HasPrice == true && price.DisplayPriceUsd is decimal amount)
+        {
+            var prefix = price.IsEstimated ? "~" : string.Empty;
+            return $"{prefix}${amount:0.00}";
+        }
+
+        return "No reliable price";
+    }
+
+    public string GetPriceStatusLabel(ItemPriceResolutionResult? price)
+    {
+        if (price is null || !price.HasPrice)
+        {
+            return "Unavailable";
+        }
+
+        if (price.IsStale)
+        {
+            return "Stale";
+        }
+
+        if (price.IsEstimated)
+        {
+            return "Estimated";
+        }
+
+        if (price.IsCached)
+        {
+            return "Cached";
+        }
+
+        return GetPriceSourceLabel(price.Source);
     }
 
     public async Task<IActionResult> OnPostSellAsync(CancellationToken cancellationToken)

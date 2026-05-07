@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -148,7 +150,10 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                     return unavailable;
                 }
 
-                var parsedPrice = ParsePrice(payload.LowestPrice) ?? ParsePrice(payload.MedianPrice);
+                var lowestPrice = ParsePrice(payload.LowestPrice);
+                var medianPrice = ParsePrice(payload.MedianPrice);
+                var usingLowest = lowestPrice.HasValue && lowestPrice > 0;
+                var parsedPrice = usingLowest ? lowestPrice : medianPrice;
                 if (!parsedPrice.HasValue || parsedPrice <= 0)
                 {
                     var malformed = Failure("Steam", "MalformedResponse", "Steam market response did not contain a usable price.", normalizedName);
@@ -157,15 +162,36 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                     return malformed;
                 }
 
+                var observedAtUtc = DateTime.UtcNow;
                 var result = new PriceSourceResult
                 {
                     Success = true,
                     Price = Math.Round(parsedPrice.Value, 2, MidpointRounding.AwayFromZero),
                     Currency = _options.PreferredCurrency,
-                    Source = "Steam",
-                    Status = "Live",
-                    LastUpdatedUtc = DateTime.UtcNow,
-                    ResolvedMarketHashName = normalizedName
+                    Source = PriceSourceNames.Steam,
+                    PriceType = usingLowest ? PriceTypeNames.LowestListing : PriceTypeNames.MedianSale,
+                    Status = usingLowest ? "Live" : "Estimated",
+                    IsEstimated = !usingLowest,
+                    LastUpdatedUtc = observedAtUtc,
+                    ObservedAtUtc = observedAtUtc,
+                    ExpiresAtUtc = observedAtUtc.AddMinutes(Math.Max(1, _options.SteamCacheMinutes)),
+                    TtlSeconds = Math.Max(1, _options.SteamCacheMinutes) * 60,
+                    OriginalPrice = Math.Round(parsedPrice.Value, 2, MidpointRounding.AwayFromZero),
+                    OriginalCurrency = "USD",
+                    FxRate = 1m,
+                    BestAskUsd = usingLowest ? Math.Round(parsedPrice.Value, 2, MidpointRounding.AwayFromZero) : null,
+                    Volume = TryParseInt(payload.Volume),
+                    ConfidenceScore = usingLowest ? 0.80m : 0.66m,
+                    ResolvedMarketHashName = normalizedName,
+                    ProvenanceJson = JsonSerializer.Serialize(new
+                    {
+                        endpoint = "steamcommunity.com/market/priceoverview",
+                        lowest_price = payload.LowestPrice,
+                        median_price = payload.MedianPrice,
+                        volume = payload.Volume,
+                        usedField = usingLowest ? "lowest_price" : "median_price"
+                    }),
+                    RawPayloadHash = Hash(rawContent)
                 };
 
                 await _appLogService.WriteAsync("Info", $"Success. Url={requestUri}; MarketHashName={normalizedName}; Price={result.Price}; Currency={result.Currency}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
@@ -233,6 +259,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         {
             Source = source,
             Status = status,
+            PriceType = PriceTypeNames.Unavailable,
             FailureReason = failureReason,
             Currency = "USD",
             ResolvedMarketHashName = marketHashName,
@@ -240,7 +267,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         };
     }
 
-    private static decimal? ParsePrice(string? rawValue)
+    internal static decimal? ParsePrice(string? rawValue)
     {
         if (string.IsNullOrWhiteSpace(rawValue))
         {
@@ -267,10 +294,30 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             : null;
     }
 
+    private static int? TryParseInt(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        var cleaned = new string(rawValue.Where(char.IsDigit).ToArray());
+        return int.TryParse(cleaned, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static string Hash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
     private sealed class SteamMarketPriceResponse
     {
         public bool Success { get; set; }
         public string? LowestPrice { get; set; }
         public string? MedianPrice { get; set; }
+        public string? Volume { get; set; }
     }
 }

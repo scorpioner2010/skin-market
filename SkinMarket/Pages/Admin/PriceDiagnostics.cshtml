@@ -1,0 +1,114 @@
+@page
+@model SkinMarket.Pages.Admin.PriceDiagnosticsModel
+@{
+    ViewData["Title"] = "Price Diagnostics";
+    string FormatLocal(DateTime? value, string fallback = "Never") => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? fallback;
+}
+
+<div class="py-4">
+    <div class="page-header">
+        <div>
+            <h1>Price Diagnostics</h1>
+            <p class="text-muted mb-0">Source-aware price refresh health, stale snapshots, missing prices, and confidence distribution.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotLogs">Steam Trade Bot Logs</a>
+            <a class="btn app-button-primary" asp-page="/Admin/PriceDiagnostics">Price Diagnostics</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+        </div>
+    </div>
+
+    <section class="page-section">
+        <div class="card-grid live-status-grid">
+            @foreach (var source in Model.SourceSummaries)
+            {
+                <article class="content-card live-status-card">
+                    <span class="section-kicker">@source.Source</span>
+                    <div class="card-heading">
+                        <h3>@source.SnapshotCount snapshots</h3>
+                        <span class="status-badge" data-status="@(source.ErrorCount > 0 ? "Pending" : "Credited")">@source.ErrorCount errors</span>
+                    </div>
+                    <div class="history-metrics">
+                        <span><strong>Last success:</strong> @FormatLocal(source.LastSuccessUtc)</span>
+                        <span><strong>Last failure:</strong> @FormatLocal(source.LastFailureUtc)</span>
+                        <span><strong>429/rate limits:</strong> @source.RateLimitCount</span>
+                        <span><strong>Failure:</strong> <span class="break-value">@(source.LastFailureReason ?? "None")</span></span>
+                    </div>
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Distribution</h2>
+                <p class="section-description">Recent selected snapshot mix by source/type and confidence.</p>
+            </div>
+        </div>
+        <div class="card-grid live-status-grid">
+            <article class="content-card">
+                <h3>Source / Type</h3>
+                <div class="history-metrics">
+                    @foreach (var entry in Model.SelectedSourceDistribution)
+                    {
+                        <span><strong>@entry.Key:</strong> @entry.Value</span>
+                    }
+                </div>
+            </article>
+            <article class="content-card">
+                <h3>Confidence</h3>
+                <div class="history-metrics">
+                    @foreach (var entry in Model.ConfidenceDistribution)
+                    {
+                        <span><strong>@entry.Key:</strong> @entry.Value</span>
+                    }
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="page-section">
+        <div class="history-tabs" data-admin-price-tabs>
+            <div class="history-tab-list" role="tablist" aria-label="Price diagnostics sections">
+                <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-price-tab="missing">Missing (@Model.MissingPriceItems.Count)</button>
+                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-price-tab="stale">Stale (@Model.StalePriceItems.Count)</button>
+            </div>
+
+            <div class="history-tab-panel" data-admin-price-panel="missing">
+                @await Html.PartialAsync("_PriceIssueTable", Model.MissingPriceItems)
+            </div>
+            <div class="history-tab-panel" data-admin-price-panel="stale" hidden>
+                @await Html.PartialAsync("_PriceIssueTable", Model.StalePriceItems)
+            </div>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const root = document.querySelector('[data-admin-price-tabs]');
+            if (!root) {
+                return;
+            }
+
+            const tabs = Array.from(root.querySelectorAll('[data-admin-price-tab]'));
+            const panels = Array.from(root.querySelectorAll('[data-admin-price-panel]'));
+            tabs.forEach((tab) => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.adminPriceTab;
+                    tabs.forEach((candidate) => {
+                        const active = candidate.dataset.adminPriceTab === target;
+                        candidate.classList.toggle('active', active);
+                        candidate.setAttribute('aria-selected', active ? 'true' : 'false');
+                    });
+                    panels.forEach((panel) => {
+                        panel.hidden = panel.dataset.adminPricePanel !== target;
+                    });
+                });
+            });
+        })();
+    </script>
+}

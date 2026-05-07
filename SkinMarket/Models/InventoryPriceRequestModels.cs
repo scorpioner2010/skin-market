@@ -18,10 +18,17 @@ public class InventoryPriceStatusItem
     public string MarketHashName { get; set; } = string.Empty;
     public bool HasPrice { get; set; }
     public decimal? Price { get; set; }
+    public decimal? PriceUsd { get; set; }
+    public string DisplayPrice { get; set; } = "No reliable price";
     public string Currency { get; set; } = "USD";
     public string Source { get; set; } = "Unavailable";
+    public string PriceType { get; set; } = PriceTypeNames.Unavailable;
     public string Status { get; set; } = "Unavailable";
     public bool IsCached { get; set; }
     public bool IsEstimated { get; set; }
+    public bool IsStale { get; set; }
+    public decimal ConfidenceScore { get; set; }
+    public string ConfidenceLabel { get; set; } = "Unavailable";
+    public DateTime? LastUpdatedUtc { get; set; }
     public string? FailureReason { get; set; }
 }

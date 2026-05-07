@@ -47,6 +47,7 @@
                         <th>@L["PricingDebug_SteamMarket"]</th>
                         <th>CSFloat</th>
                         <th>Skinport</th>
+                        <th>DMarket</th>
                         <th>@L["PricingDebug_Final"]</th>
                         <th>@L["PricingDebug_Source"]</th>
                         <th>@L["Common_Status"]</th>
@@ -66,8 +67,9 @@
                         <td>@(item.SteamPrice.HasValue ? $"${item.SteamPrice.Value:0.00} ({item.SteamStatus})" : item.SteamStatus ?? "-")</td>
                         <td>@(item.CsFloatPrice.HasValue ? $"${item.CsFloatPrice.Value:0.00} ({item.CsFloatStatus})" : item.CsFloatStatus ?? "-")</td>
                         <td>@(item.SkinportPrice.HasValue ? $"${item.SkinportPrice.Value:0.00} ({item.SkinportStatus})" : item.SkinportStatus ?? "-")</td>
+                        <td>@(item.DMarketPrice.HasValue ? $"${item.DMarketPrice.Value:0.00} ({item.DMarketStatus})" : item.DMarketStatus ?? "-")</td>
                         <td>@(item.FinalPrice.HasValue ? $"${item.FinalPrice.Value:0.00}" : "-")</td>
-                        <td><span class="compact-badge compact-badge-neutral">@item.FinalSource</span></td>
+                        <td><span class="compact-badge compact-badge-neutral">@item.FinalSource / @item.FinalPriceType / @item.ConfidenceScore.ToString("0.00")</span></td>
                         <td><span class="compact-badge compact-badge-neutral">@item.FinalStatus</span></td>
                         <td class="debug-errors">
                             @if (!string.IsNullOrWhiteSpace(item.SteamError))
@@ -82,6 +84,10 @@
                             {
                                 <div><strong>Skinport:</strong> @item.SkinportError</div>
                             }
+                            @if (!string.IsNullOrWhiteSpace(item.DMarketError))
+                            {
+                                <div><strong>DMarket:</strong> @item.DMarketError</div>
+                            }
                             @if (!string.IsNullOrWhiteSpace(item.FailureReason))
                             {
                                 <div><strong>@L["PricingDebug_Final"]:</strong> @item.FailureReason</div>
@@ -89,6 +95,7 @@
                             @if (string.IsNullOrWhiteSpace(item.SteamError) &&
                                  string.IsNullOrWhiteSpace(item.CsFloatError) &&
                                  string.IsNullOrWhiteSpace(item.SkinportError) &&
+                                 string.IsNullOrWhiteSpace(item.DMarketError) &&
                                  string.IsNullOrWhiteSpace(item.FailureReason))
                             {
                                 <span>-</span>

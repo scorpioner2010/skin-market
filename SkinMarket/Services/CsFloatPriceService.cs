@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -91,24 +94,45 @@ public class CsFloatPriceService : ICsFloatPriceService
                     normalizedName,
                     StringComparison.Ordinal));
 
-            var scmPrice = listing?.Item?.Scm?.Price;
-            if (!scmPrice.HasValue || scmPrice <= 0)
+            var listingPriceUsd = TryGetTopLevelListingPriceUsd(listing);
+            if (!listingPriceUsd.HasValue)
             {
-                var failed = Failure("CSFloat item.scm.price is missing.", normalizedName);
+                var failed = Failure("CSFloat listing price is missing.", normalizedName);
                 await _appLogService.WriteAsync("Info", $"No price. Url={requestUri}; MarketHashName={normalizedName}; Reason={failed.FailureReason}", nameof(CsFloatPriceService), cancellationToken: CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
 
+            var observedAtUtc = DateTime.UtcNow;
+            var priceUsd = listingPriceUsd.Value;
             var result = new PriceSourceResult
             {
                 Success = true,
-                Price = Math.Round(scmPrice.Value / 100m, 2, MidpointRounding.AwayFromZero),
+                Price = priceUsd,
                 Currency = _options.PreferredCurrency,
-                Source = "CSFloat",
+                Source = PriceSourceNames.CSFloat,
+                SourceItemId = listing?.Id,
+                PriceType = PriceTypeNames.LowestListing,
                 Status = "Live",
-                LastUpdatedUtc = DateTime.UtcNow,
-                ResolvedMarketHashName = normalizedName
+                LastUpdatedUtc = observedAtUtc,
+                ObservedAtUtc = observedAtUtc,
+                ExpiresAtUtc = observedAtUtc.AddMinutes(Math.Max(1, _options.CsFloatCacheMinutes)),
+                TtlSeconds = Math.Max(1, _options.CsFloatCacheMinutes) * 60,
+                OriginalPrice = priceUsd,
+                OriginalCurrency = "USD",
+                FxRate = 1m,
+                BestAskUsd = priceUsd,
+                ConfidenceScore = 0.86m,
+                ResolvedMarketHashName = normalizedName,
+                ProvenanceJson = JsonSerializer.Serialize(new
+                {
+                    usedField = "price",
+                    ignoredSteamReferenceField = "item.scm.price",
+                    scmPriceCents = listing?.Item?.Scm?.Price,
+                    listingPriceCents = listing?.Price,
+                    scmVolume = listing?.Item?.Scm?.Volume
+                }),
+                RawPayloadHash = Hash(JsonSerializer.Serialize(listing))
             };
 
             await _appLogService.WriteAsync("Info", $"Success. Url={requestUri}; MarketHashName={normalizedName}; Price={result.Price}; Currency={result.Currency}", nameof(CsFloatPriceService), cancellationToken: CancellationToken.None);
@@ -150,12 +174,26 @@ public class CsFloatPriceService : ICsFloatPriceService
     {
         return new PriceSourceResult
         {
-            Source = "CSFloat",
+            Source = PriceSourceNames.CSFloat,
             Status = "Unavailable",
+            PriceType = PriceTypeNames.Unavailable,
             FailureReason = failureReason,
             Currency = "USD",
             LastUpdatedUtc = DateTime.UtcNow,
             ResolvedMarketHashName = marketHashName
         };
+    }
+
+    internal static decimal? TryGetTopLevelListingPriceUsd(CsFloatListingDto? listing)
+    {
+        return listing?.Price is > 0
+            ? Math.Round(listing.Price.Value / 100m, 2, MidpointRounding.AwayFromZero)
+            : null;
+    }
+
+    private static string Hash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

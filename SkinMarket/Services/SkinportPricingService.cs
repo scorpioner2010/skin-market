@@ -1,5 +1,7 @@
 using System.Text.Json;
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -47,6 +49,16 @@ public class SkinportPricingService : ISkinportPricingService
             return Failure($"Skinport pricing is not configured for {game.DisplayName}.", normalizedName);
         }
 
+        var liveMap = await GetItemsPriceMapAsync(gameType, cancellationToken);
+        if (liveMap.TryGetValue(normalizedName, out var liveItem))
+        {
+            var liveResult = ResolveFromLiveItem(liveItem, normalizedName);
+            if (liveResult.Success)
+            {
+                return liveResult;
+            }
+        }
+
         var historyMap = await GetSalesHistoryAsync([normalizedName], gameType, cancellationToken);
         if (historyMap.TryGetValue(normalizedName, out var historyItem))
         {
@@ -68,6 +80,60 @@ public class SkinportPricingService : ISkinportPricingService
         }
 
         return Failure("Skinport did not return a usable history or out-of-stock price.", normalizedName);
+    }
+
+    public async Task<IReadOnlyDictionary<string, SkinportItemDto>> GetItemsPriceMapAsync(GameType gameType, CancellationToken cancellationToken = default)
+    {
+        var game = _gameCatalog.Get(gameType);
+        var cacheKey = $"skinport-items::{game.Key}::{_options.PreferredCurrency}";
+        if (_memoryCache.TryGetValue<IReadOnlyDictionary<string, SkinportItemDto>>(cacheKey, out var cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        var endpoint =
+            $"https://api.skinport.com/v1/items?app_id={game.SteamAppId}&currency={Uri.EscapeDataString(_options.PreferredCurrency)}&tradable=1";
+
+        var stopwatch = Stopwatch.StartNew();
+        _logger.LogInformation("Skinport live items lookup started for {GameType}.", gameType);
+        await _appLogService.WriteAsync("Info", $"Start live items. Url={endpoint}; GameType={(int)gameType}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
+        try
+        {
+            using var response = await _httpClient.GetAsync(endpoint, cancellationToken);
+            stopwatch.Stop();
+            await _appLogService.WriteAsync("Info", $"End live items. Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; GameType={(int)gameType}", nameof(SkinportPricingService), cancellationToken: cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                await _appLogService.WriteAsync("Warning", $"Fail live items. Url={endpoint}; Http={(int)response.StatusCode}; Reason=Skinport items returned HTTP {(int)response.StatusCode}.", nameof(SkinportPricingService), cancellationToken: CancellationToken.None);
+                return EmptyItemsMap();
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var payload = await JsonSerializer.DeserializeAsync<List<SkinportItemDto>>(
+                stream,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                cancellationToken);
+
+            var result = payload?
+                .Where(item => !string.IsNullOrWhiteSpace(item.MarketHashName))
+                .ToDictionary(item => item.MarketHashName, item => item, StringComparer.Ordinal)
+                ?? new Dictionary<string, SkinportItemDto>(StringComparer.Ordinal);
+
+            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportItemsCacheMinutes)));
+            return result;
+        }
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            await _appLogService.WriteAsync("Warning", $"Timeout live items. Url={endpoint}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}", nameof(SkinportPricingService), exception, CancellationToken.None);
+            return EmptyItemsMap();
+        }
+        catch (Exception exception) when (exception is HttpRequestException or JsonException)
+        {
+            stopwatch.Stop();
+            await _appLogService.WriteAsync("Error", $"Fail live items. Url={endpoint}; ExceptionType={exception.GetType().Name}; Reason={exception.Message}", nameof(SkinportPricingService), exception, CancellationToken.None);
+            return EmptyItemsMap();
+        }
     }
 
     public async Task<IReadOnlyDictionary<string, SkinportSalesHistoryDto>> GetSalesHistoryAsync(
@@ -195,7 +261,7 @@ public class SkinportPricingService : ISkinportPricingService
                 .ToDictionary(item => item.MarketHashName, item => item, StringComparer.Ordinal)
                 ?? new Dictionary<string, SkinportOutOfStockItemDto>(StringComparer.Ordinal);
 
-            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportItemsCacheMinutes)));
+            _memoryCache.Set(cacheKey, result, TimeSpan.FromMinutes(Math.Max(1, _options.SkinportOutOfStockCacheMinutes)));
             return result;
         }
         catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested)
@@ -237,9 +303,28 @@ public class SkinportPricingService : ISkinportPricingService
                     Price = Math.Round(median, 2, MidpointRounding.AwayFromZero),
                     Currency = item.Currency,
                     Source = "Skinport",
-                    Status = "Live",
+                    PriceType = PriceTypeNames.MedianSale,
+                    Status = "Estimated",
+                    IsEstimated = true,
                     LastUpdatedUtc = DateTime.UtcNow,
-                    ResolvedMarketHashName = marketHashName
+                    ObservedAtUtc = DateTime.UtcNow,
+                    ExpiresAtUtc = DateTime.UtcNow.AddMinutes(Math.Max(1, _options.SkinportHistoryCacheMinutes)),
+                    TtlSeconds = Math.Max(1, _options.SkinportHistoryCacheMinutes) * 60,
+                    OriginalPrice = Math.Round(median, 2, MidpointRounding.AwayFromZero),
+                    OriginalCurrency = item.Currency,
+                    FxRate = string.Equals(item.Currency, "USD", StringComparison.OrdinalIgnoreCase) ? 1m : null,
+                    Volume = candidate.Window.Volume,
+                    SalesCount = candidate.Window.Volume,
+                    ConfidenceScore = 0.70m,
+                    ResolvedMarketHashName = marketHashName,
+                    ProvenanceJson = JsonSerializer.Serialize(new
+                    {
+                        endpoint = "skinport/v1/sales/history",
+                        window = candidate.Status,
+                        usedField = "median",
+                        currency = item.Currency
+                    }),
+                    RawPayloadHash = Hash(JsonSerializer.Serialize(item))
                 };
             }
         }
@@ -247,24 +332,89 @@ public class SkinportPricingService : ISkinportPricingService
         return Failure("Skinport history did not contain a usable median.", marketHashName);
     }
 
+    private PriceSourceResult ResolveFromLiveItem(SkinportItemDto item, string marketHashName)
+    {
+        var livePrice = TryGetLiveMinPriceUsd(item);
+        if (!livePrice.HasValue)
+        {
+            return Failure("Skinport live items did not contain min_price with quantity > 0.", marketHashName);
+        }
+
+        var observedAtUtc = item.UpdatedAt.HasValue
+            ? DateTimeOffset.FromUnixTimeSeconds(item.UpdatedAt.Value).UtcDateTime
+            : DateTime.UtcNow;
+        var priceUsd = livePrice.Value;
+        return new PriceSourceResult
+        {
+            Success = true,
+            Price = priceUsd,
+            Currency = item.Currency,
+            Source = PriceSourceNames.Skinport,
+            PriceType = PriceTypeNames.LowestListing,
+            Status = "Live",
+            LastUpdatedUtc = DateTime.UtcNow,
+            ObservedAtUtc = observedAtUtc,
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(Math.Max(1, _options.SkinportItemsCacheMinutes)),
+            TtlSeconds = Math.Max(1, _options.SkinportItemsCacheMinutes) * 60,
+            OriginalPrice = priceUsd,
+            OriginalCurrency = item.Currency,
+            FxRate = string.Equals(item.Currency, "USD", StringComparison.OrdinalIgnoreCase) ? 1m : null,
+            Quantity = item.Quantity,
+            BestAskUsd = priceUsd,
+            ConfidenceScore = 0.94m,
+            ResolvedMarketHashName = marketHashName,
+            ProvenanceJson = JsonSerializer.Serialize(new
+            {
+                endpoint = "skinport/v1/items",
+                usedField = "min_price",
+                quantity = item.Quantity,
+                median_price = item.MedianPrice,
+                mean_price = item.MeanPrice,
+                suggested_price = item.SuggestedPrice
+            }),
+            RawPayloadHash = Hash(JsonSerializer.Serialize(item))
+        };
+    }
+
     private PriceSourceResult ResolveFromOutOfStock(SkinportOutOfStockItemDto item, string marketHashName)
     {
-        var price = item.SuggestedPrice ?? item.AvgSalePrice;
+        var price = TryGetOutOfStockEstimateUsd(item);
         if (!price.HasValue || price <= 0)
         {
             return Failure("Skinport out-of-stock data did not contain a usable price.", marketHashName);
         }
 
+        var isSuggested = !item.AvgSalePrice.HasValue && item.SuggestedPrice.HasValue;
+        var observedAtUtc = DateTime.UtcNow;
         return new PriceSourceResult
         {
             Success = true,
             Price = Math.Round(price.Value, 2, MidpointRounding.AwayFromZero),
             Currency = item.Currency,
-            Source = "Skinport",
+            Source = PriceSourceNames.Skinport,
+            PriceType = isSuggested ? PriceTypeNames.Suggested : PriceTypeNames.AvgSale,
             Status = "Estimated",
             IsEstimated = true,
-            LastUpdatedUtc = DateTime.UtcNow,
-            ResolvedMarketHashName = marketHashName
+            LastUpdatedUtc = observedAtUtc,
+            ObservedAtUtc = observedAtUtc,
+            ExpiresAtUtc = observedAtUtc.AddMinutes(Math.Max(1, _options.SkinportOutOfStockCacheMinutes)),
+            TtlSeconds = Math.Max(1, _options.SkinportOutOfStockCacheMinutes) * 60,
+            OriginalPrice = Math.Round(price.Value, 2, MidpointRounding.AwayFromZero),
+            OriginalCurrency = item.Currency,
+            FxRate = string.Equals(item.Currency, "USD", StringComparison.OrdinalIgnoreCase) ? 1m : null,
+            SalesCount = item.SalesLast90Days,
+            ConfidenceScore = isSuggested ? 0.42m : 0.60m,
+            ResolvedMarketHashName = marketHashName,
+            ProvenanceJson = JsonSerializer.Serialize(new
+            {
+                endpoint = "skinport/v1/items",
+                mode = "out_of_stock",
+                usedField = isSuggested ? "suggested_price" : "avg_sale_price",
+                avg_sale_price = item.AvgSalePrice,
+                suggested_price = item.SuggestedPrice,
+                sales_last_90d = item.SalesLast90Days
+            }),
+            RawPayloadHash = Hash(JsonSerializer.Serialize(item))
         };
     }
 
@@ -272,8 +422,9 @@ public class SkinportPricingService : ISkinportPricingService
     {
         return new PriceSourceResult
         {
-            Source = "Skinport",
+            Source = PriceSourceNames.Skinport,
             Status = "Unavailable",
+            PriceType = PriceTypeNames.Unavailable,
             FailureReason = failureReason,
             Currency = "USD",
             LastUpdatedUtc = DateTime.UtcNow,
@@ -289,5 +440,31 @@ public class SkinportPricingService : ISkinportPricingService
     private static IReadOnlyDictionary<string, SkinportOutOfStockItemDto> EmptyOutOfStockMap()
     {
         return new Dictionary<string, SkinportOutOfStockItemDto>(StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyDictionary<string, SkinportItemDto> EmptyItemsMap()
+    {
+        return new Dictionary<string, SkinportItemDto>(StringComparer.Ordinal);
+    }
+
+    internal static decimal? TryGetLiveMinPriceUsd(SkinportItemDto item)
+    {
+        return item.Quantity is > 0 && item.MinPrice is > 0
+            ? Math.Round(item.MinPrice.Value, 2, MidpointRounding.AwayFromZero)
+            : null;
+    }
+
+    internal static decimal? TryGetOutOfStockEstimateUsd(SkinportOutOfStockItemDto item)
+    {
+        var price = item.AvgSalePrice ?? item.SuggestedPrice;
+        return price is > 0
+            ? Math.Round(price.Value, 2, MidpointRounding.AwayFromZero)
+            : null;
+    }
+
+    private static string Hash(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

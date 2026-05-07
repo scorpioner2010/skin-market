@@ -133,6 +133,7 @@ builder.Services.AddHostedService<LocalSteamBotHostService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
 builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
+builder.Services.AddSingleton<IFxRateService, UsdOnlyFxRateService>();
 builder.Services.AddSingleton<InventoryPriceRefreshService>();
 builder.Services.AddSingleton<IInventoryPriceRefreshService>(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
 builder.Services.AddHostedService(provider => provider.GetRequiredService<InventoryPriceRefreshService>());
@@ -153,6 +154,14 @@ builder.Services.AddHostedService<SteamTradeSyncService>();
 builder.Services.AddHttpClient<ICsFloatPriceService, CsFloatPriceService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(pricing-refresh)"));
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+});
+builder.Services.AddHttpClient<IDMarketPricingService, DMarketPricingService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.dmarket.com", UriKind.Absolute);
+    client.Timeout = TimeSpan.FromSeconds(20);
     client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
     client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(pricing-refresh)"));
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -551,6 +560,7 @@ app.MapPost("/api/inventory/prices/status", async (
         {
             Currency = "USD",
             Source = "Unavailable",
+            PriceType = PriceTypeNames.Unavailable,
             Status = "Refreshing",
             FailureReason = "Price refresh pending."
         };
@@ -561,11 +571,20 @@ app.MapPost("/api/inventory/prices/status", async (
             MarketHashName = normalizedMarketHashName,
             HasPrice = status.HasPrice,
             Price = status.Price,
+            PriceUsd = status.PriceUsd,
+            DisplayPrice = status.HasPrice && status.DisplayPriceUsd.HasValue
+                ? $"{(status.IsEstimated ? "~" : string.Empty)}${status.DisplayPriceUsd.Value:0.00} {(status.IsStale ? "Stale" : status.IsCached ? "Cached" : status.IsEstimated ? "Estimated" : status.Source)}"
+                : "No reliable price",
             Currency = status.Currency,
             Source = status.Source,
+            PriceType = status.PriceType,
             Status = status.Status,
             IsCached = status.IsCached,
             IsEstimated = status.IsEstimated,
+            IsStale = status.IsStale,
+            ConfidenceScore = status.ConfidenceScore,
+            ConfidenceLabel = status.ConfidenceLabel,
+            LastUpdatedUtc = status.LastUpdatedUtc,
             FailureReason = status.FailureReason
         };
     }).ToList();

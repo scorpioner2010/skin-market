@@ -306,7 +306,7 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
                 result.FailureReason);
             await PersistAppLogAsync(
                 result.HasPrice ? "Info" : "Warning",
-                $"Worker done. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}; HasPrice={result.HasPrice}; Status={result.Status}; Source={result.Source}; Failure={result.FailureReason}",
+                $"Worker done. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}; HasPrice={result.HasPrice}; Status={result.Status}; Source={result.Source}; PriceType={result.PriceType}; PriceUsd={result.Price?.ToString() ?? "<null>"}; Estimated={result.IsEstimated}; Cached={result.IsCached}; Stale={result.IsStale}; Confidence={result.ConfidenceScore}; Failure={result.FailureReason}",
                 nameof(InventoryPriceRefreshService),
                 null,
                 CancellationToken.None);
@@ -426,7 +426,9 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             var existing = await dbContext.PriceSnapshots.SingleOrDefaultAsync(
                 item => item.AppId == appId &&
                         item.MarketHashName == marketHashName &&
-                        item.Currency == _options.PreferredCurrency,
+                        item.Currency == _options.PreferredCurrency &&
+                        item.Source == PriceSourceNames.Unavailable &&
+                        item.PriceType == PriceTypeNames.Unavailable,
                 cancellationToken);
 
             var updatedAtUtc = DateTime.UtcNow;
@@ -442,14 +444,19 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             }
 
             existing.Currency = _options.PreferredCurrency;
-            existing.Source = "Unavailable";
+            existing.Source = PriceSourceNames.Unavailable;
+            existing.PriceType = PriceTypeNames.Unavailable;
             existing.Price = null;
+            existing.PriceUsd = null;
             existing.Status = "Unavailable";
             existing.HasPrice = false;
             existing.IsEstimated = false;
+            existing.ConfidenceScore = 0m;
+            existing.ObservedAtUtc = updatedAtUtc;
             existing.FailureReason = failureReason;
             existing.UpdatedAtUtc = updatedAtUtc;
-            existing.ExpiresAtUtc = updatedAtUtc.AddMinutes(Math.Max(1, _options.NegativeCacheMinutes));
+            existing.TtlSeconds = Math.Max(1, _options.NegativeCacheMinutes) * 60;
+            existing.ExpiresAtUtc = updatedAtUtc.AddSeconds(existing.TtlSeconds);
 
             await dbContext.SaveChangesAsync(cancellationToken);
             _logger.LogInformation(

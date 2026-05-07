@@ -11,4 +11,6 @@ public sealed class GameDefinition
     public bool SupportsInventory { get; init; }
     public bool SupportsSteamMarketPricing { get; init; }
     public bool SupportsSkinportPricing { get; init; }
+    public bool SupportsDMarketPricing { get; init; }
+    public string? DMarketGameId { get; init; }
 }
