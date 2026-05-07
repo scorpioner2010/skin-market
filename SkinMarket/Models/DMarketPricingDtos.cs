@@ -64,6 +64,9 @@ public class DMarketMoneyDto
     [JsonPropertyName("amount")]
     public string? AmountLower { get; set; }
 
+    [JsonIgnore]
     public string? Currency => CurrencyUpper ?? CurrencyLower;
+
+    [JsonIgnore]
     public string? Amount => AmountUpper ?? AmountLower;
 }

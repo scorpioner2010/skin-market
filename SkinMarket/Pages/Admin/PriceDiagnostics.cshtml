@@ -2,14 +2,16 @@
 @model SkinMarket.Pages.Admin.PriceDiagnosticsModel
 @{
     ViewData["Title"] = "Price Diagnostics";
-    string FormatLocal(DateTime? value, string fallback = "Never") => value?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? fallback;
+    string FormatUtc(DateTime? value) => value?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-";
+    string FormatMoney(decimal? value) => value.HasValue ? $"${value.Value:0.00}" : "-";
+    string FormatDecimal(decimal? value) => value.HasValue ? value.Value.ToString("0.####") : "-";
 }
 
 <div class="py-4">
     <div class="page-header">
         <div>
             <h1>Price Diagnostics</h1>
-            <p class="text-muted mb-0">Source-aware price refresh health, stale snapshots, missing prices, and confidence distribution.</p>
+            <p class="text-muted mb-0">Source-level price events from memory and local files since @Model.FromUtc.ToString("yyyy-MM-dd HH:mm:ss") UTC.</p>
         </div>
         <div class="action-row">
             <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
@@ -20,21 +22,78 @@
     </div>
 
     <section class="page-section">
+        <form method="get" class="content-card">
+            <div class="admin-filter-grid">
+                <label>
+                    <span>Range</span>
+                    <select name="range" class="form-select app-input">
+                        <option value="15m" selected="@(Model.Range == "15m")">Last 15 minutes</option>
+                        <option value="1h" selected="@(Model.Range == "1h")">Last 1 hour</option>
+                        <option value="6h" selected="@(Model.Range == "6h")">Last 6 hours</option>
+                        <option value="24h" selected="@(Model.Range == "24h")">Last 24 hours</option>
+                        <option value="7d" selected="@(Model.Range == "7d")">Last 7 days</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Game</span>
+                    <select name="game" class="form-select app-input">
+                        <option value="all" selected="@(Model.Game == "all")">All</option>
+                        @foreach (var game in Model.SupportedGames.Where(item => item.SupportsInventory))
+                        {
+                            <option value="@game.Key" selected="@(Model.Game == game.Key || Model.Game == game.Type.ToString())">@game.DisplayName</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>Source</span>
+                    <select name="source" class="form-select app-input">
+                        @foreach (var source in new[] { "all", "Steam", "Skinport", "DMarket", "CSFloat", "Unavailable" })
+                        {
+                            <option value="@source" selected="@(Model.Source == source)">@source</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>Status</span>
+                    <select name="status" class="form-select app-input">
+                        @foreach (var status in new[] { "all", "Live", "Cached", "Stale", "Estimated", "Unavailable", "RateLimited", "Timeout" })
+                        {
+                            <option value="@status" selected="@(Model.Status == status)">@status</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>Event</span>
+                    <select name="eventType" class="form-select app-input">
+                        @foreach (var eventType in new[] { "all", "FinalResolutionFailed", "NoReliablePrice", "SourceFailed", "SourceNotFound", "SourceReturnedNoUsablePrice", "SourceRateLimited", "SourceTimeout", "SourceRejected", "CurrencyMismatch", "ParseFailed", "ExternalApiError" })
+                        {
+                            <option value="@eventType" selected="@(Model.EventType == eventType)">@eventType</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    <span>MarketHashName</span>
+                    <input name="search" value="@Model.Search" class="form-control app-input" />
+                </label>
+                <label>
+                    <span>AssetId</span>
+                    <input name="assetId" value="@Model.AssetId" class="form-control app-input" />
+                </label>
+            </div>
+            <div class="action-row mt-3">
+                <button type="submit" class="btn app-button-primary">Apply</button>
+                <a class="btn app-button-secondary" asp-page="/Admin/PriceDiagnostics">Reset</a>
+            </div>
+        </form>
+    </section>
+
+    <section class="page-section">
         <div class="card-grid live-status-grid">
-            @foreach (var source in Model.SourceSummaries)
+            @foreach (var card in Model.SummaryCards)
             {
                 <article class="content-card live-status-card">
-                    <span class="section-kicker">@source.Source</span>
-                    <div class="card-heading">
-                        <h3>@source.SnapshotCount snapshots</h3>
-                        <span class="status-badge" data-status="@(source.ErrorCount > 0 ? "Pending" : "Credited")">@source.ErrorCount errors</span>
-                    </div>
-                    <div class="history-metrics">
-                        <span><strong>Last success:</strong> @FormatLocal(source.LastSuccessUtc)</span>
-                        <span><strong>Last failure:</strong> @FormatLocal(source.LastFailureUtc)</span>
-                        <span><strong>429/rate limits:</strong> @source.RateLimitCount</span>
-                        <span><strong>Failure:</strong> <span class="break-value">@(source.LastFailureReason ?? "None")</span></span>
-                    </div>
+                    <span class="section-kicker">@card.Label</span>
+                    <h3>@card.Value</h3>
                 </article>
             }
         </div>
@@ -43,72 +102,120 @@
     <section class="page-section">
         <div class="section-heading">
             <div>
-                <h2>Distribution</h2>
-                <p class="section-description">Recent selected snapshot mix by source/type and confidence.</p>
+                <h2>Items without reliable price</h2>
+                <p class="section-description">Latest resolver failures with per-source reasons from problem diagnostics.</p>
             </div>
         </div>
-        <div class="card-grid live-status-grid">
-            <article class="content-card">
-                <h3>Source / Type</h3>
-                <div class="history-metrics">
-                    @foreach (var entry in Model.SelectedSourceDistribution)
-                    {
-                        <span><strong>@entry.Key:</strong> @entry.Value</span>
-                    }
+        <div class="market-table-shell">
+            <div class="market-table-list">
+                <div class="market-table-row market-table-header">
+                    <div class="market-table-cell market-table-item-cell">MarketHashName</div>
+                    <div class="market-table-cell">Game</div>
+                    <div class="market-table-cell market-table-item-cell">Final reason</div>
+                    <div class="market-table-cell market-table-item-cell">Skinport</div>
+                    <div class="market-table-cell market-table-item-cell">DMarket</div>
+                    <div class="market-table-cell market-table-item-cell">Steam</div>
+                    <div class="market-table-cell market-table-item-cell">CSFloat</div>
+                    <div class="market-table-cell">Last attempt</div>
                 </div>
-            </article>
-            <article class="content-card">
-                <h3>Confidence</h3>
-                <div class="history-metrics">
-                    @foreach (var entry in Model.ConfidenceDistribution)
-                    {
-                        <span><strong>@entry.Key:</strong> @entry.Value</span>
-                    }
-                </div>
-            </article>
+                @foreach (var item in Model.ItemsWithoutReliablePrice)
+                {
+                    <article class="market-table-row">
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="MarketHashName">@item.MarketHashName</div>
+                        <div class="market-table-cell" data-label="Game">@item.Game</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="Final reason">@item.FinalReason</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="Skinport">@item.SkinportReason</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="DMarket">@item.DMarketReason</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="Steam">@item.SteamReason</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="CSFloat">@item.CSFloatReason</div>
+                        <div class="market-table-cell" data-label="Last attempt">@FormatUtc(item.LastAttemptUtc)</div>
+                    </article>
+                }
+            </div>
         </div>
     </section>
 
     <section class="page-section">
-        <div class="history-tabs" data-admin-price-tabs>
-            <div class="history-tab-list" role="tablist" aria-label="Price diagnostics sections">
-                <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-price-tab="missing">Missing (@Model.MissingPriceItems.Count)</button>
-                <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-price-tab="stale">Stale (@Model.StalePriceItems.Count)</button>
+        <div class="section-heading">
+            <div>
+                <h2>Last source failures</h2>
+                <p class="section-description">Fresh price source failures only. Stale cached snapshots are intentionally hidden.</p>
             </div>
+        </div>
+        <div class="market-table-shell">
+            <div class="market-table-list">
+                <div class="market-table-row market-table-header">
+                    <div class="market-table-cell">UTC time</div>
+                    <div class="market-table-cell">Level</div>
+                    <div class="market-table-cell">Game</div>
+                    <div class="market-table-cell market-table-item-cell">MarketHashName</div>
+                    <div class="market-table-cell">AssetId</div>
+                    <div class="market-table-cell">Source</div>
+                    <div class="market-table-cell">Price type</div>
+                    <div class="market-table-cell">Price</div>
+                    <div class="market-table-cell">Status</div>
+                    <div class="market-table-cell">Confidence</div>
+                    <div class="market-table-cell">Flags</div>
+                    <div class="market-table-cell">HTTP</div>
+                    <div class="market-table-cell">Duration</div>
+                    <div class="market-table-cell market-table-item-cell">Failure / details</div>
+                </div>
+                @foreach (var item in Model.LastSourceFailures)
+                {
+                    <article class="market-table-row">
+                        <div class="market-table-cell" data-label="UTC time">@FormatUtc(item.CreatedAtUtc)</div>
+                        <div class="market-table-cell" data-label="Level">@item.Level</div>
+                        <div class="market-table-cell" data-label="Game">@Model.GameName(item.AppId, item.GameType)</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="MarketHashName">@(item.MarketHashName ?? item.NormalizedMarketHashName ?? "-")</div>
+                        <div class="market-table-cell break-value" data-label="AssetId">@(item.AssetId ?? "-")</div>
+                        <div class="market-table-cell" data-label="Source">@(item.Source ?? "-")</div>
+                        <div class="market-table-cell" data-label="Price type">@(item.PriceType ?? "-")</div>
+                        <div class="market-table-cell" data-label="Price">@FormatMoney(item.PriceUsd)</div>
+                        <div class="market-table-cell" data-label="Status">@(item.Status ?? item.EventType)</div>
+                        <div class="market-table-cell" data-label="Confidence">@FormatDecimal(item.ConfidenceScore)</div>
+                        <div class="market-table-cell" data-label="Flags">
+                            @((item.IsEstimated == true ? "estimated " : "") + (item.IsCached == true ? "cached " : "") + (item.IsStale == true ? "stale" : ""))
+                        </div>
+                        <div class="market-table-cell" data-label="HTTP">@(item.HttpStatusCode?.ToString() ?? "-")</div>
+                        <div class="market-table-cell" data-label="Duration">@(item.DurationMs.HasValue ? $"{item.DurationMs}ms" : "-")</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="Failure / details">@Model.ProblemDetails(item)</div>
+                    </article>
+                }
+            </div>
+        </div>
+    </section>
 
-            <div class="history-tab-panel" data-admin-price-panel="missing">
-                @await Html.PartialAsync("_PriceIssueTable", Model.MissingPriceItems)
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Last final resolution failures</h2>
+                <p class="section-description">Compact resolver summaries for items where no reliable fresh price was selected.</p>
             </div>
-            <div class="history-tab-panel" data-admin-price-panel="stale" hidden>
-                @await Html.PartialAsync("_PriceIssueTable", Model.StalePriceItems)
+        </div>
+        <div class="market-table-shell">
+            <div class="market-table-list">
+                <div class="market-table-row market-table-header">
+                    <div class="market-table-cell">UTC time</div>
+                    <div class="market-table-cell">Game</div>
+                    <div class="market-table-cell market-table-item-cell">MarketHashName</div>
+                    <div class="market-table-cell">Source</div>
+                    <div class="market-table-cell">Event</div>
+                    <div class="market-table-cell">Status</div>
+                    <div class="market-table-cell market-table-item-cell">Failure / details</div>
+                </div>
+                @foreach (var item in Model.LastFinalResolutionFailures)
+                {
+                    <article class="market-table-row">
+                        <div class="market-table-cell" data-label="UTC time">@FormatUtc(item.CreatedAtUtc)</div>
+                        <div class="market-table-cell" data-label="Game">@Model.GameName(item.AppId, item.GameType)</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="MarketHashName">@(item.MarketHashName ?? item.NormalizedMarketHashName ?? "-")</div>
+                        <div class="market-table-cell" data-label="Source">@(item.Source ?? "-")</div>
+                        <div class="market-table-cell" data-label="Event">@item.EventType</div>
+                        <div class="market-table-cell" data-label="Status">@(item.Status ?? item.EventType)</div>
+                        <div class="market-table-cell market-table-item-cell break-value" data-label="Failure / details">@Model.ProblemDetails(item)</div>
+                    </article>
+                }
             </div>
         </div>
     </section>
 </div>
-
-@section Scripts {
-    <script>
-        (() => {
-            const root = document.querySelector('[data-admin-price-tabs]');
-            if (!root) {
-                return;
-            }
-
-            const tabs = Array.from(root.querySelectorAll('[data-admin-price-tab]'));
-            const panels = Array.from(root.querySelectorAll('[data-admin-price-panel]'));
-            tabs.forEach((tab) => {
-                tab.addEventListener('click', () => {
-                    const target = tab.dataset.adminPriceTab;
-                    tabs.forEach((candidate) => {
-                        const active = candidate.dataset.adminPriceTab === target;
-                        candidate.classList.toggle('active', active);
-                        candidate.setAttribute('aria-selected', active ? 'true' : 'false');
-                    });
-                    panels.forEach((panel) => {
-                        panel.hidden = panel.dataset.adminPricePanel !== target;
-                    });
-                });
-            });
-        })();
-    </script>
-}

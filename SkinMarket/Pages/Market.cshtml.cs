@@ -44,6 +44,7 @@ public class MarketModel : PageModel
 
     public List<MarketListingItem> Items { get; private set; } = new();
     public List<GroupedMarketListingItem> GroupedItems { get; private set; } = new();
+    public Dictionary<string, List<PriceSourceBreakdownItem>> PriceBreakdownsByMarketHashName { get; private set; } = new(StringComparer.Ordinal);
     public List<MarketPurchaseRecord> Purchases { get; private set; } = new();
     public Guid? CurrentUserId { get; private set; }
     public decimal CurrentBalance { get; private set; }
@@ -53,6 +54,13 @@ public class MarketModel : PageModel
     public IReadOnlyList<GameDefinition> SupportedGames => _gameCatalog.SupportedGames;
     [BindProperty(SupportsGet = true)]
     public GameType Game { get; set; } = GameType.CS2;
+    private static readonly string[] PriceBreakdownSources =
+    [
+        PriceSourceNames.Skinport,
+        PriceSourceNames.DMarket,
+        PriceSourceNames.Steam,
+        PriceSourceNames.CSFloat
+    ];
     [TempData]
     public string? SuccessMessage { get; set; }
     [TempData]
@@ -77,6 +85,15 @@ public class MarketModel : PageModel
         CurrentGameDisplayName = currentGame.DisplayName;
         Items = await _marketService.GetAvailableItemsAsync(CurrentGameType, cancellationToken);
         TotalAvailableItemCount = Items.Count;
+        PriceBreakdownsByMarketHashName = await LoadPriceBreakdownsAsync(
+            Items
+                .Select(item => item.MarketHashName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToList(),
+            currentGame.SteamAppId,
+            cancellationToken);
         GroupedItems = BuildGroupedItems(Items, CurrentUserId);
         if (CurrentUserId.HasValue)
         {
@@ -174,6 +191,84 @@ public class MarketModel : PageModel
         return RedirectToCurrentGame(Game);
     }
 
+    public string GetPriceNumberText(GroupedMarketListingItem item)
+    {
+        return item.HasReliablePrice && item.Price.HasValue
+            ? $"${item.Price.Value:0.00}"
+            : "-";
+    }
+
+    public string GetPriceStatusLabel(GroupedMarketListingItem item)
+    {
+        if (!item.HasReliablePrice)
+        {
+            return "No reliable price";
+        }
+
+        if (item.IsStale)
+        {
+            return "Stale";
+        }
+
+        if (item.IsCached)
+        {
+            return item.IsEstimated ? "Estimated cached" : "Cached";
+        }
+
+        return item.IsEstimated ? "Estimated" : "Live";
+    }
+
+    public string GetPriceSourceLabel(string? source)
+    {
+        return source switch
+        {
+            PriceSourceNames.CSFloat => "CSFloat",
+            PriceSourceNames.Skinport => "Skinport",
+            PriceSourceNames.Steam => "Steam",
+            PriceSourceNames.DMarket => "DMarket",
+            _ => "Unavailable"
+        };
+    }
+
+    public IReadOnlyList<PriceSourceBreakdownItem> GetPriceBreakdown(string? marketHashName)
+    {
+        if (string.IsNullOrWhiteSpace(marketHashName))
+        {
+            return [];
+        }
+
+        var normalized = MarketHashNameUtility.Normalize(marketHashName) ?? marketHashName.Trim();
+        return PriceBreakdownsByMarketHashName.GetValueOrDefault(normalized) ?? [];
+    }
+
+    public string GetBreakdownPriceText(PriceSourceBreakdownItem item)
+    {
+        return item.HasPrice && item.PriceUsd.HasValue
+            ? $"${item.PriceUsd.Value:0.00}"
+            : "-";
+    }
+
+    public string GetBreakdownMetaText(PriceSourceBreakdownItem item)
+    {
+        if (!item.HasPrice)
+        {
+            return string.IsNullOrWhiteSpace(item.FailureReason) ? item.Status : item.FailureReason;
+        }
+
+        var flags = new List<string> { item.PriceType };
+        flags.Add(item.IsStale ? "stale" : item.IsEstimated ? "estimated" : item.Status);
+        if (item.Quantity.HasValue)
+        {
+            flags.Add($"qty {item.Quantity.Value}");
+        }
+        else if (item.Volume.HasValue)
+        {
+            flags.Add($"vol {item.Volume.Value}");
+        }
+
+        return string.Join(" / ", flags.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
     private IActionResult RedirectToCurrentGame(GameType? gameType = null)
     {
         var game = _gameCatalog.Get(gameType ?? Game);
@@ -239,6 +334,129 @@ public class MarketModel : PageModel
                                      activeDeliveryStatuses.Contains(item.DeliveryStatus), cancellationToken);
     }
 
+    private async Task<Dictionary<string, List<PriceSourceBreakdownItem>>> LoadPriceBreakdownsAsync(
+        IReadOnlyCollection<string> marketHashNames,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        if (marketHashNames.Count == 0)
+        {
+            return new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        }
+
+        var normalizedMarketHashNames = marketHashNames
+            .Select(MarketHashNameUtility.Normalize)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (normalizedMarketHashNames.Count == 0)
+        {
+            return new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        }
+
+        var snapshots = await _dbContext.PriceSnapshots
+            .AsNoTracking()
+            .Where(item => item.AppId == appId && normalizedMarketHashNames.Contains(item.MarketHashName))
+            .ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var snapshotsByMarketHashName = snapshots
+            .GroupBy(item => MarketHashNameUtility.Normalize(item.MarketHashName) ?? item.MarketHashName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        var breakdowns = new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        foreach (var normalizedName in normalizedMarketHashNames)
+        {
+            breakdowns[normalizedName] = BuildPriceBreakdownItems(
+                snapshotsByMarketHashName.GetValueOrDefault(normalizedName) ?? [],
+                now);
+        }
+
+        return breakdowns;
+    }
+
+    private static List<PriceSourceBreakdownItem> BuildPriceBreakdownItems(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        DateTime now)
+    {
+        var rows = snapshots
+            .Select(item => new PriceSourceBreakdownItem
+            {
+                Source = item.Source,
+                PriceType = item.PriceType,
+                Status = item.Status,
+                HasPrice = item.HasPrice,
+                PriceUsd = item.PriceUsd ?? item.Price,
+                IsEstimated = item.IsEstimated,
+                IsStale = item.ExpiresAtUtc <= now,
+                ConfidenceScore = item.ConfidenceScore,
+                Quantity = item.Quantity,
+                Volume = item.Volume,
+                UpdatedAtUtc = item.UpdatedAtUtc,
+                ExpiresAtUtc = item.ExpiresAtUtc,
+                FailureReason = item.FailureReason
+            })
+            .GroupBy(item => item.Source, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderBy(GetBreakdownSelectionRank)
+                .ThenByDescending(item => item.ConfidenceScore)
+                .ThenBy(item => item.PriceUsd)
+                .First())
+            .ToList();
+
+        foreach (var source in PriceBreakdownSources)
+        {
+            if (rows.Any(item => string.Equals(item.Source, source, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            rows.Add(new PriceSourceBreakdownItem
+            {
+                Source = source,
+                Status = "No snapshot",
+                FailureReason = "No recent snapshot."
+            });
+        }
+
+        return rows
+            .OrderBy(item => GetPriceSourceOrder(item.Source))
+            .ThenBy(item => item.PriceType, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static int GetBreakdownSelectionRank(PriceSourceBreakdownItem item)
+    {
+        if (!item.IsEstimated && !item.IsStale && item.PriceType == PriceTypeNames.LowestListing)
+        {
+            return 10;
+        }
+
+        if (item.PriceType is PriceTypeNames.MedianSale or PriceTypeNames.AvgSale)
+        {
+            return item.IsStale ? 40 : 20;
+        }
+
+        if (item.PriceType is PriceTypeNames.Suggested or PriceTypeNames.BlendedEstimate)
+        {
+            return item.IsStale ? 50 : 30;
+        }
+
+        return item.IsStale ? 60 : 35;
+    }
+
+    private static int GetPriceSourceOrder(string? source)
+    {
+        return source switch
+        {
+            PriceSourceNames.Skinport => 10,
+            PriceSourceNames.DMarket => 20,
+            PriceSourceNames.Steam => 30,
+            PriceSourceNames.CSFloat => 40,
+            PriceSourceNames.Unavailable => 90,
+            _ => 80
+        };
+    }
+
     private static List<GroupedMarketListingItem> BuildGroupedItems(
         IReadOnlyCollection<MarketListingItem> items,
         Guid? currentUserId)
@@ -254,7 +472,10 @@ public class MarketModel : PageModel
                 var buyableEntry = currentUserId.HasValue
                     ? entries.FirstOrDefault(item => item.SellerAppUserId != currentUserId.Value)
                     : entries.FirstOrDefault();
-                var representativeEntry = buyableEntry ?? entries.First();
+                var pricedBuyableEntry = currentUserId.HasValue
+                    ? entries.FirstOrDefault(item => item.SellerAppUserId != currentUserId.Value && item.HasReliablePrice)
+                    : entries.FirstOrDefault(item => item.HasReliablePrice);
+                var representativeEntry = pricedBuyableEntry ?? buyableEntry ?? entries.First();
 
                 return new GroupedMarketListingItem
                 {
@@ -270,12 +491,21 @@ public class MarketModel : PageModel
                     MarketHashName = representativeEntry.MarketHashName,
                     IconUrl = representativeEntry.IconUrl,
                     Price = representativeEntry.Price,
+                    HasReliablePrice = representativeEntry.HasReliablePrice,
+                    PriceDisplayText = representativeEntry.PriceDisplayText,
+                    PriceSource = representativeEntry.PriceSource,
+                    PriceType = representativeEntry.PriceType,
+                    IsEstimated = representativeEntry.IsEstimated,
+                    IsCached = representativeEntry.IsCached,
+                    IsStale = representativeEntry.IsStale,
+                    ConfidenceScore = representativeEntry.ConfidenceScore,
+                    PriceFailureReason = representativeEntry.PriceFailureReason,
                     Tradable = representativeEntry.Tradable,
                     Marketable = representativeEntry.Marketable,
                     Quantity = entries.Count,
                     BuyableQuantity = currentUserId.HasValue
-                        ? entries.Count(item => item.SellerAppUserId != currentUserId.Value)
-                        : entries.Count,
+                        ? entries.Count(item => item.SellerAppUserId != currentUserId.Value && item.HasReliablePrice)
+                        : entries.Count(item => item.HasReliablePrice),
                     CurrentUserOwnedQuantity = ownedByCurrentUserCount
                 };
             })

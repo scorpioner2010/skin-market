@@ -5,6 +5,7 @@ public class PricingOptions
     public const string SectionName = "Pricing";
 
     public string PreferredCurrency { get; set; } = "USD";
+    public string CsFloatApiKey { get; set; } = string.Empty;
     public bool EnableSteamSource { get; set; } = true;
     public bool EnableCsFloatSource { get; set; } = true;
     public bool EnableSkinportSource { get; set; } = true;
@@ -29,4 +30,14 @@ public class PricingOptions
     public int RefreshingStateTimeoutSeconds { get; set; } = 90;
     public decimal ConfidenceHighThreshold { get; set; } = 0.8m;
     public decimal ConfidenceMediumThreshold { get; set; } = 0.55m;
+    public int PricingDiagnosticsRetentionDays { get; set; } = 14;
+    public bool EnablePriceProblemDiagnostics { get; set; } = true;
+    public bool EnablePriceDiagnostics { get; set; } = true;
+    public bool EnableVerbosePriceDiagnostics { get; set; } = false;
+    public int PriceDiagnosticsMemoryLimit { get; set; } = 2000;
+    public bool PriceDiagnosticsFileEnabled { get; set; } = true;
+    public string PriceDiagnosticsDirectory { get; set; } = "logs/prices";
+    public int PriceDiagnosticsMaxFileSizeMb { get; set; } = 10;
+    public int PriceDiagnosticsMaxFiles { get; set; } = 7;
+    public int PriceDiagnosticsMaxLogsPerMinute { get; set; } = 100;
 }

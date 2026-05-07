@@ -13,7 +13,16 @@ public class MarketListingItem
     public string ItemName { get; set; } = string.Empty;
     public string? MarketHashName { get; set; }
     public string? IconUrl { get; set; }
-    public decimal Price { get; set; }
+    public decimal? Price { get; set; }
+    public bool HasReliablePrice { get; set; }
+    public string PriceDisplayText { get; set; } = "No reliable price";
+    public string PriceSource { get; set; } = PriceSourceNames.Unavailable;
+    public string PriceType { get; set; } = PriceTypeNames.Unavailable;
+    public bool IsEstimated { get; set; }
+    public bool IsCached { get; set; }
+    public bool IsStale { get; set; }
+    public decimal ConfidenceScore { get; set; }
+    public string? PriceFailureReason { get; set; }
     public bool? Tradable { get; set; }
     public bool? Marketable { get; set; }
 }

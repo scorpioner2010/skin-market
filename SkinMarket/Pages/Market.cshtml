@@ -69,6 +69,7 @@
             <div class="card-grid market-card-grid" data-market-view-panel="cards">
                 @foreach (var item in Model.GroupedItems)
                 {
+                    var priceBreakdown = Model.GetPriceBreakdown(item.MarketHashName);
                     <article class="content-card item-card market-item-card">
                         <div class="market-item-top">
                             <div class="market-item-visual">
@@ -94,8 +95,25 @@
                                     </div>
                                     <div class="market-price-block">
                                         <span class="compact-badge market-quantity-badge">@L["Common_QuantityShort"]: @item.Quantity</span>
-                                        <span class="market-price-label">@L["Common_Price"]</span>
-                                        <p class="price-tag market-price-tag">$@item.Price.ToString("0.00")</p>
+                                        <span class="market-price-label">USD price</span>
+                                        <p class="price-tag market-price-tag" data-price-source="@item.PriceSource" data-price-type="@item.PriceType" data-price-confidence="@item.ConfidenceScore.ToString("0.####")">@Model.GetPriceNumberText(item)</p>
+                                        <span class="inventory-meta">@Model.GetPriceStatusLabel(item)</span>
+                                        @if (priceBreakdown.Count > 0)
+                                        {
+                                            <div class="price-source-dropdown price-source-dropdown-right" data-price-source-menu>
+                                                <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                                <div class="price-source-list" aria-hidden="true">
+                                                    @foreach (var sourcePrice in priceBreakdown)
+                                                    {
+                                                        <div class="price-source-row">
+                                                            <span class="price-source-name">@Model.GetPriceSourceLabel(sourcePrice.Source)</span>
+                                                            <span class="price-source-amount">@Model.GetBreakdownPriceText(sourcePrice)</span>
+                                                            <span class="price-source-meta" title="@sourcePrice.FailureReason">@Model.GetBreakdownMetaText(sourcePrice)</span>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -125,6 +143,10 @@
                                 <a class="btn app-button-primary market-action-button" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
                             </div>
                         }
+                        else if (!item.HasReliablePrice)
+                        {
+                            <p class="meta-note market-owner-note" title="@item.PriceFailureReason">Price unavailable</p>
+                        }
                         else if (!item.HasBuyableItems)
                         {
                             <p class="meta-note market-owner-note">@L["Market_OwnItemBotInventory_Text"]</p>
@@ -151,13 +173,16 @@
                     <div class="market-table-row market-table-header">
                         <div class="market-table-cell market-table-item-cell">@L["Common_Item"]</div>
                         <div class="market-table-cell">@L["Common_QuantityShort"]</div>
-                        <div class="market-table-cell">@L["Common_Price"]</div>
-                        <div class="market-table-cell">@L["Common_Tradable"]</div>
                         <div class="market-table-cell market-table-asset-cell">@L["Common_AssetId"]</div>
+                        <div class="market-table-cell">USD price</div>
+                        <div class="market-table-cell">Price status</div>
+                        <div class="market-table-cell">Price sources</div>
+                        <div class="market-table-cell">@L["Common_Tradable"]</div>
                         <div class="market-table-cell market-table-actions-cell">@L["Common_Action"]</div>
                     </div>
                     @foreach (var item in Model.GroupedItems)
                     {
+                        var priceBreakdown = Model.GetPriceBreakdown(item.MarketHashName);
                         <article class="market-table-row">
                             <div class="market-table-cell market-table-item-cell" data-label="@L["Common_Item"]">
                                 <div class="market-table-main">
@@ -183,14 +208,41 @@
                             <div class="market-table-cell" data-label="@L["Common_QuantityShort"]">
                                 <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                             </div>
-                            <div class="market-table-cell" data-label="@L["Common_Price"]">
-                                <span class="price-value">$@item.Price.ToString("0.00")</span>
+                            <div class="market-table-cell market-table-asset-cell" data-label="@L["Common_AssetId"]">
+                                <span class="inventory-meta break-value">@item.AssetId</span>
+                            </div>
+                            <div class="market-table-cell" data-label="USD price">
+                                <div class="price-cell-stack">
+                                    <span class="price-value" data-price-source="@item.PriceSource" data-price-type="@item.PriceType" data-price-confidence="@item.ConfidenceScore.ToString("0.####")">@Model.GetPriceNumberText(item)</span>
+                                </div>
+                            </div>
+                            <div class="market-table-cell" data-label="Price status">
+                                <span class="inventory-meta">@Model.GetPriceStatusLabel(item)</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Price sources">
+                                @if (priceBreakdown.Count > 0)
+                                {
+                                    <div class="price-source-dropdown" data-price-source-menu>
+                                        <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                        <div class="price-source-list" aria-hidden="true">
+                                            @foreach (var sourcePrice in priceBreakdown)
+                                            {
+                                                <div class="price-source-row">
+                                                    <span class="price-source-name">@Model.GetPriceSourceLabel(sourcePrice.Source)</span>
+                                                    <span class="price-source-amount">@Model.GetBreakdownPriceText(sourcePrice)</span>
+                                                    <span class="price-source-meta" title="@sourcePrice.FailureReason">@Model.GetBreakdownMetaText(sourcePrice)</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="inventory-meta">-</span>
+                                }
                             </div>
                             <div class="market-table-cell" data-label="@L["Common_Tradable"]">
                                 <span class="compact-badge">@((item.Tradable.HasValue ? L[item.Tradable.Value ? "Common_Yes" : "Common_No"] : L["Common_Unknown"]).Value)</span>
-                            </div>
-                            <div class="market-table-cell market-table-asset-cell" data-label="@L["Common_AssetId"]">
-                                <span class="inventory-meta break-value">@item.AssetId</span>
                             </div>
                             <div class="market-table-cell market-table-actions-cell" data-label="@L["Common_Action"]">
                                 @if (item.Tradable != true)
@@ -200,6 +252,10 @@
                                 else if (!(User.Identity?.IsAuthenticated ?? false))
                                 {
                                     <a class="btn app-button-primary market-table-action-button" asp-page="/Auth/Login">@L["Common_LoginWithSteam"]</a>
+                                }
+                                else if (!item.HasReliablePrice)
+                                {
+                                    <span class="compact-badge compact-badge-neutral" title="@item.PriceFailureReason">Price unavailable</span>
                                 }
                                 else if (!item.HasBuyableItems)
                                 {

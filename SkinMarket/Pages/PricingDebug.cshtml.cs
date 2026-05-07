@@ -11,33 +11,21 @@ namespace SkinMarket.Pages;
 public class PricingDebugModel : PageModel
 {
     private readonly AppDbContext _dbContext;
-    private readonly ISteamInventoryService _steamInventoryService;
-    private readonly IItemPriceResolver _itemPriceResolver;
-    private readonly ISteamMarketPriceService _steamMarketPriceService;
-    private readonly ICsFloatPriceService _csFloatPriceService;
-    private readonly ISkinportPricingService _skinportPricingService;
-    private readonly IDMarketPricingService _dMarketPricingService;
+    private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
+    private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
     private readonly IGameCatalog _gameCatalog;
     private readonly AppRuntimeState _runtimeState;
 
     public PricingDebugModel(
         AppDbContext dbContext,
-        ISteamInventoryService steamInventoryService,
-        IItemPriceResolver itemPriceResolver,
-        ISteamMarketPriceService steamMarketPriceService,
-        ICsFloatPriceService csFloatPriceService,
-        ISkinportPricingService skinportPricingService,
-        IDMarketPricingService dMarketPricingService,
+        ISteamInventoryRefreshService steamInventoryRefreshService,
+        IInventoryPriceRefreshService inventoryPriceRefreshService,
         IGameCatalog gameCatalog,
         AppRuntimeState runtimeState)
     {
         _dbContext = dbContext;
-        _steamInventoryService = steamInventoryService;
-        _itemPriceResolver = itemPriceResolver;
-        _steamMarketPriceService = steamMarketPriceService;
-        _csFloatPriceService = csFloatPriceService;
-        _skinportPricingService = skinportPricingService;
-        _dMarketPricingService = dMarketPricingService;
+        _steamInventoryRefreshService = steamInventoryRefreshService;
+        _inventoryPriceRefreshService = inventoryPriceRefreshService;
         _gameCatalog = gameCatalog;
         _runtimeState = runtimeState;
     }
@@ -59,29 +47,61 @@ public class PricingDebugModel : PageModel
             return;
         }
 
-        var inventory = await _steamInventoryService.GetInventoryAsync(appUser.SteamId, _gameCatalog.DefaultGameType, cancellationToken);
-        if (!inventory.IsSuccess)
+        var gameType = _gameCatalog.DefaultGameType;
+        var game = _gameCatalog.Get(gameType);
+        var snapshot = await _steamInventoryRefreshService.GetLatestSnapshotAsync(appUser.SteamId, gameType, cancellationToken);
+        if (snapshot is null)
         {
-            ErrorMessage = inventory.ErrorMessage;
+            await _steamInventoryRefreshService.EnqueueRefreshAsync(
+                appUser.SteamId,
+                gameType,
+                SteamInventoryRefreshPriority.Normal,
+                cancellationToken,
+                reason: SteamInventoryRefreshReasons.InitialLoad);
+            ErrorMessage = "Inventory snapshot is not cached yet. A background refresh has been queued.";
             return;
         }
 
-        foreach (var item in inventory.Items)
+        var marketHashNames = snapshot.Items
+            .Select(MarketHashNameUtility.ResolvePrimary)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var currentPrices = await _inventoryPriceRefreshService.GetCurrentPricesAsync(marketHashNames, gameType, cancellationToken);
+        var normalizedNames = marketHashNames
+            .Select(MarketHashNameUtility.Normalize)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
+            .ToList();
+        var snapshots = await _dbContext.PriceSnapshots
+            .AsNoTracking()
+            .Where(item => item.AppId == game.SteamAppId && normalizedNames.Contains(item.MarketHashName))
+            .ToListAsync(cancellationToken);
+
+        var refreshTargets = new List<string>();
+        foreach (var item in snapshot.Items)
         {
             var marketHashName = MarketHashNameUtility.ResolvePrimary(item);
-            var steamResult = string.IsNullOrWhiteSpace(marketHashName)
-                ? new PriceSourceResult { Source = "Steam", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
-                : await _steamMarketPriceService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
-            var csFloatResult = string.IsNullOrWhiteSpace(marketHashName)
-                ? new PriceSourceResult { Source = "CSFloat", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
-                : await _csFloatPriceService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
-            var skinportResult = string.IsNullOrWhiteSpace(marketHashName)
-                ? new PriceSourceResult { Source = "Skinport", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
-                : await _skinportPricingService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
-            var dMarketResult = string.IsNullOrWhiteSpace(marketHashName)
-                ? new PriceSourceResult { Source = "DMarket", Status = "Unavailable", FailureReason = "MissingMarketHashName" }
-                : await _dMarketPricingService.ProbePriceAsync(marketHashName, item.GameType, cancellationToken);
-            var finalResult = await _itemPriceResolver.ResolveAsync(item, cancellationToken);
+            var normalizedName = MarketHashNameUtility.Normalize(marketHashName);
+            var steamResult = GetSnapshotResult(snapshots, normalizedName, PriceSourceNames.Steam);
+            var csFloatResult = GetSnapshotResult(snapshots, normalizedName, PriceSourceNames.CSFloat);
+            var skinportResult = GetSnapshotResult(snapshots, normalizedName, PriceSourceNames.Skinport);
+            var dMarketResult = GetSnapshotResult(snapshots, normalizedName, PriceSourceNames.DMarket);
+            var finalResult = normalizedName is not null && currentPrices.TryGetValue(normalizedName, out var cached)
+                ? cached
+                : new ItemPriceResolutionResult
+                {
+                    HasPrice = false,
+                    Source = PriceSourceNames.Unavailable,
+                    PriceType = PriceTypeNames.Unavailable,
+                    Status = "Unavailable",
+                    FailureReason = "No cached price."
+                };
+            if (!string.IsNullOrWhiteSpace(marketHashName) && finalResult.NeedsRefresh)
+            {
+                refreshTargets.Add(marketHashName);
+            }
 
             var diagnosticsResult = new ItemPriceDiagnosticsResult
             {
@@ -113,6 +133,45 @@ public class PricingDebugModel : PageModel
 
             Items.Add(diagnosticsResult);
         }
+
+        if (refreshTargets.Count > 0)
+        {
+            await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets, gameType, cancellationToken);
+        }
+    }
+
+    private static PriceSourceResult GetSnapshotResult(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        string? normalizedMarketHashName,
+        string source)
+    {
+        var snapshot = snapshots
+            .Where(item => item.MarketHashName == normalizedMarketHashName && item.Source == source)
+            .OrderBy(item => item.HasPrice ? 0 : 1)
+            .ThenBy(item => item.ExpiresAtUtc <= DateTime.UtcNow ? 1 : 0)
+            .ThenByDescending(item => item.ConfidenceScore)
+            .FirstOrDefault();
+
+        if (snapshot is null)
+        {
+            return new PriceSourceResult
+            {
+                Source = source,
+                Status = "Unavailable",
+                PriceType = PriceTypeNames.Unavailable,
+                FailureReason = "No cached snapshot."
+            };
+        }
+
+        return new PriceSourceResult
+        {
+            Success = snapshot.HasPrice,
+            Source = snapshot.Source,
+            PriceType = snapshot.PriceType,
+            Price = snapshot.PriceUsd ?? snapshot.Price,
+            Status = snapshot.HasPrice && snapshot.ExpiresAtUtc <= DateTime.UtcNow ? "Stale" : snapshot.Status,
+            FailureReason = snapshot.FailureReason
+        };
     }
 
     private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)

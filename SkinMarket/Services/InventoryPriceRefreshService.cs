@@ -54,25 +54,6 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
         GameType gameType,
         CancellationToken cancellationToken = default)
     {
-        foreach (var originalName in marketHashNames)
-        {
-            var normalizedName = MarketHashNameUtility.Normalize(originalName);
-            if (!string.IsNullOrWhiteSpace(normalizedName) &&
-                !string.Equals(originalName, normalizedName, StringComparison.Ordinal))
-            {
-                _logger.LogInformation(
-                    "Inventory price refresh normalized market hash name from {OriginalMarketHashName} to {NormalizedMarketHashName}.",
-                    originalName,
-                    normalizedName);
-                await PersistAppLogAsync(
-                    "Info",
-                    $"Queue normalize. Before={originalName}; After={normalizedName}",
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    cancellationToken);
-            }
-        }
-
         var normalizedNames = marketHashNames
             .Select(MarketHashNameUtility.Normalize)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -85,81 +66,44 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             return;
         }
 
-        var current = await GetCurrentPricesAsync(normalizedNames, gameType, cancellationToken);
+        var enqueuedCount = 0;
+        var alreadyInProgressCount = 0;
         foreach (var marketHashName in normalizedNames)
         {
-            if (!current.TryGetValue(marketHashName, out var price) || !price.NeedsRefresh)
-            {
-                _logger.LogDebug(
-                    "Skipping inventory price queue for {GameType} / {MarketHashName} because refresh is not needed.",
-                    gameType,
-                    marketHashName);
-                await PersistAppLogAsync(
-                    "Info",
-                    $"Queue skipped. GameType={(int)gameType}; MarketHashName={marketHashName}; Reason=RefreshNotNeeded",
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    CancellationToken.None);
-                continue;
-            }
-
             var key = BuildKey(gameType, marketHashName);
-            var trackerCreated = false;
-            var tracker = _trackers.GetOrAdd(key, _ =>
-            {
-                trackerCreated = true;
-                return new PriceRefreshTracker();
-            });
-            if (trackerCreated)
-            {
-                await PersistAppLogAsync(
-                    "Info",
-                    $"Tracker created. GameType={(int)gameType}; MarketHashName={marketHashName}",
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    CancellationToken.None);
-            }
+            var tracker = _trackers.GetOrAdd(key, _ => new PriceRefreshTracker());
 
-            if (TryResetStaleTracker(tracker, gameType, marketHashName, out var staleResetMessage))
-            {
-                await PersistAppLogAsync(
-                    "Info",
-                    staleResetMessage,
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    CancellationToken.None);
-            }
+            TryResetStaleTracker(tracker, gameType, marketHashName, out _);
 
             if (tracker.State is PriceRefreshState.Queued or PriceRefreshState.Refreshing)
             {
-                _logger.LogDebug(
-                    "Inventory price refresh already in progress for {GameType} / {MarketHashName}.",
-                    gameType,
-                    marketHashName);
-                await PersistAppLogAsync(
-                    "Info",
-                    $"Queue skipped. GameType={(int)gameType}; MarketHashName={marketHashName}; Reason=AlreadyInProgress; TrackerState={tracker.State}",
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    CancellationToken.None);
+                alreadyInProgressCount++;
                 continue;
             }
 
             tracker.State = PriceRefreshState.Queued;
             tracker.LastUpdatedUtc = DateTime.UtcNow;
             tracker.FailureReason = null;
-            var pendingAfterEnqueue = Interlocked.Increment(ref _pendingCount);
+            Interlocked.Increment(ref _pendingCount);
+            enqueuedCount++;
+            await _channel.Writer.WriteAsync(new PriceRefreshWorkItem(gameType, marketHashName), cancellationToken);
+        }
+
+        if (enqueuedCount > 0)
+        {
             _logger.LogInformation(
-                "Queued inventory price refresh for {GameType} / {MarketHashName}.",
+                "Price refresh batch queued. GameType={GameType} Requested={RequestedCount} Enqueued={EnqueuedCount} AlreadyInProgress={AlreadyInProgressCount} Pending={PendingCount}",
                 gameType,
-                marketHashName);
+                normalizedNames.Count,
+                enqueuedCount,
+                alreadyInProgressCount,
+                Volatile.Read(ref _pendingCount));
             await PersistAppLogAsync(
                 "Info",
-                $"Queued item. GameType={(int)gameType}; MarketHashName={marketHashName}; CurrentStatus={price.Status}; CurrentFailure={price.FailureReason}; Pending={pendingAfterEnqueue}",
+                $"Price refresh batch queued. GameType={(int)gameType}; Requested={normalizedNames.Count}; Enqueued={enqueuedCount}; AlreadyInProgress={alreadyInProgressCount}; Pending={Volatile.Read(ref _pendingCount)}",
                 nameof(InventoryPriceRefreshService),
                 null,
                 CancellationToken.None);
-            await _channel.Writer.WriteAsync(new PriceRefreshWorkItem(gameType, marketHashName), cancellationToken);
         }
     }
 
@@ -184,8 +128,6 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             null,
             CancellationToken.None);
 
-        _ = RunHeartbeatAsync(stoppingToken);
-
         var runningTasks = new HashSet<Task>();
         try
         {
@@ -205,13 +147,7 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
 
                 while (_channel.Reader.TryRead(out var workItem))
                 {
-                    var pendingAfterDequeue = Math.Max(0, Interlocked.Decrement(ref _pendingCount));
-                    await PersistAppLogAsync(
-                        "Info",
-                        $"Worker dequeued item. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}; Pending={pendingAfterDequeue}",
-                        nameof(InventoryPriceRefreshService),
-                        null,
-                        CancellationToken.None);
+                    Interlocked.Decrement(ref _pendingCount);
 
                     await _workerSemaphore.WaitAsync(stoppingToken);
                     var task = ProcessWorkItemAsync(workItem, stoppingToken).ContinueWith(_ =>
@@ -231,16 +167,6 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
                             runningTasks.Remove(completedTask);
                         }
                     }, TaskScheduler.Default);
-                }
-
-                if (Volatile.Read(ref _pendingCount) == 0)
-                {
-                    await PersistAppLogAsync(
-                        "Info",
-                        "Worker queue empty.",
-                        nameof(InventoryPriceRefreshService),
-                        null,
-                        CancellationToken.None);
                 }
             }
         }
@@ -277,12 +203,6 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
             "Starting inventory price refresh for {GameType} / {MarketHashName}.",
             workItem.GameType,
             workItem.MarketHashName);
-            await PersistAppLogAsync(
-                "Info",
-                $"Worker start. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}",
-                nameof(InventoryPriceRefreshService),
-                null,
-                CancellationToken.None);
 
         try
         {
@@ -304,12 +224,15 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
                 result.Status,
                 result.Source,
                 result.FailureReason);
-            await PersistAppLogAsync(
-                result.HasPrice ? "Info" : "Warning",
-                $"Worker done. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}; HasPrice={result.HasPrice}; Status={result.Status}; Source={result.Source}; PriceType={result.PriceType}; PriceUsd={result.Price?.ToString() ?? "<null>"}; Estimated={result.IsEstimated}; Cached={result.IsCached}; Stale={result.IsStale}; Confidence={result.ConfidenceScore}; Failure={result.FailureReason}",
-                nameof(InventoryPriceRefreshService),
-                null,
-                CancellationToken.None);
+            if (!result.HasPrice || _options.EnableVerbosePriceDiagnostics)
+            {
+                await PersistAppLogAsync(
+                    result.HasPrice ? "Info" : "Warning",
+                    $"Worker done. GameType={(int)workItem.GameType}; MarketHashName={workItem.MarketHashName}; HasPrice={result.HasPrice}; Status={result.Status}; Source={result.Source}; PriceType={result.PriceType}; PriceUsd={result.Price?.ToString() ?? "<null>"}; Estimated={result.IsEstimated}; Cached={result.IsCached}; Stale={result.IsStale}; Confidence={result.ConfidenceScore}; Failure={result.FailureReason}",
+                    nameof(InventoryPriceRefreshService),
+                    null,
+                    CancellationToken.None);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -464,12 +387,15 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
                 workItem.GameType,
                 marketHashName,
                 failureReason);
-            await PersistAppLogAsync(
-                IsRetryableFailure(failureReason) ? "Warning" : "Info",
-                $"Final failure snapshot written. GameType={(int)workItem.GameType}; MarketHashName={marketHashName}; Failure={failureReason}; Retryable={IsRetryableFailure(failureReason)}",
-                nameof(InventoryPriceRefreshService),
-                null,
-                CancellationToken.None);
+            if (IsRetryableFailure(failureReason) || _options.EnableVerbosePriceDiagnostics)
+            {
+                await PersistAppLogAsync(
+                    IsRetryableFailure(failureReason) ? "Warning" : "Info",
+                    $"Final failure snapshot written. GameType={(int)workItem.GameType}; MarketHashName={marketHashName}; Failure={failureReason}; Retryable={IsRetryableFailure(failureReason)}",
+                    nameof(InventoryPriceRefreshService),
+                    null,
+                    CancellationToken.None);
+            }
         }
         catch (Exception exception)
         {
@@ -488,6 +414,11 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
         Exception? exception,
         CancellationToken cancellationToken)
     {
+        if (!_options.EnableVerbosePriceDiagnostics && level is not ("Warning" or "Error"))
+        {
+            return;
+        }
+
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
@@ -497,26 +428,6 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
         catch (Exception logException)
         {
             _logger.LogError(logException, "Failed to persist background log for {Source}.", source);
-        }
-    }
-
-    private async Task RunHeartbeatAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        try
-        {
-            while (await timer.WaitForNextTickAsync(stoppingToken))
-            {
-                await PersistAppLogAsync(
-                    "Info",
-                    $"Worker heartbeat. Pending={Volatile.Read(ref _pendingCount)}; Trackers={_trackers.Count}; ActiveWorkers={Math.Max(0, _options.MaxConcurrentPriceLookups - _workerSemaphore.CurrentCount)}",
-                    nameof(InventoryPriceRefreshService),
-                    null,
-                    CancellationToken.None);
-            }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
         }
     }
 

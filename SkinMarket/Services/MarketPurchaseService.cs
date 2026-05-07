@@ -17,6 +17,7 @@ public class MarketPurchaseService : IMarketPurchaseService
     private readonly ISteamInventoryRefreshService _steamInventoryRefreshService;
     private readonly SteamBotOptions _steamBotOptions;
     private readonly IAppLogService _appLogService;
+    private readonly IPriceDiagnosticLogService _priceDiagnosticLogService;
 
     public MarketPurchaseService(
         AppDbContext dbContext,
@@ -25,7 +26,8 @@ public class MarketPurchaseService : IMarketPurchaseService
         IGameCatalog gameCatalog,
         ISteamInventoryRefreshService steamInventoryRefreshService,
         IOptions<SteamBotOptions> steamBotOptions,
-        IAppLogService appLogService)
+        IAppLogService appLogService,
+        IPriceDiagnosticLogService priceDiagnosticLogService)
     {
         _dbContext = dbContext;
         _steamBotInventoryClient = steamBotInventoryClient;
@@ -34,6 +36,7 @@ public class MarketPurchaseService : IMarketPurchaseService
         _steamInventoryRefreshService = steamInventoryRefreshService;
         _steamBotOptions = steamBotOptions.Value;
         _appLogService = appLogService;
+        _priceDiagnosticLogService = priceDiagnosticLogService;
     }
 
     public async Task<MarketPurchaseResult> PurchaseAsync(
@@ -165,7 +168,20 @@ public class MarketPurchaseService : IMarketPurchaseService
         sourceOperationByAssetId.TryGetValue(inventoryItem.AssetId, out var sourceOperation);
 
         var price = await _marketPricingService.CalculatePriceAsync(inventoryItem, cancellationToken);
-        if (buyer.Balance < price)
+        if (!price.HasValue)
+        {
+            await _priceDiagnosticLogService.LogMarketBuyBlockedNoPriceAsync(
+                game.Type,
+                game.SteamAppId,
+                MarketHashNameUtility.ResolvePrimary(inventoryItem),
+                inventoryItem.AssetId,
+                "Purchase blocked because no reliable market price is available.",
+                cancellationToken);
+            return await FailAsync("No reliable price is available for this item right now.");
+        }
+
+        var priceValue = price.Value;
+        if (buyer.Balance < priceValue)
         {
             return await FailAsync("Not enough balance to buy this item.");
         }
@@ -196,9 +212,9 @@ public class MarketPurchaseService : IMarketPurchaseService
             }
 
             var deductedBuyerCount = await _dbContext.AppUsers
-                .Where(user => user.Id == buyer.Id && user.Balance >= price)
+                .Where(user => user.Id == buyer.Id && user.Balance >= priceValue)
                 .ExecuteUpdateAsync(
-                    setters => setters.SetProperty(user => user.Balance, user => user.Balance - price),
+                    setters => setters.SetProperty(user => user.Balance, user => user.Balance - priceValue),
                     cancellationToken);
             if (deductedBuyerCount != 1)
             {
@@ -211,7 +227,7 @@ public class MarketPurchaseService : IMarketPurchaseService
             {
                 Id = Guid.NewGuid(),
                 AppUserId = buyer.Id,
-                Amount = -price,
+                Amount = -priceValue,
                 Type = "PurchaseFromMarket",
                 CreatedAtUtc = now
             });
@@ -230,7 +246,7 @@ public class MarketPurchaseService : IMarketPurchaseService
                 ItemName = string.IsNullOrWhiteSpace(inventoryItem.Name) ? "Unknown Item" : inventoryItem.Name,
                 MarketHashName = MarketHashNameUtility.ResolvePrimary(inventoryItem),
                 IconUrl = inventoryItem.IconUrl,
-                Price = price,
+                Price = priceValue,
                 Status = "Sold",
                 CreatedAtUtc = now,
                 PurchasedAtUtc = now,
@@ -262,7 +278,7 @@ public class MarketPurchaseService : IMarketPurchaseService
 
         await _appLogService.WriteAsync(
             "Info",
-            $"Market purchase finished. BuyerAppUserId={buyerAppUserId}; PurchasedAssetId={inventoryItem.AssetId}; SourceTradeOperationId={sourceOperation?.Id.ToString() ?? "<null>"}; Price={price:0.##}; DeliveryStatus=PendingDelivery",
+            $"Market purchase finished. BuyerAppUserId={buyerAppUserId}; PurchasedAssetId={inventoryItem.AssetId}; SourceTradeOperationId={sourceOperation?.Id.ToString() ?? "<null>"}; Price={priceValue:0.##}; DeliveryStatus=PendingDelivery",
             nameof(MarketPurchaseService),
             cancellationToken: cancellationToken);
         await TryEnqueueInventoryRefreshAsync(

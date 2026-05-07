@@ -133,6 +133,7 @@ builder.Services.AddHostedService<LocalSteamBotHostService>();
 builder.Services.AddScoped<IHistoryService, HistoryService>();
 builder.Services.AddScoped<IItemPricingService, ItemPricingService>();
 builder.Services.AddScoped<IItemPriceResolver, ItemPriceResolver>();
+builder.Services.AddSingleton<IPriceDiagnosticLogService, PriceDiagnosticLogService>();
 builder.Services.AddSingleton<IFxRateService, UsdOnlyFxRateService>();
 builder.Services.AddSingleton<InventoryPriceRefreshService>();
 builder.Services.AddSingleton<IInventoryPriceRefreshService>(provider => provider.GetRequiredService<InventoryPriceRefreshService>());

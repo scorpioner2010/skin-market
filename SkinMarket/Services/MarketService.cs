@@ -145,6 +145,8 @@ public class MarketService : IMarketService
             }
 
             sourceOperationsByAssetId.TryGetValue(item.AssetId, out var sourceOperation);
+            var price = _marketPricingService.CalculatePrice(item, resolvedPrice);
+
             listings.Add(new MarketListingItem
             {
                 GameType = game.Type,
@@ -158,7 +160,16 @@ public class MarketService : IMarketService
                 ItemName = string.IsNullOrWhiteSpace(item.Name) ? "Unknown Item" : item.Name,
                 MarketHashName = marketHashName,
                 IconUrl = item.IconUrl,
-                Price = _marketPricingService.CalculatePrice(item, resolvedPrice),
+                Price = price,
+                HasReliablePrice = price.HasValue,
+                PriceDisplayText = FormatPriceDisplay(price, resolvedPrice),
+                PriceSource = resolvedPrice?.Source ?? PriceSourceNames.Unavailable,
+                PriceType = resolvedPrice?.PriceType ?? PriceTypeNames.Unavailable,
+                IsEstimated = resolvedPrice?.IsEstimated == true,
+                IsCached = resolvedPrice?.IsCached == true,
+                IsStale = resolvedPrice?.IsStale == true,
+                ConfidenceScore = resolvedPrice?.ConfidenceScore ?? 0m,
+                PriceFailureReason = resolvedPrice?.FailureReason,
                 Tradable = item.Tradable,
                 Marketable = item.Marketable
             });
@@ -176,6 +187,8 @@ public class MarketService : IMarketService
                 refreshTargets.Add(marketHashName);
             }
 
+            var price = CalculateProtectedFallbackPrice(operation, resolvedPrice);
+
             listings.Add(new MarketListingItem
             {
                 GameType = game.Type,
@@ -189,7 +202,16 @@ public class MarketService : IMarketService
                 ItemName = string.IsNullOrWhiteSpace(operation.ItemName) ? "Unknown Item" : operation.ItemName,
                 MarketHashName = marketHashName,
                 IconUrl = operation.IconUrl,
-                Price = CalculateProtectedFallbackPrice(operation, resolvedPrice),
+                Price = price,
+                HasReliablePrice = price.HasValue,
+                PriceDisplayText = FormatPriceDisplay(price, resolvedPrice),
+                PriceSource = resolvedPrice?.Source ?? PriceSourceNames.Unavailable,
+                PriceType = resolvedPrice?.PriceType ?? PriceTypeNames.Unavailable,
+                IsEstimated = resolvedPrice?.IsEstimated == true,
+                IsCached = resolvedPrice?.IsCached == true,
+                IsStale = resolvedPrice?.IsStale == true,
+                ConfidenceScore = resolvedPrice?.ConfidenceScore ?? 0m,
+                PriceFailureReason = resolvedPrice?.FailureReason,
                 Tradable = false,
                 Marketable = null
             });
@@ -286,7 +308,7 @@ public class MarketService : IMarketService
             .ToList();
     }
 
-    private static decimal CalculateProtectedFallbackPrice(
+    private static decimal? CalculateProtectedFallbackPrice(
         TradeOperation operation,
         ItemPriceResolutionResult? resolvedPrice)
     {
@@ -295,8 +317,27 @@ public class MarketService : IMarketService
             return Math.Round(resolvedPrice.Price.Value * 0.92m, 2, MidpointRounding.AwayFromZero);
         }
 
-        var basePrice = operation.CreditAmount > 0 ? operation.CreditAmount : 10m;
-        return Math.Round(basePrice * 1.15m, 2, MidpointRounding.AwayFromZero);
+        return null;
+    }
+
+    private static string FormatPriceDisplay(decimal? marketPrice, ItemPriceResolutionResult? resolvedPrice)
+    {
+        if (!marketPrice.HasValue)
+        {
+            return "No reliable price";
+        }
+
+        var prefix = resolvedPrice?.IsEstimated == true ? "~" : string.Empty;
+        var suffix = resolvedPrice switch
+        {
+            { IsStale: true } => " Stale",
+            { IsCached: true } => " Cached",
+            { IsEstimated: true } => " Estimated",
+            { Source: { Length: > 0 } source } => $" {source}",
+            _ => string.Empty
+        };
+
+        return $"{prefix}${marketPrice.Value:0.00}{suffix}";
     }
 
     private static string BuildAssetKey(int appId, string contextId, string assetId)

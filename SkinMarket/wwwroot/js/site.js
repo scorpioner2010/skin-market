@@ -420,5 +420,63 @@ const appText = (key, fallback, ...args) => {
         setPanelMessage(appText('steamOfferNotCreated', 'Steam offer is not created yet. The status will update automatically.'), 'failed');
     });
 
-    window.setTimeout(poll, 500);
+window.setTimeout(poll, 500);
+})();
+
+(() => {
+    const menus = Array.from(document.querySelectorAll('[data-price-source-menu]'));
+    if (menus.length === 0) {
+        return;
+    }
+
+    const isTouchLike = () => window.matchMedia?.('(hover: none), (pointer: coarse)').matches === true;
+
+    const setOpen = (menu, isOpen) => {
+        menu.classList.toggle('is-open', isOpen);
+        const trigger = menu.querySelector('.price-source-trigger');
+        const list = menu.querySelector('.price-source-list');
+        trigger?.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        list?.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    };
+
+    const closeOthers = (activeMenu = null) => {
+        menus.forEach((menu) => {
+            if (menu !== activeMenu) {
+                setOpen(menu, false);
+            }
+        });
+    };
+
+    menus.forEach((menu) => {
+        const trigger = menu.querySelector('.price-source-trigger');
+        if (!trigger) {
+            return;
+        }
+
+        trigger.addEventListener('click', (event) => {
+            if (!isTouchLike()) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            const shouldOpen = !menu.classList.contains('is-open');
+            closeOthers(menu);
+            setOpen(menu, shouldOpen);
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        if (event.target.closest?.('[data-price-source-menu]')) {
+            return;
+        }
+
+        closeOthers();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            closeOthers();
+        }
+    });
 })();

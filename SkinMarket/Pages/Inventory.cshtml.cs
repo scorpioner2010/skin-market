@@ -59,7 +59,15 @@ public class InventoryModel : PageModel
     public List<SteamInventoryItemDto> Items { get; private set; } = new();
     public List<GroupedInventoryItem> GroupedItems { get; private set; } = new();
     public Dictionary<string, ItemPriceResolutionResult> ResolvedPricesByAssetId { get; private set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, List<PriceSourceBreakdownItem>> PriceBreakdownsByMarketHashName { get; private set; } = new(StringComparer.Ordinal);
     public List<InventoryPriceItemRequest> PricePollingItems { get; private set; } = new();
+    private static readonly string[] PriceBreakdownSources =
+    [
+        PriceSourceNames.Skinport,
+        PriceSourceNames.DMarket,
+        PriceSourceNames.Steam,
+        PriceSourceNames.CSFloat
+    ];
     public List<TradeOperation> RecentOperations { get; private set; } = new();
     public Dictionary<string, TradeOperation> LatestOperationsByAssetId { get; private set; } = new(StringComparer.Ordinal);
     public string? ErrorMessage { get; private set; }
@@ -128,8 +136,7 @@ public class InventoryModel : PageModel
 
         if (price?.HasPrice == true && price.DisplayPriceUsd is decimal amount)
         {
-            var prefix = price.IsEstimated ? "~" : string.Empty;
-            return $"{prefix}${amount:0.00}";
+            return $"${amount:0.00}";
         }
 
         return "No reliable price";
@@ -167,6 +174,45 @@ public class InventoryModel : PageModel
         }
 
         return GetPriceSourceLabel(price.Source);
+    }
+
+    public IReadOnlyList<PriceSourceBreakdownItem> GetPriceBreakdown(string? marketHashName)
+    {
+        if (string.IsNullOrWhiteSpace(marketHashName))
+        {
+            return [];
+        }
+
+        var normalized = MarketHashNameUtility.Normalize(marketHashName) ?? marketHashName.Trim();
+        return PriceBreakdownsByMarketHashName.GetValueOrDefault(normalized) ?? [];
+    }
+
+    public string GetBreakdownPriceText(PriceSourceBreakdownItem item)
+    {
+        return item.HasPrice && item.PriceUsd.HasValue
+            ? $"${item.PriceUsd.Value:0.00}"
+            : "-";
+    }
+
+    public string GetBreakdownMetaText(PriceSourceBreakdownItem item)
+    {
+        if (!item.HasPrice)
+        {
+            return string.IsNullOrWhiteSpace(item.FailureReason) ? item.Status : item.FailureReason;
+        }
+
+        var flags = new List<string> { item.PriceType };
+        flags.Add(item.IsStale ? "stale" : item.IsEstimated ? "estimated" : item.Status);
+        if (item.Quantity.HasValue)
+        {
+            flags.Add($"qty {item.Quantity.Value}");
+        }
+        else if (item.Volume.HasValue)
+        {
+            flags.Add($"vol {item.Volume.Value}");
+        }
+
+        return string.Join(" / ", flags.Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
     public async Task<IActionResult> OnPostSellAsync(CancellationToken cancellationToken)
@@ -695,6 +741,7 @@ public class InventoryModel : PageModel
             cancellationToken: cancellationToken);
 
         var pricesByMarketHashName = await _inventoryPriceRefreshService.GetCurrentPricesAsync(marketHashNames, CurrentGameType, cancellationToken);
+        PriceBreakdownsByMarketHashName = await LoadPriceBreakdownsAsync(marketHashNames, currentGame.SteamAppId, cancellationToken);
         var refreshTargets = new List<string>();
         foreach (var item in Items)
         {
@@ -845,6 +892,129 @@ public class InventoryModel : PageModel
 
         var days = Math.Max(1, (int)Math.Floor(age.TotalDays));
         return days == 1 ? "1 day" : $"{days} days";
+    }
+
+    private async Task<Dictionary<string, List<PriceSourceBreakdownItem>>> LoadPriceBreakdownsAsync(
+        IReadOnlyCollection<string> marketHashNames,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        if (marketHashNames.Count == 0)
+        {
+            return new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        }
+
+        var normalizedMarketHashNames = marketHashNames
+            .Select(MarketHashNameUtility.Normalize)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (normalizedMarketHashNames.Count == 0)
+        {
+            return new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        }
+
+        var snapshots = await _dbContext.PriceSnapshots
+            .AsNoTracking()
+            .Where(item => item.AppId == appId && normalizedMarketHashNames.Contains(item.MarketHashName))
+            .ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        var snapshotsByMarketHashName = snapshots
+            .GroupBy(item => MarketHashNameUtility.Normalize(item.MarketHashName) ?? item.MarketHashName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+        var breakdowns = new Dictionary<string, List<PriceSourceBreakdownItem>>(StringComparer.Ordinal);
+        foreach (var normalizedName in normalizedMarketHashNames)
+        {
+            breakdowns[normalizedName] = BuildPriceBreakdownItems(
+                snapshotsByMarketHashName.GetValueOrDefault(normalizedName) ?? [],
+                now);
+        }
+
+        return breakdowns;
+    }
+
+    private static List<PriceSourceBreakdownItem> BuildPriceBreakdownItems(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        DateTime now)
+    {
+        var rows = snapshots
+            .Select(item => new PriceSourceBreakdownItem
+            {
+                Source = item.Source,
+                PriceType = item.PriceType,
+                Status = item.Status,
+                HasPrice = item.HasPrice,
+                PriceUsd = item.PriceUsd ?? item.Price,
+                IsEstimated = item.IsEstimated,
+                IsStale = item.ExpiresAtUtc <= now,
+                ConfidenceScore = item.ConfidenceScore,
+                Quantity = item.Quantity,
+                Volume = item.Volume,
+                UpdatedAtUtc = item.UpdatedAtUtc,
+                ExpiresAtUtc = item.ExpiresAtUtc,
+                FailureReason = item.FailureReason
+            })
+            .GroupBy(item => item.Source, StringComparer.Ordinal)
+            .Select(group => group
+                .OrderBy(GetBreakdownSelectionRank)
+                .ThenByDescending(item => item.ConfidenceScore)
+                .ThenBy(item => item.PriceUsd)
+                .First())
+            .ToList();
+
+        foreach (var source in PriceBreakdownSources)
+        {
+            if (rows.Any(item => string.Equals(item.Source, source, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            rows.Add(new PriceSourceBreakdownItem
+            {
+                Source = source,
+                Status = "No snapshot",
+                FailureReason = "No recent snapshot."
+            });
+        }
+
+        return rows
+            .OrderBy(item => GetPriceSourceOrder(item.Source))
+            .ThenBy(item => item.PriceType, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static int GetBreakdownSelectionRank(PriceSourceBreakdownItem item)
+    {
+        if (!item.IsEstimated && !item.IsStale && item.PriceType == PriceTypeNames.LowestListing)
+        {
+            return 10;
+        }
+
+        if (item.PriceType is PriceTypeNames.MedianSale or PriceTypeNames.AvgSale)
+        {
+            return item.IsStale ? 40 : 20;
+        }
+
+        if (item.PriceType is PriceTypeNames.Suggested or PriceTypeNames.BlendedEstimate)
+        {
+            return item.IsStale ? 50 : 30;
+        }
+
+        return item.IsStale ? 60 : 35;
+    }
+
+    private static int GetPriceSourceOrder(string? source)
+    {
+        return source switch
+        {
+            PriceSourceNames.Skinport => 10,
+            PriceSourceNames.DMarket => 20,
+            PriceSourceNames.Steam => 30,
+            PriceSourceNames.CSFloat => 40,
+            PriceSourceNames.Unavailable => 90,
+            _ => 80
+        };
     }
 
     private async Task<AppUser?> GetCurrentUserAsync(CancellationToken cancellationToken)

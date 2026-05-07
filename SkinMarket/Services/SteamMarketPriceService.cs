@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
@@ -22,6 +23,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
     private readonly PricingOptions _options;
     private readonly SteamMarketPriceOptions _steamMarketPriceOptions;
     private readonly IAppLogService _appLogService;
+    private readonly IPriceDiagnosticLogService _priceDiagnosticLogService;
 
     public SteamMarketPriceService(
         HttpClient httpClient,
@@ -30,7 +32,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         IGameCatalog gameCatalog,
         IOptions<PricingOptions> options,
         IOptions<SteamMarketPriceOptions> steamMarketPriceOptions,
-        IAppLogService appLogService)
+        IAppLogService appLogService,
+        IPriceDiagnosticLogService priceDiagnosticLogService)
     {
         _httpClient = httpClient;
         _memoryCache = memoryCache;
@@ -39,6 +42,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         _options = options.Value;
         _steamMarketPriceOptions = steamMarketPriceOptions.Value;
         _appLogService = appLogService;
+        _priceDiagnosticLogService = priceDiagnosticLogService;
     }
 
     public async Task<PriceSourceResult> ProbePriceAsync(string marketHashName, GameType gameType, CancellationToken cancellationToken = default)
@@ -66,7 +70,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
         if (!_steamMarketPriceOptions.Enabled)
         {
             var disabled = Failure("Steam", "Disabled", "Steam market priceoverview is disabled by configuration.", normalizedName);
-            await _appLogService.WriteAsync(
+            await LogVerboseAppAsync(
                 "Info",
                 $"Disabled. Url=skipped; GameType={(int)gameType}; MarketHashName={normalizedName}; Reason={disabled.FailureReason}",
                 nameof(SteamMarketPriceService),
@@ -78,7 +82,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             cooldownUntil > DateTimeOffset.UtcNow)
         {
             var cooledDown = Failure("Steam", "RateLimited", $"Steam market cooldown is active until {cooldownUntil.UtcDateTime:O}.", normalizedName);
-            await _appLogService.WriteAsync("Warning", $"Cooldown skip. GameType={(int)gameType}; MarketHashName={normalizedName}; CooldownUntil={cooldownUntil.UtcDateTime:O}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+            await LogSteamProblemAsync("SourceRateLimited", "steamcommunity.com/market/priceoverview", game, normalizedName, cooledDown.FailureReason, status: cooledDown.Status, details: new { cooldownUntil = cooldownUntil.UtcDateTime }, cancellationToken: CancellationToken.None);
+            await LogVerboseAppAsync("Warning", $"Cooldown skip. GameType={(int)gameType}; MarketHashName={normalizedName}; CooldownUntil={cooldownUntil.UtcDateTime:O}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
             Cache(cacheKey, cooledDown);
             return cooledDown;
         }
@@ -87,7 +92,7 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             $"https://steamcommunity.com/market/priceoverview/?country=US&currency=1&appid={game.SteamAppId}&market_hash_name={Uri.EscapeDataString(normalizedName)}";
 
         _logger.LogInformation("Steam price lookup started for {GameType} / {MarketHashName}.", gameType, normalizedName);
-        await _appLogService.WriteAsync("Info", $"Start. Url={requestUri}; GameType={(int)gameType}; MarketHashName={normalizedName}", nameof(SteamMarketPriceService), cancellationToken: cancellationToken);
+        await LogVerboseAppAsync("Info", $"Start. Url={requestUri}; GameType={(int)gameType}; MarketHashName={normalizedName}", nameof(SteamMarketPriceService), cancellationToken: cancellationToken);
         for (var attempt = 0; attempt <= Math.Max(0, _options.SteamRetryCount); attempt++)
         {
             var stopwatch = Stopwatch.StartNew();
@@ -102,11 +107,12 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                     (int)response.StatusCode,
                     stopwatch.ElapsedMilliseconds,
                     attempt + 1);
-                await _appLogService.WriteAsync("Info", $"End. Url={requestUri}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Attempt={attempt + 1}; MarketHashName={normalizedName}", nameof(SteamMarketPriceService), cancellationToken: cancellationToken);
+                await LogVerboseAppAsync("Info", $"End. Url={requestUri}; Http={(int)response.StatusCode}; ElapsedMs={stopwatch.ElapsedMilliseconds}; Attempt={attempt + 1}; MarketHashName={normalizedName}", nameof(SteamMarketPriceService), cancellationToken: cancellationToken);
                 if (response.StatusCode == HttpStatusCode.Forbidden)
                 {
                     var forbidden = Failure("Steam", "Forbidden", "Steam market denied the request.", normalizedName);
-                    await _appLogService.WriteAsync("Warning", $"Fail. Status=Forbidden; Url={requestUri}; MarketHashName={normalizedName}; Reason={forbidden.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await LogSteamProblemAsync("ExternalApiError", "steamcommunity.com/market/priceoverview", game, normalizedName, forbidden.FailureReason, httpStatusCode: (int)response.StatusCode, status: forbidden.Status, durationMs: stopwatch.ElapsedMilliseconds, cancellationToken: CancellationToken.None);
+                    await LogVerboseAppAsync("Warning", $"Fail. Status=Forbidden; Url={requestUri}; MarketHashName={normalizedName}; Reason={forbidden.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, forbidden);
                     return forbidden;
                 }
@@ -115,7 +121,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                 {
                     _memoryCache.Set(cooldownKey, DateTimeOffset.UtcNow.Add(RateLimitCooldown), RateLimitCooldown);
                     var rateLimited = Failure("Steam", "RateLimited", "Steam market is rate limiting requests.", normalizedName);
-                    await _appLogService.WriteAsync("Warning", $"Fail. Status=RateLimited; Url={requestUri}; MarketHashName={normalizedName}; CooldownMinutes={(int)RateLimitCooldown.TotalMinutes}; Reason={rateLimited.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await LogSteamProblemAsync("SourceRateLimited", "steamcommunity.com/market/priceoverview", game, normalizedName, rateLimited.FailureReason, httpStatusCode: (int)response.StatusCode, status: rateLimited.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { cooldownMinutes = (int)RateLimitCooldown.TotalMinutes }, cancellationToken: CancellationToken.None);
+                    await LogVerboseAppAsync("Warning", $"Fail. Status=RateLimited; Url={requestUri}; MarketHashName={normalizedName}; CooldownMinutes={(int)RateLimitCooldown.TotalMinutes}; Reason={rateLimited.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, rateLimited);
                     return rateLimited;
                 }
@@ -129,7 +136,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                 if (!response.IsSuccessStatusCode)
                 {
                     var failed = Failure("Steam", "HttpError", $"Steam market returned HTTP {(int)response.StatusCode}.", normalizedName);
-                    await _appLogService.WriteAsync("Warning", $"Fail. Status=HttpError; Http={(int)response.StatusCode}; Url={requestUri}; MarketHashName={normalizedName}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await LogSteamProblemAsync("ExternalApiError", "steamcommunity.com/market/priceoverview", game, normalizedName, failed.FailureReason, httpStatusCode: (int)response.StatusCode, status: failed.Status, durationMs: stopwatch.ElapsedMilliseconds, cancellationToken: CancellationToken.None);
+                    await LogVerboseAppAsync("Warning", $"Fail. Status=HttpError; Http={(int)response.StatusCode}; Url={requestUri}; MarketHashName={normalizedName}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, failed);
                     return failed;
                 }
@@ -145,7 +153,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                 if (payload?.Success != true)
                 {
                     var unavailable = Failure("Steam", "Unavailable", "Steam market did not return a price.", normalizedName);
-                    await _appLogService.WriteAsync("Info", $"No price. Url={requestUri}; MarketHashName={normalizedName}; Reason={unavailable.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await LogSteamProblemAsync("SourceReturnedNoUsablePrice", "steamcommunity.com/market/priceoverview", game, normalizedName, unavailable.FailureReason, httpStatusCode: (int)response.StatusCode, status: unavailable.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { success = payload?.Success, bodyLength = rawContent.Length }, cancellationToken: CancellationToken.None);
+                    await LogVerboseAppAsync("Info", $"No price. Url={requestUri}; MarketHashName={normalizedName}; Reason={unavailable.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, unavailable);
                     return unavailable;
                 }
@@ -157,7 +166,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                 if (!parsedPrice.HasValue || parsedPrice <= 0)
                 {
                     var malformed = Failure("Steam", "MalformedResponse", "Steam market response did not contain a usable price.", normalizedName);
-                    await _appLogService.WriteAsync("Warning", $"Parse fail. Url={requestUri}; MarketHashName={normalizedName}; Reason={malformed.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                    await LogSteamProblemAsync("ParseFailed", "steamcommunity.com/market/priceoverview", game, normalizedName, malformed.FailureReason, httpStatusCode: (int)response.StatusCode, status: malformed.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { lowest_price = payload.LowestPrice, median_price = payload.MedianPrice, volume = payload.Volume }, cancellationToken: CancellationToken.None);
+                    await LogVerboseAppAsync("Warning", $"Parse fail. Url={requestUri}; MarketHashName={normalizedName}; Reason={malformed.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                     Cache(cacheKey, malformed);
                     return malformed;
                 }
@@ -194,7 +204,25 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                     RawPayloadHash = Hash(rawContent)
                 };
 
-                await _appLogService.WriteAsync("Info", $"Success. Url={requestUri}; MarketHashName={normalizedName}; Price={result.Price}; Currency={result.Currency}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+                if (!usingLowest)
+                {
+                    await LogSteamProblemAsync(
+                        "SourceRejected",
+                        "steamcommunity.com/market/priceoverview",
+                        game,
+                        normalizedName,
+                        "Steam lowest_price is missing; median_price is only a reference/estimate.",
+                        httpStatusCode: (int)response.StatusCode,
+                        priceType: result.PriceType,
+                        priceUsd: result.Price,
+                        originalCurrency: result.OriginalCurrency,
+                        confidenceScore: result.ConfidenceScore,
+                        durationMs: stopwatch.ElapsedMilliseconds,
+                        details: new { lowest_price = payload.LowestPrice, median_price = payload.MedianPrice, usedField = "median_price" },
+                        cancellationToken: CancellationToken.None);
+                }
+
+                await LogVerboseAppAsync("Info", $"Success. Url={requestUri}; MarketHashName={normalizedName}; Price={result.Price}; Currency={result.Currency}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
                 Cache(cacheKey, result);
                 return result;
             }
@@ -208,7 +236,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
                     gameType,
                     normalizedName,
                     stopwatch.ElapsedMilliseconds);
-                await _appLogService.WriteAsync("Warning", $"Timeout. Url={requestUri}; MarketHashName={normalizedName}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
+                await LogSteamProblemAsync("SourceTimeout", "steamcommunity.com/market/priceoverview", game, normalizedName, failed.FailureReason, status: failed.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { exceptionType = exception.GetType().Name }, cancellationToken: CancellationToken.None);
+                await LogVerboseAppAsync("Warning", $"Timeout. Url={requestUri}; MarketHashName={normalizedName}; ElapsedMs={stopwatch.ElapsedMilliseconds}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
@@ -222,7 +251,8 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             {
                 stopwatch.Stop();
                 var failed = Failure("Steam", "NetworkError", exception.Message, normalizedName);
-                await _appLogService.WriteAsync("Error", $"Fail. Url={requestUri}; MarketHashName={normalizedName}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
+                await LogSteamProblemAsync("SourceFailed", "steamcommunity.com/market/priceoverview", game, normalizedName, failed.FailureReason, status: failed.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { exceptionType = exception.GetType().Name }, cancellationToken: CancellationToken.None);
+                await LogVerboseAppAsync("Error", $"Fail. Url={requestUri}; MarketHashName={normalizedName}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
@@ -230,14 +260,16 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             {
                 stopwatch.Stop();
                 var failed = Failure("Steam", "MalformedResponse", exception.Message, normalizedName);
-                await _appLogService.WriteAsync("Error", $"Parse fail. Url={requestUri}; MarketHashName={normalizedName}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
+                await LogSteamProblemAsync("ParseFailed", "steamcommunity.com/market/priceoverview", game, normalizedName, failed.FailureReason, status: failed.Status, durationMs: stopwatch.ElapsedMilliseconds, details: new { exceptionType = exception.GetType().Name }, cancellationToken: CancellationToken.None);
+                await LogVerboseAppAsync("Error", $"Parse fail. Url={requestUri}; MarketHashName={normalizedName}; ExceptionType={exception.GetType().Name}; Reason={failed.FailureReason}", nameof(SteamMarketPriceService), exception, CancellationToken.None);
                 Cache(cacheKey, failed);
                 return failed;
             }
         }
 
         var exhausted = Failure("Steam", "TransientFailure", "Steam market retry budget exhausted.", normalizedName);
-        await _appLogService.WriteAsync("Warning", $"Fail. Url={requestUri}; MarketHashName={normalizedName}; Reason={exhausted.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
+        await LogSteamProblemAsync("SourceFailed", "steamcommunity.com/market/priceoverview", game, normalizedName, exhausted.FailureReason, status: exhausted.Status, details: new { retryCount = _options.SteamRetryCount }, cancellationToken: CancellationToken.None);
+        await LogVerboseAppAsync("Warning", $"Fail. Url={requestUri}; MarketHashName={normalizedName}; Reason={exhausted.FailureReason}", nameof(SteamMarketPriceService), cancellationToken: CancellationToken.None);
         Cache(exhaustedKey: cacheKey, result: exhausted);
         return exhausted;
     }
@@ -354,6 +386,53 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             : null;
     }
 
+    private Task LogSteamProblemAsync(
+        string eventType,
+        string endpoint,
+        GameDefinition game,
+        string? marketHashName,
+        string? failureReason,
+        int? httpStatusCode = null,
+        string? priceType = null,
+        decimal? priceUsd = null,
+        string? originalCurrency = null,
+        decimal? confidenceScore = null,
+        string? status = null,
+        long? durationMs = null,
+        object? details = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _priceDiagnosticLogService.LogProblemAsync(
+            eventType,
+            PriceSourceNames.Steam,
+            failureReason ?? "Steam price problem.",
+            game.Type,
+            game.SteamAppId,
+            marketHashName,
+            httpStatusCode: httpStatusCode,
+            endpoint: endpoint,
+            priceType: priceType,
+            priceUsd: priceUsd,
+            originalCurrency: originalCurrency,
+            confidenceScore: confidenceScore,
+            status: status,
+            durationMs: durationMs,
+            detailsJson: details is null ? null : JsonSerializer.Serialize(details),
+            cancellationToken: cancellationToken);
+    }
+
+    private Task LogVerboseAppAsync(
+        string level,
+        string message,
+        string? source = null,
+        Exception? exception = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _options.EnableVerbosePriceDiagnostics
+            ? _appLogService.WriteAsync(level, message, source, exception, cancellationToken)
+            : Task.CompletedTask;
+    }
+
     private static string Hash(string value)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
@@ -362,9 +441,16 @@ public class SteamMarketPriceService : ISteamMarketPriceService
 
     private sealed class SteamMarketPriceResponse
     {
+        [JsonPropertyName("success")]
         public bool Success { get; set; }
+
+        [JsonPropertyName("lowest_price")]
         public string? LowestPrice { get; set; }
+
+        [JsonPropertyName("median_price")]
         public string? MedianPrice { get; set; }
+
+        [JsonPropertyName("volume")]
         public string? Volume { get; set; }
     }
 }

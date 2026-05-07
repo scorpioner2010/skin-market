@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using SkinMarket.Contracts;
 using SkinMarket.Data;
 using SkinMarket.Infrastructure;
@@ -21,6 +22,7 @@ public class ItemPriceResolver : IItemPriceResolver
     private readonly IGameCatalog _gameCatalog;
     private readonly ILogger<ItemPriceResolver> _logger;
     private readonly IAppLogService _appLogService;
+    private readonly IPriceDiagnosticLogService _priceDiagnosticLogService;
 
     public ItemPriceResolver(
         AppDbContext dbContext,
@@ -33,7 +35,8 @@ public class ItemPriceResolver : IItemPriceResolver
         IOptions<PricingOptions> options,
         IGameCatalog gameCatalog,
         ILogger<ItemPriceResolver> logger,
-        IAppLogService appLogService)
+        IAppLogService appLogService,
+        IPriceDiagnosticLogService priceDiagnosticLogService)
     {
         _dbContext = dbContext;
         _steamMarketPriceService = steamMarketPriceService;
@@ -46,6 +49,7 @@ public class ItemPriceResolver : IItemPriceResolver
         _gameCatalog = gameCatalog;
         _logger = logger;
         _appLogService = appLogService;
+        _priceDiagnosticLogService = priceDiagnosticLogService;
     }
 
     public async Task<ItemPriceResolutionResult> ResolveAsync(SteamInventoryItemDto item, CancellationToken cancellationToken = default)
@@ -101,7 +105,8 @@ public class ItemPriceResolver : IItemPriceResolver
                 continue;
             }
 
-            var selected = SelectBestSnapshot(snapshots.GetValueOrDefault(marketHashName) ?? [], marketHashName);
+            var snapshotsForName = snapshots.GetValueOrDefault(marketHashName) ?? [];
+            var selected = SelectBestSnapshot(snapshotsForName, marketHashName);
             if (selected is not null)
             {
                 selected.NeedsRefresh = selected.IsStale || selected.ExpiresAtUtc <= DateTime.UtcNow;
@@ -161,24 +166,48 @@ public class ItemPriceResolver : IItemPriceResolver
         var normalizedMarketHashName = MarketHashNameUtility.Normalize(marketHashName);
         if (string.IsNullOrWhiteSpace(normalizedMarketHashName))
         {
-            await _appLogService.WriteAsync("Warning", "Missing market hash name.", nameof(ItemPriceResolver), cancellationToken: cancellationToken);
+            await LogVerboseAppAsync("Warning", "Missing market hash name.", nameof(ItemPriceResolver), cancellationToken: cancellationToken);
             return CreateUnavailable("MissingMarketHashName", null);
         }
 
+        var game = _gameCatalog.Get(gameType);
+        var existingSnapshots = await LoadSnapshotsForNameAsync(normalizedMarketHashName, gameType, cancellationToken);
         var memoryCacheKey = BuildMemoryCacheKey(gameType, normalizedMarketHashName);
         if (_memoryCache.TryGetValue<ItemPriceResolutionResult>(memoryCacheKey, out var cached) &&
             cached is not null &&
             !cached.NeedsRefresh)
         {
-            return Clone(cached, true);
+            var cachedClone = Clone(cached, true);
+            if (GetMissingHigherPrioritySourceNames(existingSnapshots, game, cachedClone).Count == 0)
+            {
+                return cachedClone;
+            }
         }
 
-        var existingSnapshots = await LoadSnapshotsForNameAsync(normalizedMarketHashName, gameType, cancellationToken);
         var cachedSelection = SelectBestSnapshot(existingSnapshots, normalizedMarketHashName);
-        if (!probeSources || cachedSelection is { IsStale: false } && cachedSelection.ExpiresAtUtc > DateTime.UtcNow)
+        var shouldProbeHigherPrioritySources = probeSources &&
+                                               cachedSelection is { IsStale: false } &&
+                                               cachedSelection.ExpiresAtUtc > DateTime.UtcNow &&
+                                               GetMissingHigherPrioritySourceNames(existingSnapshots, game, cachedSelection).Count > 0;
+        if (!probeSources ||
+            cachedSelection is { IsStale: false } &&
+            cachedSelection.ExpiresAtUtc > DateTime.UtcNow &&
+            !shouldProbeHigherPrioritySources)
         {
             if (cachedSelection is not null)
             {
+                var missingExpectedSources = GetMissingExpectedSourceNames(existingSnapshots, game);
+                if (probeSources && missingExpectedSources.Count > 0)
+                {
+                    await LogCachedSelectionSkippedSourcesAsync(
+                        game,
+                        normalizedMarketHashName,
+                        cachedSelection,
+                        existingSnapshots,
+                        missingExpectedSources,
+                        cancellationToken);
+                }
+
                 _memoryCache.Set(memoryCacheKey, cachedSelection, GetMemoryDuration(cachedSelection));
                 return Clone(cachedSelection, true);
             }
@@ -188,7 +217,13 @@ public class ItemPriceResolver : IItemPriceResolver
             return unavailableCached;
         }
 
-        await _appLogService.WriteAsync(
+        await _priceDiagnosticLogService.LogResolveStartedAsync(
+            gameType,
+            game.SteamAppId,
+            normalizedMarketHashName,
+            existingSnapshots.Count,
+            cancellationToken);
+        await LogVerboseAppAsync(
             "Info",
             $"Resolve start. GameType={(int)gameType}; MarketHashName={normalizedMarketHashName}; Steam={_options.EnableSteamSource}; CSFloat={_options.EnableCsFloatSource}; Skinport={_options.EnableSkinportSource}; DMarket={_options.EnableDMarketSource}; SnapshotCount={existingSnapshots.Count}",
             nameof(ItemPriceResolver),
@@ -206,6 +241,8 @@ public class ItemPriceResolver : IItemPriceResolver
                 () => _skinportPricingService.ProbePriceAsync(normalizedMarketHashName, gameType, cancellationToken),
                 PriceSourceNames.Skinport,
                 normalizedMarketHashName,
+                gameType,
+                game.SteamAppId,
                 cancellationToken);
             sourceResults.Add(skinportResult);
             await SaveSnapshotAsync(gameType, skinportResult, cancellationToken);
@@ -217,6 +254,8 @@ public class ItemPriceResolver : IItemPriceResolver
                 () => _dMarketPricingService.ProbePriceAsync(normalizedMarketHashName, gameType, cancellationToken),
                 PriceSourceNames.DMarket,
                 normalizedMarketHashName,
+                gameType,
+                game.SteamAppId,
                 cancellationToken);
             sourceResults.Add(dMarketResult);
             await SaveSnapshotAsync(gameType, dMarketResult, cancellationToken);
@@ -228,18 +267,21 @@ public class ItemPriceResolver : IItemPriceResolver
                 () => _steamMarketPriceService.ProbePriceAsync(normalizedMarketHashName, gameType, cancellationToken),
                 PriceSourceNames.Steam,
                 normalizedMarketHashName,
+                gameType,
+                game.SteamAppId,
                 cancellationToken);
             sourceResults.Add(steamResult);
             await SaveSnapshotAsync(gameType, steamResult, cancellationToken);
         }
 
-        var game = _gameCatalog.Get(gameType);
         if (_options.EnableCsFloatSource && game.SteamAppId == 730)
         {
             csFloatResult = await ProbeAndNormalizeAsync(
                 () => _csFloatPriceService.ProbePriceAsync(normalizedMarketHashName, gameType, cancellationToken),
                 PriceSourceNames.CSFloat,
                 normalizedMarketHashName,
+                gameType,
+                game.SteamAppId,
                 cancellationToken);
             sourceResults.Add(csFloatResult);
             await SaveSnapshotAsync(gameType, csFloatResult, cancellationToken);
@@ -258,10 +300,23 @@ public class ItemPriceResolver : IItemPriceResolver
         if (!selected.HasPrice)
         {
             await SaveSnapshotAsync(gameType, ToSourceResult(selected), cancellationToken);
+            await LogFinalResolutionFailedAsync(
+                game,
+                normalizedMarketHashName,
+                selected.FailureReason ?? "No reliable price.",
+                sourceResults,
+                existingSnapshots,
+                cancellationToken);
         }
 
         _memoryCache.Set(memoryCacheKey, selected, GetMemoryDuration(selected));
-        await _appLogService.WriteAsync(
+        await _priceDiagnosticLogService.LogFinalSelectionAsync(
+            gameType,
+            game.SteamAppId,
+            normalizedMarketHashName,
+            selected,
+            cancellationToken);
+        await LogVerboseAppAsync(
             selected.HasPrice ? "Info" : "Warning",
             $"Resolved final. GameType={(int)gameType}; MarketHashName={normalizedMarketHashName}; HasPrice={selected.HasPrice}; Source={selected.Source}; PriceType={selected.PriceType}; PriceUsd={selected.Price?.ToString() ?? "<null>"}; Estimated={selected.IsEstimated}; Cached={selected.IsCached}; Stale={selected.IsStale}; Confidence={selected.ConfidenceScore}; Failure={selected.FailureReason}",
             nameof(ItemPriceResolver),
@@ -274,6 +329,8 @@ public class ItemPriceResolver : IItemPriceResolver
         Func<Task<PriceSourceResult>> probe,
         string source,
         string marketHashName,
+        GameType gameType,
+        int appId,
         CancellationToken cancellationToken)
     {
         var result = await probe();
@@ -320,6 +377,12 @@ public class ItemPriceResolver : IItemPriceResolver
         }
 
         LogSourceResult(result);
+        await _priceDiagnosticLogService.LogSourceResultAsync(
+            gameType,
+            appId,
+            marketHashName,
+            result,
+            cancellationToken: cancellationToken);
         return result;
     }
 
@@ -377,39 +440,129 @@ public class ItemPriceResolver : IItemPriceResolver
         return selected;
     }
 
-    private int GetSelectionRank(ItemPriceResolutionResult result)
+    private List<string> GetMissingExpectedSourceNames(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        GameDefinition game)
     {
-        if (!result.IsEstimated && !result.IsStale && result.Source == PriceSourceNames.Skinport && result.PriceType == PriceTypeNames.LowestListing)
+        var availableSources = snapshots
+            .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Source))
+            .Select(snapshot => snapshot.Source)
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return GetExpectedSourceNames(game)
+            .Where(source => !availableSources.Contains(source))
+            .ToList();
+    }
+
+    private List<string> GetMissingHigherPrioritySourceNames(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        GameDefinition game,
+        ItemPriceResolutionResult selected)
+    {
+        var selectedRank = GetSourceSelectionRank(selected.Source);
+        var now = DateTime.UtcNow;
+        var availableFreshSources = snapshots
+            .Where(snapshot => snapshot.HasPrice && (snapshot.PriceUsd ?? snapshot.Price).HasValue)
+            .Where(snapshot => snapshot.ExpiresAtUtc > now)
+            .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Source))
+            .Select(snapshot => snapshot.Source)
+            .Distinct(StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+
+        return GetExpectedSourceNames(game)
+            .Where(source => GetSourceSelectionRank(source) < selectedRank)
+            .Where(source => !availableFreshSources.Contains(source))
+            .ToList();
+    }
+
+    private List<string> GetExpectedSourceNames(GameDefinition game)
+    {
+        var expectedSources = new List<string>();
+        if (_options.EnableSteamSource && game.SupportsSteamMarketPricing)
         {
-            return 10;
+            expectedSources.Add(PriceSourceNames.Steam);
         }
 
-        if (!result.IsEstimated && !result.IsStale && result.Source == PriceSourceNames.DMarket && result.PriceType == PriceTypeNames.LowestListing)
+        if (_options.EnableSkinportSource && game.SupportsSkinportPricing)
         {
-            return 20;
+            expectedSources.Add(PriceSourceNames.Skinport);
         }
 
-        if (!result.IsEstimated && !result.IsStale && result.Source == PriceSourceNames.Steam && result.PriceType == PriceTypeNames.LowestListing)
+        if (_options.EnableDMarketSource)
         {
-            return 30;
+            expectedSources.Add(PriceSourceNames.DMarket);
         }
 
-        if (!result.IsEstimated && !result.IsStale && result.Source == PriceSourceNames.CSFloat && result.PriceType == PriceTypeNames.LowestListing)
+        if (_options.EnableCsFloatSource && game.SteamAppId == 730)
         {
-            return 40;
+            expectedSources.Add(PriceSourceNames.CSFloat);
         }
 
-        if (result.PriceType is PriceTypeNames.MedianSale or PriceTypeNames.AvgSale)
-        {
-            return result.IsStale ? 80 : 50;
-        }
+        return expectedSources;
+    }
 
-        if (result.PriceType is PriceTypeNames.Suggested or PriceTypeNames.BlendedEstimate)
-        {
-            return result.IsStale ? 90 : 60;
-        }
+    private Task LogCachedSelectionSkippedSourcesAsync(
+        GameDefinition game,
+        string marketHashName,
+        ItemPriceResolutionResult cachedSelection,
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        IReadOnlyCollection<string> missingExpectedSources,
+        CancellationToken cancellationToken)
+    {
+        return _priceDiagnosticLogService.LogProblemAsync(
+            "SourceSkipped",
+            "Resolver",
+            "Fresh cached selected price returned before probing missing source snapshots.",
+            game.Type,
+            game.SteamAppId,
+            marketHashName,
+            endpoint: "ItemPriceResolver cache short-circuit",
+            priceType: cachedSelection.PriceType,
+            priceUsd: cachedSelection.Price,
+            confidenceScore: cachedSelection.ConfidenceScore,
+            status: "CachedShortCircuit",
+            detailsJson: JsonSerializer.Serialize(new
+            {
+                selected = new
+                {
+                    cachedSelection.Source,
+                    cachedSelection.PriceType,
+                    priceUsd = cachedSelection.Price,
+                    cachedSelection.Status,
+                    cachedSelection.ExpiresAtUtc,
+                    cachedSelection.ConfidenceScore
+                },
+                missingExpectedSources,
+                existingSources = snapshots
+                    .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Source))
+                    .GroupBy(snapshot => snapshot.Source, StringComparer.Ordinal)
+                    .Select(group => new
+                    {
+                        source = group.Key,
+                        rows = group.Count(),
+                        bestUpdatedAtUtc = group.Max(snapshot => snapshot.UpdatedAtUtc)
+                    })
+                    .ToList()
+            }),
+            cancellationToken: cancellationToken);
+    }
 
-        return result.IsStale ? 100 : 70;
+    internal static int GetSelectionRank(ItemPriceResolutionResult result)
+    {
+        return (result.IsStale ? 100 : 0) + GetSourceSelectionRank(result.Source);
+    }
+
+    private static int GetSourceSelectionRank(string? source)
+    {
+        return source switch
+        {
+            PriceSourceNames.Steam => 10,
+            PriceSourceNames.Skinport => 20,
+            PriceSourceNames.DMarket => 30,
+            PriceSourceNames.CSFloat => 80,
+            _ => 100
+        };
     }
 
     private async Task<Dictionary<string, List<PriceSnapshot>>> LoadSnapshotsAsync(
@@ -649,11 +802,108 @@ public class ItemPriceResolver : IItemPriceResolver
 
     private async Task LogRejectedSourceAsync(PriceSourceResult result, string marketHashName, string reason, CancellationToken cancellationToken)
     {
-        await _appLogService.WriteAsync(
+        await _priceDiagnosticLogService.LogProblemAsync(
+            string.Equals(result.Currency, "USD", StringComparison.OrdinalIgnoreCase) ? "SourceRejected" : "CurrencyMismatch",
+            result.Source,
+            reason,
+            marketHashName: marketHashName,
+            priceType: result.PriceType,
+            priceUsd: result.Price,
+            originalCurrency: result.Currency,
+            confidenceScore: result.ConfidenceScore,
+            status: result.Status,
+            detailsJson: JsonSerializer.Serialize(new
+            {
+                result.ResolvedMarketHashName,
+                result.OriginalPrice,
+                result.OriginalCurrency,
+                result.FxRate
+            }),
+            cancellationToken: cancellationToken);
+        await LogVerboseAppAsync(
             "Warning",
             $"Price source rejected. MarketHashName={marketHashName}; Source={result.Source}; PriceType={result.PriceType}; Currency={result.Currency}; Reason={reason}",
             nameof(ItemPriceResolver),
             cancellationToken: cancellationToken);
+    }
+
+    private Task LogFinalResolutionFailedAsync(
+        GameDefinition game,
+        string marketHashName,
+        string finalReason,
+        IReadOnlyCollection<PriceSourceResult> sourceResults,
+        IReadOnlyCollection<PriceSnapshot> existingSnapshots,
+        CancellationToken cancellationToken)
+    {
+        return _priceDiagnosticLogService.LogProblemAsync(
+            "FinalResolutionFailed",
+            "Resolver",
+            finalReason,
+            game.Type,
+            game.SteamAppId,
+            marketHashName,
+            status: "NoReliablePrice",
+            detailsJson: JsonSerializer.Serialize(new
+            {
+                itemName = marketHashName,
+                game = game.DisplayName,
+                finalReason,
+                sources = BuildSourceProblemSummary(sourceResults),
+                staleSnapshotsRejected = existingSnapshots
+                    .Where(snapshot => snapshot.HasPrice && snapshot.ExpiresAtUtc <= DateTime.UtcNow)
+                    .OrderByDescending(snapshot => snapshot.UpdatedAtUtc)
+                    .Take(8)
+                    .Select(snapshot => new
+                    {
+                        snapshot.Source,
+                        snapshot.PriceType,
+                        priceUsd = snapshot.PriceUsd ?? snapshot.Price,
+                        snapshot.ConfidenceScore,
+                        snapshot.ExpiresAtUtc,
+                        snapshot.FailureReason
+                    })
+                    .ToList()
+            }),
+            cancellationToken: cancellationToken);
+    }
+
+    private static IReadOnlyList<object> BuildSourceProblemSummary(IReadOnlyCollection<PriceSourceResult> sourceResults)
+    {
+        return sourceResults
+            .GroupBy(result => string.IsNullOrWhiteSpace(result.Source) ? PriceSourceNames.Unavailable : result.Source)
+            .Select(group => group.OrderByDescending(result => result.Success).First())
+            .Select(result => new
+            {
+                source = result.Source,
+                state = result.Success && result.Price.HasValue ? "Found" :
+                    result.Status == "RateLimited" ? "Failed" :
+                    (result.FailureReason?.Contains("not return this title", StringComparison.OrdinalIgnoreCase) == true ||
+                     result.FailureReason?.Contains("not found", StringComparison.OrdinalIgnoreCase) == true) ? "NotFound" :
+                    "Failed",
+                reason = result.FailureReason,
+                result.Status,
+                result.PriceType,
+                priceUsd = result.Price,
+                result.Currency,
+                result.ConfidenceScore,
+                result.IsEstimated,
+                result.IsCached,
+                result.IsStale
+            })
+            .Cast<object>()
+            .ToList();
+    }
+
+    private Task LogVerboseAppAsync(
+        string level,
+        string message,
+        string? source = null,
+        Exception? exception = null,
+        CancellationToken cancellationToken = default)
+    {
+        return _options.EnableVerbosePriceDiagnostics
+            ? _appLogService.WriteAsync(level, message, source, exception, cancellationToken)
+            : Task.CompletedTask;
     }
 
     private void LogSourceResult(PriceSourceResult result)

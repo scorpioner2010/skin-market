@@ -157,12 +157,16 @@
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Tradable"]</div>
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Marketable"]</div>
                             <div class="inventory-cell">@L["Common_QuantityShort"]</div>
+                            <div class="inventory-cell">Asset ID</div>
                             <div class="inventory-cell">USD price</div>
+                            <div class="inventory-cell">Price status</div>
+                            <div class="inventory-cell">Price sources</div>
                             <div class="inventory-cell inventory-status-cell">@L["Inventory_Column_Status"]</div>
                             <div class="inventory-cell inventory-actions-cell">@L["Inventory_Column_Action"]</div>
                         </div>
                         @foreach (var item in Model.GroupedItems)
                         {
+                            var priceBreakdown = Model.GetPriceBreakdown(item.MarketHashName);
                             <article class="inventory-row" data-inventory-sale-row data-asset-ids="@string.Join("|", item.AssetIds)" data-quantity="@item.Quantity">
                                 <div class="inventory-cell inventory-item-cell" data-label="@L["Inventory_Column_Item"]">
                                     <div class="inventory-main">
@@ -206,6 +210,9 @@
                                 <div class="inventory-cell inventory-meta break-value" data-label="@L["Common_QuantityShort"]">
                                     <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                                 </div>
+                                <div class="inventory-cell inventory-meta break-value" data-label="Asset ID" title="@string.Join(", ", item.AssetIds)">
+                                    @item.RepresentativeAssetId
+                                </div>
                                 <div class="inventory-cell inventory-meta inventory-price-cell"
                                      data-label="USD price"
                                      data-asset-id="@item.RepresentativeAssetId"
@@ -219,21 +226,48 @@
                                     @if (resolvedPrice?.Status == "Refreshing")
                                     {
                                         <div class="inventory-price-block">
-                                            <span class="inventory-unavailable">@L["PriceStatus_Refreshing"]</span>
+                                            <span class="inventory-unavailable">-</span>
                                         </div>
                                     }
                                     else if (resolvedPrice?.HasPrice == true && resolvedPrice.Price is decimal realPrice)
                                     {
                                         <div class="inventory-price-block">
                                             <span class="price-value">@Model.GetPriceDisplayText(resolvedPrice)</span>
-                                            <span class="inventory-meta">@Model.GetPriceStatusLabel(resolvedPrice) · @Model.GetPriceSourceLabel(resolvedPrice.Source)</span>
                                         </div>
                                     }
                                     else
                                     {
                                         <div class="inventory-price-block">
-                                            <span class="inventory-unavailable">No reliable price</span>
+                                            <span class="inventory-unavailable">-</span>
                                         </div>
+                                    }
+                                </div>
+                                <div class="inventory-cell inventory-meta inventory-price-status-cell"
+                                     data-label="Price status"
+                                     data-asset-id="@item.RepresentativeAssetId">
+                                    @(resolvedPrice?.Status == "Refreshing" ? L["PriceStatus_Refreshing"].Value : Model.GetPriceStatusLabel(resolvedPrice))
+                                </div>
+                                <div class="inventory-cell inventory-meta inventory-price-sources-cell"
+                                     data-label="Price sources">
+                                    @if (priceBreakdown.Count > 0)
+                                    {
+                                        <div class="price-source-dropdown" data-price-source-menu>
+                                            <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                            <div class="price-source-list" aria-hidden="true">
+                                                @foreach (var sourcePrice in priceBreakdown)
+                                                {
+                                                    <div class="price-source-row">
+                                                        <span class="price-source-name">@Model.GetPriceSourceLabel(sourcePrice.Source)</span>
+                                                        <span class="price-source-amount">@Model.GetBreakdownPriceText(sourcePrice)</span>
+                                                        <span class="price-source-meta" title="@sourcePrice.FailureReason">@Model.GetBreakdownMetaText(sourcePrice)</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="inventory-meta">-</span>
                                     }
                                 </div>
                                 <div class="inventory-cell inventory-status-cell" data-label="@L["Inventory_Column_Status"]" data-sale-status-cell data-trade-flow-status-cell>
@@ -455,26 +489,42 @@
 
             const updateCell = (entry) => {
                 const cell = document.querySelector(`.inventory-price-cell[data-asset-id="${entry.assetId}"]`);
-                if (!cell) {
+                const statusCell = document.querySelector(`.inventory-price-status-cell[data-asset-id="${entry.assetId}"]`);
+                if (!cell && !statusCell) {
                     return;
                 }
 
                 if (entry.status === 'Refreshing') {
-                    cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">@L["PriceStatus_Refreshing"]</span></div>`;
+                    if (cell) {
+                        cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">-</span></div>`;
+                    }
+                    if (statusCell) {
+                        statusCell.textContent = '@L["PriceStatus_Refreshing"]';
+                    }
                     return;
                 }
 
                 if (entry.hasPrice && entry.price !== null) {
-                    const display = entry.displayPrice || `${entry.isEstimated ? '~' : ''}$${Number(entry.price).toFixed(2)}`;
-                    const label = entry.isStale ? 'Stale' : entry.isEstimated ? 'Estimated' : entry.isCached ? 'Cached' : (entry.source || 'Live');
-                    cell.dataset.priceSource = entry.source || 'Unavailable';
-                    cell.dataset.priceType = entry.priceType || 'unavailable';
-                    cell.dataset.priceConfidence = entry.confidenceLabel || '';
-                    cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${display.split(' ')[0]}</span><span class="inventory-meta">${label} · ${entry.source || 'Unavailable'}</span></div>`;
+                    const display = `$${Number(entry.price).toFixed(2)}`;
+                    const label = entry.isStale ? 'Stale' : entry.isEstimated ? 'Estimated' : entry.isCached ? 'Cached' : 'Live';
+                    if (cell) {
+                        cell.dataset.priceSource = entry.source || 'Unavailable';
+                        cell.dataset.priceType = entry.priceType || 'unavailable';
+                        cell.dataset.priceConfidence = entry.confidenceLabel || '';
+                        cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${display}</span></div>`;
+                    }
+                    if (statusCell) {
+                        statusCell.textContent = label;
+                    }
                     return;
                 }
 
-                cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">No reliable price</span></div>`;
+                if (cell) {
+                    cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">-</span></div>`;
+                }
+                if (statusCell) {
+                    statusCell.textContent = 'No reliable price';
+                }
             };
 
             const fetchJson = async (url) => {
