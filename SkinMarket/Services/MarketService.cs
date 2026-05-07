@@ -83,6 +83,14 @@ public class MarketService : IMarketService
 
             reservedAssetSet.Add(assetKey);
             reservedDiagnostics.Add($"AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; Status={purchase.Status}; DeliveryStatus={purchase.DeliveryStatus ?? "<null>"}; Reason={decision.Reason}");
+            if (decision.ShouldWarn)
+            {
+                await _appLogService.WriteAsync(
+                    "Warning",
+                    $"Delivered item still appears in bot inventory. Game={game.Key}; AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; SourceTradeOperationId={purchase.SourceTradeOperationId?.ToString() ?? "<null>"}",
+                    nameof(MarketService),
+                    cancellationToken: cancellationToken);
+            }
         }
 
         if (reservedDiagnostics.Count > 0)

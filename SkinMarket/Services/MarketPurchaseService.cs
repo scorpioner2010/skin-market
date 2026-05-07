@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SkinMarket.Contracts;
@@ -62,6 +63,7 @@ public class MarketPurchaseService : IMarketPurchaseService
         }
 
         var buyer = await _dbContext.AppUsers
+            .AsNoTracking()
             .SingleOrDefaultAsync(user => user.Id == buyerAppUserId, cancellationToken);
 
         if (buyer is null)
@@ -103,6 +105,14 @@ public class MarketPurchaseService : IMarketPurchaseService
 
             reservedAssetSet.Add(purchase.AssetId);
             reservedDiagnostics.Add($"AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; Status={purchase.Status}; DeliveryStatus={purchase.DeliveryStatus ?? "<null>"}; Reason={decision.Reason}");
+            if (decision.ShouldWarn)
+            {
+                await _appLogService.WriteAsync(
+                    "Warning",
+                    $"Delivered item still appears in bot inventory. BuyerAppUserId={buyerAppUserId}; Game={game.Key}; AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; SourceTradeOperationId={purchase.SourceTradeOperationId?.ToString() ?? "<null>"}",
+                    nameof(MarketPurchaseService),
+                    cancellationToken: cancellationToken);
+            }
         }
 
         if (reservedDiagnostics.Count > 0)
@@ -130,13 +140,16 @@ public class MarketPurchaseService : IMarketPurchaseService
             return await FailAsync("Market item was not found.");
         }
 
+        var candidateAssetIds = candidates
+            .Select(candidate => candidate.AssetId)
+            .ToArray();
         var sourceOperations = await _dbContext.TradeOperations
             .AsNoTracking()
             .Where(
                 item => item.AppId == game.SteamAppId &&
                         item.ContextId == game.SteamContextId.ToString() &&
                         item.BotAssetId != null &&
-                        candidates.Select(candidate => candidate.AssetId).Contains(item.BotAssetId))
+                        candidateAssetIds.Contains(item.BotAssetId))
             .OrderByDescending(item => item.CreditedAtUtc ?? item.ReceivedByBotAtUtc ?? item.UpdatedAtUtc)
             .ToListAsync(cancellationToken);
         var sourceOperationByAssetId = sourceOperations
@@ -162,47 +175,89 @@ public class MarketPurchaseService : IMarketPurchaseService
             return await FailAsync("This item is no longer available.");
         }
 
-        var now = DateTime.UtcNow;
-        buyer.Balance -= price;
-
-        _dbContext.BalanceTransactions.Add(new BalanceTransaction
+        var executionStrategy = _dbContext.Database.CreateExecutionStrategy();
+        var reservationResult = await executionStrategy.ExecuteAsync(async () =>
         {
-            Id = Guid.NewGuid(),
-            AppUserId = buyer.Id,
-            Amount = -price,
-            Type = "PurchaseFromMarket",
-            CreatedAtUtc = now
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+            var isAlreadyReserved = await _dbContext.MarketPurchaseRecords
+                .AsNoTracking()
+                .AnyAsync(
+                    item => item.AppId == game.SteamAppId &&
+                            item.ContextId == game.SteamContextId.ToString() &&
+                            item.AssetId == inventoryItem.AssetId &&
+                            item.Status == "Sold" &&
+                            (item.DeliveryStatus == null ||
+                             MarketReservationPolicy.ActiveReservationDeliveryStatuses.Contains(item.DeliveryStatus)),
+                    cancellationToken);
+            if (isAlreadyReserved)
+            {
+                return await FailAsync("This item is no longer available.");
+            }
+
+            var deductedBuyerCount = await _dbContext.AppUsers
+                .Where(user => user.Id == buyer.Id && user.Balance >= price)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(user => user.Balance, user => user.Balance - price),
+                    cancellationToken);
+            if (deductedBuyerCount != 1)
+            {
+                return await FailAsync("Not enough balance to buy this item.");
+            }
+
+            var now = DateTime.UtcNow;
+
+            _dbContext.BalanceTransactions.Add(new BalanceTransaction
+            {
+                Id = Guid.NewGuid(),
+                AppUserId = buyer.Id,
+                Amount = -price,
+                Type = "PurchaseFromMarket",
+                CreatedAtUtc = now
+            });
+
+            _dbContext.MarketPurchaseRecords.Add(new MarketPurchaseRecord
+            {
+                Id = Guid.NewGuid(),
+                GameType = game.Type,
+                SourceTradeOperationId = sourceOperation?.Id,
+                BuyerAppUserId = buyer.Id,
+                AppId = game.SteamAppId,
+                ContextId = game.SteamContextId.ToString(),
+                AssetId = inventoryItem.AssetId,
+                ClassId = inventoryItem.ClassId,
+                InstanceId = inventoryItem.InstanceId,
+                ItemName = string.IsNullOrWhiteSpace(inventoryItem.Name) ? "Unknown Item" : inventoryItem.Name,
+                MarketHashName = MarketHashNameUtility.ResolvePrimary(inventoryItem),
+                IconUrl = inventoryItem.IconUrl,
+                Price = price,
+                Status = "Sold",
+                CreatedAtUtc = now,
+                PurchasedAtUtc = now,
+                UpdatedAtUtc = now,
+                DeliveryStatus = "PendingDelivery"
+            });
+
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch (DbUpdateException)
+            {
+                return await FailAsync("This item is no longer available.");
+            }
+
+            return new MarketPurchaseResult
+            {
+                Success = true,
+                Message = "Purchase completed. Delivery trade will start automatically."
+            };
         });
 
-        _dbContext.MarketPurchaseRecords.Add(new MarketPurchaseRecord
+        if (!reservationResult.Success)
         {
-            Id = Guid.NewGuid(),
-            GameType = game.Type,
-            SourceTradeOperationId = sourceOperation?.Id,
-            BuyerAppUserId = buyer.Id,
-            AppId = game.SteamAppId,
-            ContextId = game.SteamContextId.ToString(),
-            AssetId = inventoryItem.AssetId,
-            ClassId = inventoryItem.ClassId,
-            InstanceId = inventoryItem.InstanceId,
-            ItemName = string.IsNullOrWhiteSpace(inventoryItem.Name) ? "Unknown Item" : inventoryItem.Name,
-            MarketHashName = MarketHashNameUtility.ResolvePrimary(inventoryItem),
-            IconUrl = inventoryItem.IconUrl,
-            Price = price,
-            Status = "Sold",
-            CreatedAtUtc = now,
-            PurchasedAtUtc = now,
-            UpdatedAtUtc = now,
-            DeliveryStatus = "PendingDelivery"
-        });
-
-        try
-        {
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException)
-        {
-            return await FailAsync("This item is no longer available.");
+            return reservationResult;
         }
 
         await _appLogService.WriteAsync(
@@ -216,11 +271,7 @@ public class MarketPurchaseService : IMarketPurchaseService
             SteamInventoryRefreshReasons.UserBoughtItem,
             cancellationToken);
 
-        return new MarketPurchaseResult
-        {
-            Success = true,
-            Message = "Purchase completed. Delivery trade will start automatically."
-        };
+        return reservationResult;
     }
 
     public Task<List<MarketPurchaseRecord>> GetRecentPurchasesAsync(

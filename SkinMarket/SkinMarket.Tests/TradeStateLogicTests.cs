@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using SkinMarket.Data;
 using SkinMarket.Models;
 using SkinMarket.Pages;
 using SkinMarket.Services;
@@ -87,7 +89,10 @@ public class TradeStateLogicTests
         var active = Purchase("asset-3", "PendingDelivery");
 
         Assert.False(MarketReservationPolicy.GetDecision(failed, assetCurrentlyInBotInventory: true).IsReserved);
-        Assert.False(MarketReservationPolicy.GetDecision(deliveredStillInBotInventory, assetCurrentlyInBotInventory: true).IsReserved);
+        var deliveredDecision = MarketReservationPolicy.GetDecision(deliveredStillInBotInventory, assetCurrentlyInBotInventory: true);
+        Assert.True(deliveredDecision.IsReserved);
+        Assert.True(deliveredDecision.ShouldWarn);
+        Assert.Equal("Delivered item still appears in bot inventory", deliveredDecision.Reason);
         Assert.True(MarketReservationPolicy.GetDecision(active, assetCurrentlyInBotInventory: true).IsReserved);
     }
 
@@ -107,11 +112,35 @@ public class TradeStateLogicTests
         var group = Assert.Single(groups, item => item.AssetIds.Contains("asset-ready"));
         var deliveredGroup = Assert.Single(groups, item => item.AssetIds.Contains("delivered:purchase-1"));
 
-        Assert.Equal(InventoryItemActionKinds.Sell, group.ActionDecision.Kind);
+        Assert.Equal(InventoryItemActionKinds.CreatingTradeOffer, group.ActionDecision.Kind);
         Assert.Contains(group.StatusItems, item => item.IsReady && item.Quantity == 1);
         Assert.Contains(group.StatusItems, item => item.Status == "Pending" && item.Quantity == 1);
         Assert.Equal(InventoryItemActionKinds.Delivered, deliveredGroup.ActionDecision.Kind);
         Assert.Contains(deliveredGroup.StatusItems, item => item.Status == "Delivered" && item.Quantity == 1);
+    }
+
+    [Fact]
+    public void MarketPurchaseRecordModel_EnforcesActiveAssetReservationButAllowsSourceTradeReuse()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=skinmarket_model_test;Username=test;Password=test")
+            .Options;
+        using var dbContext = new AppDbContext(options);
+        var entity = dbContext.Model.FindEntityType(typeof(MarketPurchaseRecord));
+        Assert.NotNull(entity);
+
+        var assetIndex = Assert.Single(entity.GetIndexes(), index =>
+            index.Properties.Select(property => property.Name)
+                .SequenceEqual(["AppId", "ContextId", "AssetId"]));
+        Assert.True(assetIndex.IsUnique);
+        Assert.Contains("\"Status\" = 'Sold'", assetIndex.GetFilter());
+        Assert.Contains("'Delivered'", assetIndex.GetFilter());
+        Assert.Contains("'PendingDelivery'", assetIndex.GetFilter());
+
+        var sourceTradeIndex = Assert.Single(entity.GetIndexes(), index =>
+            index.Properties.Select(property => property.Name)
+                .SequenceEqual(["SourceTradeOperationId"]));
+        Assert.False(sourceTradeIndex.IsUnique);
     }
 
     [Fact]

@@ -6,13 +6,6 @@ public static class InventoryItemActionResolver
 {
     public static InventoryItemActionDecision Resolve(GroupedInventoryItem item, bool isTradeUrlConfigured)
     {
-        if (item.HasSellableItem)
-        {
-            return isTradeUrlConfigured
-                ? new InventoryItemActionDecision { Kind = InventoryItemActionKinds.Sell, DiagnosticReason = "Tradable asset is available." }
-                : new InventoryItemActionDecision { Kind = InventoryItemActionKinds.TradeUrlRequired, DiagnosticReason = "Tradable asset is available but seller Trade URL is missing." };
-        }
-
         if (!string.IsNullOrWhiteSpace(item.ActiveTradeStatus))
         {
             return ResolveSellerTradeAction(item);
@@ -21,6 +14,13 @@ public static class InventoryItemActionResolver
         if (item.HasIncomingDelivery)
         {
             return ResolveBuyerDeliveryAction(item.IncomingDeliveryStatus);
+        }
+
+        if (item.HasSellableItem)
+        {
+            return isTradeUrlConfigured
+                ? new InventoryItemActionDecision { Kind = InventoryItemActionKinds.Sell, DiagnosticReason = "Tradable asset is available." }
+                : new InventoryItemActionDecision { Kind = InventoryItemActionKinds.TradeUrlRequired, DiagnosticReason = "Tradable asset is available but seller Trade URL is missing." };
         }
 
         if (item.HasDeliveredPurchase)

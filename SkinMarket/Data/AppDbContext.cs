@@ -98,8 +98,10 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Status).IsRequired();
             entity.Property(item => item.DeliveryStatus).HasMaxLength(100);
             entity.Property(item => item.DeliveryTradeOfferId).HasMaxLength(100);
-            entity.HasIndex(item => new { item.AppId, item.ContextId, item.AssetId });
-            entity.HasIndex(item => item.SourceTradeOperationId).IsUnique();
+            entity.HasIndex(item => new { item.AppId, item.ContextId, item.AssetId })
+                .IsUnique()
+                .HasFilter("\"Status\" = 'Sold' AND (\"DeliveryStatus\" IS NULL OR \"DeliveryStatus\" IN ('PendingDelivery', 'DeliveryBotPending', 'AwaitingBotConfirmation', 'DeliveryTradeCreated', 'AwaitingBuyerAction', 'DeliveryInEscrow', 'Delivered'))");
+            entity.HasIndex(item => item.SourceTradeOperationId);
             entity.HasOne(item => item.SourceTradeOperation)
                 .WithMany()
                 .HasForeignKey(item => item.SourceTradeOperationId);
