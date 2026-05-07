@@ -948,7 +948,10 @@ public class InventoryModel : PageModel
 
         var snapshots = await _dbContext.PriceSnapshots
             .AsNoTracking()
-            .Where(item => item.AppId == appId && normalizedMarketHashNames.Contains(item.MarketHashName))
+            .Where(item =>
+                item.AppId == appId &&
+                !item.IsSelected &&
+                normalizedMarketHashNames.Contains(item.MarketHashName))
             .ToListAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var snapshotsByMarketHashName = snapshots

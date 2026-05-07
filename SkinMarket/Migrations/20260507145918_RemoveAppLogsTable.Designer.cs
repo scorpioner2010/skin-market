@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SkinMarket.Data;
@@ -11,9 +12,11 @@ using SkinMarket.Data;
 namespace SkinMarket.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260507145918_RemoveAppLogsTable")]
+    partial class RemoveAppLogsTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -494,11 +497,6 @@ namespace SkinMarket.Migrations
                     b.Property<bool>("IsEstimated")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsSelected")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<string>("MarketHashName")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -572,9 +570,7 @@ namespace SkinMarket.Migrations
 
                     b.HasIndex("ExpiresAtUtc");
 
-                    b.HasIndex("AppId", "MarketHashName", "Currency", "IsSelected");
-
-                    b.HasIndex("AppId", "MarketHashName", "Currency", "Source", "PriceType", "IsSelected")
+                    b.HasIndex("AppId", "MarketHashName", "Currency", "Source", "PriceType")
                         .IsUnique();
 
                     b.ToTable("PriceSnapshots");

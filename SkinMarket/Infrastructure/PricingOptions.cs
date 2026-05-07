@@ -18,6 +18,7 @@ public class PricingOptions
     public int SkinportOutOfStockCacheMinutes { get; set; } = 60;
     public int DMarketLiveCacheMinutes { get; set; } = 5;
     public int DMarketSalesHistoryCacheMinutes { get; set; } = 60;
+    public int SelectedPriceCacheHours { get; set; } = 12;
     public int SnapshotCacheHours { get; set; } = 24;
     public int NegativeCacheMinutes { get; set; } = 5;
     public int StaleSnapshotDays { get; set; } = 14;

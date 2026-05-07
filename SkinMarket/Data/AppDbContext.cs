@@ -10,7 +10,6 @@ public class AppDbContext : DbContext
     }
 
     public DbSet<AppUser> AppUsers => Set<AppUser>();
-    public DbSet<AppLog> Logs => Set<AppLog>();
     public DbSet<BalanceTransaction> BalanceTransactions => Set<BalanceTransaction>();
     public DbSet<MarketPurchaseRecord> MarketPurchaseRecords => Set<MarketPurchaseRecord>();
     public DbSet<PriceSnapshot> PriceSnapshots => Set<PriceSnapshot>();
@@ -39,16 +38,6 @@ public class AppDbContext : DbContext
             entity.Property(user => user.IsAdmin).HasDefaultValue(false);
             entity.Property(user => user.Balance).HasDefaultValue(0m);
             entity.HasIndex(user => user.SteamId).IsUnique();
-        });
-
-        modelBuilder.Entity<AppLog>(entity =>
-        {
-            entity.HasKey(item => item.Id);
-            entity.Property(item => item.Level).IsRequired().HasMaxLength(20);
-            entity.Property(item => item.Message).IsRequired().HasMaxLength(4000);
-            entity.Property(item => item.Source).HasMaxLength(200);
-            entity.Property(item => item.StackTrace).HasMaxLength(12000);
-            entity.HasIndex(item => item.TimestampUtc);
         });
 
         modelBuilder.Entity<BalanceTransaction>(entity =>
@@ -120,6 +109,7 @@ public class AppDbContext : DbContext
             entity.Property(snapshot => snapshot.Source).IsRequired().HasMaxLength(50);
             entity.Property(snapshot => snapshot.SourceItemId).HasMaxLength(100);
             entity.Property(snapshot => snapshot.PriceType).IsRequired().HasMaxLength(50);
+            entity.Property(snapshot => snapshot.IsSelected).HasDefaultValue(false);
             entity.Property(snapshot => snapshot.Price).HasPrecision(18, 2);
             entity.Property(snapshot => snapshot.PriceUsd).HasPrecision(18, 2);
             entity.Property(snapshot => snapshot.OriginalPrice).HasPrecision(18, 4);
@@ -131,7 +121,8 @@ public class AppDbContext : DbContext
             entity.Property(snapshot => snapshot.FailureReason).HasMaxLength(500);
             entity.Property(snapshot => snapshot.RawPayloadHash).HasMaxLength(128);
             entity.Property(snapshot => snapshot.ProvenanceJson).HasMaxLength(4000);
-            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency, snapshot.Source, snapshot.PriceType }).IsUnique();
+            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency, snapshot.Source, snapshot.PriceType, snapshot.IsSelected }).IsUnique();
+            entity.HasIndex(snapshot => new { snapshot.AppId, snapshot.MarketHashName, snapshot.Currency, snapshot.IsSelected });
             entity.HasIndex(snapshot => snapshot.ExpiresAtUtc);
         });
 

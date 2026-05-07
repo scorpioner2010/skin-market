@@ -96,21 +96,21 @@ public class ItemPriceResolver : IItemPriceResolver
         var snapshots = await LoadSnapshotsAsync(normalizedNames, gameType, cancellationToken);
         foreach (var marketHashName in normalizedNames)
         {
-            var memoryCacheKey = BuildMemoryCacheKey(gameType, marketHashName);
-            if (_memoryCache.TryGetValue<ItemPriceResolutionResult>(memoryCacheKey, out var cached) && cached is not null)
-            {
-                var cachedClone = Clone(cached, true);
-                cachedClone.NeedsRefresh = cachedClone.NeedsRefresh || IsRetryableFailure(cachedClone);
-                result[marketHashName] = cachedClone;
-                continue;
-            }
-
             var snapshotsForName = snapshots.GetValueOrDefault(marketHashName) ?? [];
-            var selected = SelectBestSnapshot(snapshotsForName, marketHashName);
+            var selected = SelectSelectedSnapshot(snapshotsForName, marketHashName);
             if (selected is not null)
             {
                 selected.NeedsRefresh = selected.IsStale || selected.ExpiresAtUtc <= DateTime.UtcNow;
                 result[marketHashName] = selected;
+                continue;
+            }
+
+            var sourceFallback = SelectBestSnapshot(snapshotsForName, marketHashName);
+            if (sourceFallback is not null)
+            {
+                var persistedSelection = await SaveSelectedSnapshotAsync(gameType, sourceFallback, cancellationToken);
+                persistedSelection.NeedsRefresh = persistedSelection.IsStale || persistedSelection.ExpiresAtUtc <= DateTime.UtcNow;
+                result[marketHashName] = persistedSelection;
                 continue;
             }
 
@@ -173,43 +173,38 @@ public class ItemPriceResolver : IItemPriceResolver
         var game = _gameCatalog.Get(gameType);
         var existingSnapshots = await LoadSnapshotsForNameAsync(normalizedMarketHashName, gameType, cancellationToken);
         var memoryCacheKey = BuildMemoryCacheKey(gameType, normalizedMarketHashName);
-        if (_memoryCache.TryGetValue<ItemPriceResolutionResult>(memoryCacheKey, out var cached) &&
-            cached is not null &&
-            !cached.NeedsRefresh)
+        var selectedSnapshot = SelectSelectedSnapshot(existingSnapshots, normalizedMarketHashName);
+        if (selectedSnapshot is { IsStale: false } &&
+            selectedSnapshot.ExpiresAtUtc > DateTime.UtcNow)
         {
-            var cachedClone = Clone(cached, true);
-            if (GetMissingHigherPrioritySourceNames(existingSnapshots, game, cachedClone).Count == 0)
-            {
-                return cachedClone;
-            }
+            selectedSnapshot.NeedsRefresh = false;
+            _memoryCache.Set(memoryCacheKey, selectedSnapshot, GetMemoryDuration(selectedSnapshot));
+            return Clone(selectedSnapshot, true);
         }
 
-        var cachedSelection = SelectBestSnapshot(existingSnapshots, normalizedMarketHashName);
-        var shouldProbeHigherPrioritySources = probeSources &&
-                                               cachedSelection is { IsStale: false } &&
-                                               cachedSelection.ExpiresAtUtc > DateTime.UtcNow &&
-                                               GetMissingHigherPrioritySourceNames(existingSnapshots, game, cachedSelection).Count > 0;
-        if (!probeSources ||
-            cachedSelection is { IsStale: false } &&
-            cachedSelection.ExpiresAtUtc > DateTime.UtcNow &&
-            !shouldProbeHigherPrioritySources)
+        if (_memoryCache.TryGetValue<ItemPriceResolutionResult>(memoryCacheKey, out var cached) &&
+            cached is not null &&
+            !cached.NeedsRefresh &&
+            selectedSnapshot is not null &&
+            cached.ExpiresAtUtc == selectedSnapshot.ExpiresAtUtc)
         {
-            if (cachedSelection is not null)
-            {
-                var missingExpectedSources = GetMissingExpectedSourceNames(existingSnapshots, game);
-                if (probeSources && missingExpectedSources.Count > 0)
-                {
-                    await LogCachedSelectionSkippedSourcesAsync(
-                        game,
-                        normalizedMarketHashName,
-                        cachedSelection,
-                        existingSnapshots,
-                        missingExpectedSources,
-                        cancellationToken);
-                }
+            return Clone(cached, true);
+        }
 
-                _memoryCache.Set(memoryCacheKey, cachedSelection, GetMemoryDuration(cachedSelection));
-                return Clone(cachedSelection, true);
+        if (!probeSources)
+        {
+            if (selectedSnapshot is not null)
+            {
+                selectedSnapshot.NeedsRefresh = selectedSnapshot.IsStale || selectedSnapshot.ExpiresAtUtc <= DateTime.UtcNow;
+                return selectedSnapshot;
+            }
+
+            var sourceFallback = SelectBestSnapshot(existingSnapshots, normalizedMarketHashName);
+            if (sourceFallback is not null)
+            {
+                var persistedSelection = await SaveSelectedSnapshotAsync(gameType, sourceFallback, cancellationToken);
+                persistedSelection.NeedsRefresh = persistedSelection.IsStale || persistedSelection.ExpiresAtUtc <= DateTime.UtcNow;
+                return persistedSelection;
             }
 
             var unavailableCached = CreateUnavailable("No cached price.", normalizedMarketHashName);
@@ -287,9 +282,14 @@ public class ItemPriceResolver : IItemPriceResolver
             await SaveSnapshotAsync(gameType, csFloatResult, cancellationToken);
         }
 
-        var selected = SelectBestSourceResult(sourceResults, normalizedMarketHashName)
-                       ?? SelectBestSnapshot(existingSnapshots, normalizedMarketHashName, staleOnly: true)
-                       ?? CreateUnavailable(BuildFailureReason(sourceResults), normalizedMarketHashName);
+        var refreshedSnapshots = await LoadSnapshotsForNameAsync(normalizedMarketHashName, gameType, cancellationToken);
+        var selectedCandidate = SelectBestSourceResult(sourceResults, normalizedMarketHashName)
+                                ?? SelectBestSnapshot(refreshedSnapshots, normalizedMarketHashName, freshOnly: true);
+        var selected = selectedCandidate is not null
+            ? await SaveSelectedSnapshotAsync(gameType, selectedCandidate, cancellationToken)
+            : selectedSnapshot
+              ?? SelectBestSnapshot(refreshedSnapshots, normalizedMarketHashName)
+              ?? CreateUnavailable(BuildFailureReason(sourceResults), normalizedMarketHashName);
 
         selected.SteamResult = steamResult;
         selected.CsFloatResult = csFloatResult;
@@ -416,15 +416,18 @@ public class ItemPriceResolver : IItemPriceResolver
     private ItemPriceResolutionResult? SelectBestSnapshot(
         IReadOnlyCollection<PriceSnapshot> snapshots,
         string marketHashName,
-        bool staleOnly = false)
+        bool staleOnly = false,
+        bool freshOnly = false)
     {
         var now = DateTime.UtcNow;
         var staleThreshold = now.AddHours(-Math.Max(1, _options.StaleSnapshotHours > 0 ? _options.StaleSnapshotHours : _options.SnapshotCacheHours));
         var candidates = snapshots
+            .Where(snapshot => !snapshot.IsSelected)
             .Where(snapshot => snapshot.HasPrice && (snapshot.PriceUsd ?? snapshot.Price).HasValue)
             .Where(snapshot => snapshot.ObservedAtUtc >= staleThreshold || snapshot.UpdatedAtUtc >= staleThreshold)
             .Select(snapshot => FromSnapshot(snapshot, now))
             .Where(item => !staleOnly || item.IsStale)
+            .Where(item => !freshOnly || !item.IsStale && item.ExpiresAtUtc > now)
             .Where(item => item.ConfidenceScore > 0.25m)
             .OrderBy(item => GetSelectionRank(item))
             .ThenByDescending(item => item.ConfidenceScore)
@@ -440,11 +443,35 @@ public class ItemPriceResolver : IItemPriceResolver
         return selected;
     }
 
+    private ItemPriceResolutionResult? SelectSelectedSnapshot(
+        IReadOnlyCollection<PriceSnapshot> snapshots,
+        string marketHashName)
+    {
+        var now = DateTime.UtcNow;
+        var staleThreshold = now.AddHours(-Math.Max(1, _options.StaleSnapshotHours > 0 ? _options.StaleSnapshotHours : _options.SnapshotCacheHours));
+        var selected = snapshots
+            .Where(snapshot => snapshot.IsSelected)
+            .Where(snapshot => snapshot.HasPrice && (snapshot.PriceUsd ?? snapshot.Price).HasValue)
+            .Where(snapshot => snapshot.ObservedAtUtc >= staleThreshold || snapshot.UpdatedAtUtc >= staleThreshold)
+            .OrderByDescending(snapshot => snapshot.ExpiresAtUtc)
+            .ThenByDescending(snapshot => snapshot.UpdatedAtUtc)
+            .Select(snapshot => FromSnapshot(snapshot, now))
+            .FirstOrDefault();
+
+        if (selected is not null)
+        {
+            selected.ResolvedMarketHashName = marketHashName;
+        }
+
+        return selected;
+    }
+
     private List<string> GetMissingExpectedSourceNames(
         IReadOnlyCollection<PriceSnapshot> snapshots,
         GameDefinition game)
     {
         var availableSources = snapshots
+            .Where(snapshot => !snapshot.IsSelected)
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Source))
             .Select(snapshot => snapshot.Source)
             .Distinct(StringComparer.Ordinal)
@@ -463,6 +490,7 @@ public class ItemPriceResolver : IItemPriceResolver
         var selectedRank = GetSourceSelectionRank(selected.Source);
         var now = DateTime.UtcNow;
         var availableFreshSources = snapshots
+            .Where(snapshot => !snapshot.IsSelected)
             .Where(snapshot => snapshot.HasPrice && (snapshot.PriceUsd ?? snapshot.Price).HasValue)
             .Where(snapshot => snapshot.ExpiresAtUtc > now)
             .Where(snapshot => !string.IsNullOrWhiteSpace(snapshot.Source))
@@ -616,6 +644,7 @@ public class ItemPriceResolver : IItemPriceResolver
                 item.AppId == appId &&
                 item.MarketHashName == marketHashName &&
                 item.Currency == "USD" &&
+                !item.IsSelected &&
                 item.Source == source &&
                 item.PriceType == priceType,
                 cancellationToken);
@@ -638,6 +667,7 @@ public class ItemPriceResolver : IItemPriceResolver
 
         existing.Currency = "USD";
         existing.Source = source;
+        existing.IsSelected = false;
         existing.SourceItemId = result.SourceItemId;
         existing.PriceType = priceType;
         existing.Price = result.Price;
@@ -665,6 +695,81 @@ public class ItemPriceResolver : IItemPriceResolver
         existing.ExpiresAtUtc = result.ExpiresAtUtc ?? updatedAtUtc.AddSeconds(existing.TtlSeconds);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<ItemPriceResolutionResult> SaveSelectedSnapshotAsync(
+        GameType gameType,
+        ItemPriceResolutionResult selected,
+        CancellationToken cancellationToken)
+    {
+        var marketHashName = MarketHashNameUtility.Normalize(selected.ResolvedMarketHashName);
+        if (string.IsNullOrWhiteSpace(marketHashName))
+        {
+            return selected;
+        }
+
+        var appId = _gameCatalog.Get(gameType).SteamAppId;
+        var selectedRows = await _dbContext.PriceSnapshots
+            .Where(item =>
+                item.AppId == appId &&
+                item.MarketHashName == marketHashName &&
+                item.Currency == "USD" &&
+                item.IsSelected)
+            .OrderByDescending(item => item.UpdatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        var updatedAtUtc = DateTime.UtcNow;
+        var ttlSeconds = Math.Max(1, _options.SelectedPriceCacheHours) * 60 * 60;
+        var existing = selectedRows.FirstOrDefault();
+        if (existing is null)
+        {
+            existing = new PriceSnapshot
+            {
+                Id = Guid.NewGuid(),
+                AppId = appId,
+                MarketHashName = marketHashName,
+                IsSelected = true
+            };
+            _dbContext.PriceSnapshots.Add(existing);
+        }
+
+        foreach (var duplicate in selectedRows.Skip(1))
+        {
+            _dbContext.PriceSnapshots.Remove(duplicate);
+        }
+
+        existing.Currency = "USD";
+        existing.Source = string.IsNullOrWhiteSpace(selected.Source) ? PriceSourceNames.Unavailable : selected.Source;
+        existing.IsSelected = true;
+        existing.SourceItemId = null;
+        existing.PriceType = string.IsNullOrWhiteSpace(selected.PriceType) ? PriceTypeNames.Unavailable : selected.PriceType;
+        existing.Price = selected.Price;
+        existing.PriceUsd = selected.Price;
+        existing.OriginalPrice = selected.OriginalPrice ?? selected.Price;
+        existing.OriginalCurrency = selected.OriginalCurrency ?? selected.Currency;
+        existing.FxRate = selected.FxRate ?? 1m;
+        existing.Quantity = selected.Quantity;
+        existing.Volume = selected.Volume;
+        existing.SalesCount = selected.SalesCount;
+        existing.BestBidUsd = selected.BestBidUsd;
+        existing.BestAskUsd = selected.BestAskUsd;
+        existing.Status = selected.HasPrice
+            ? selected.IsEstimated ? "Estimated" : "Selected"
+            : "Unavailable";
+        existing.HasPrice = selected.HasPrice && selected.Price.HasValue;
+        existing.IsEstimated = selected.IsEstimated;
+        existing.ConfidenceScore = ClampConfidence(selected.ConfidenceScore);
+        existing.ObservedAtUtc = selected.ObservedAtUtc ?? selected.LastUpdatedUtc ?? updatedAtUtc;
+        existing.FailureReason = selected.FailureReason;
+        existing.RawPayloadHash = null;
+        existing.ProvenanceJson = selected.Provenance;
+        existing.UpdatedAtUtc = updatedAtUtc;
+        existing.TtlSeconds = ttlSeconds;
+        existing.ExpiresAtUtc = updatedAtUtc.AddSeconds(ttlSeconds);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return FromSnapshot(existing, DateTime.UtcNow);
     }
 
     private ItemPriceResolutionResult FromSourceResult(PriceSourceResult source, bool isCached)

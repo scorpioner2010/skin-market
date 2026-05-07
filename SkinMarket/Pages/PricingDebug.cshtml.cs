@@ -76,7 +76,10 @@ public class PricingDebugModel : PageModel
             .ToList();
         var snapshots = await _dbContext.PriceSnapshots
             .AsNoTracking()
-            .Where(item => item.AppId == game.SteamAppId && normalizedNames.Contains(item.MarketHashName))
+            .Where(item =>
+                item.AppId == game.SteamAppId &&
+                !item.IsSelected &&
+                normalizedNames.Contains(item.MarketHashName))
             .ToListAsync(cancellationToken);
 
         var refreshTargets = new List<string>();

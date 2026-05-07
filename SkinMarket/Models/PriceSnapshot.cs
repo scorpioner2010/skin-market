@@ -10,6 +10,7 @@ public class PriceSnapshot
     public string Source { get; set; } = "Unavailable";
     public string? SourceItemId { get; set; }
     public string PriceType { get; set; } = PriceTypeNames.Unavailable;
+    public bool IsSelected { get; set; }
     public decimal? Price { get; set; }
     public decimal? PriceUsd { get; set; }
     public decimal? OriginalPrice { get; set; }

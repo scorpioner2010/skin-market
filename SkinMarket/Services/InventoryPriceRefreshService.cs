@@ -350,6 +350,7 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
                 item => item.AppId == appId &&
                         item.MarketHashName == marketHashName &&
                         item.Currency == _options.PreferredCurrency &&
+                        !item.IsSelected &&
                         item.Source == PriceSourceNames.Unavailable &&
                         item.PriceType == PriceTypeNames.Unavailable,
                 cancellationToken);
@@ -368,6 +369,7 @@ public class InventoryPriceRefreshService : BackgroundService, IInventoryPriceRe
 
             existing.Currency = _options.PreferredCurrency;
             existing.Source = PriceSourceNames.Unavailable;
+            existing.IsSelected = false;
             existing.PriceType = PriceTypeNames.Unavailable;
             existing.Price = null;
             existing.PriceUsd = null;

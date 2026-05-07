@@ -1,6 +1,5 @@
-using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using SkinMarket.Contracts;
-using SkinMarket.Data;
 using SkinMarket.Models;
 
 namespace SkinMarket.Services;
@@ -12,21 +11,23 @@ public class AppLogService : IAppLogService, IAppLogReader
     private const int MaxDetailsLength = 16000;
     private const int PersistedMessageLength = 4000;
     private const int PersistedDetailsLength = 12000;
-    private static readonly HashSet<string> PersistedSources = new(StringComparer.Ordinal)
-    {
-        nameof(SteamInventoryRefreshWorker),
-        "AdminSteamInventoryDiagnostic"
-    };
+    private const int MaxFileScanMultiplier = 100;
+    private const int MaxFileScanLines = 10000;
+    private const int MaxLogFiles = 14;
+    private const long MaxLogFileBytes = 10L * 1024L * 1024L;
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly object _sync = new();
+    private readonly SemaphoreSlim _fileWriteLock = new(1, 1);
     private readonly LinkedList<AppLog> _entries = new();
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly string _logDirectory;
     private readonly ILogger<AppLogService> _logger;
 
-    public AppLogService(IServiceScopeFactory scopeFactory, ILogger<AppLogService> logger)
+    public AppLogService(IHostEnvironment environment, ILogger<AppLogService> logger)
     {
-        _scopeFactory = scopeFactory;
         _logger = logger;
+        _logDirectory = Path.Combine(environment.ContentRootPath, "logs", "app");
     }
 
     public async Task WriteAsync(string level, string message, string? source = null, Exception? exception = null, CancellationToken cancellationToken = default)
@@ -50,107 +51,114 @@ public class AppLogService : IAppLogService, IAppLogReader
             }
         }
 
-        if (!ShouldPersist(entry.Source))
-        {
-            return;
-        }
-
-        try
-        {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            dbContext.Logs.Add(new AppLog
-            {
-                Id = entry.Id,
-                TimestampUtc = entry.TimestampUtc,
-                Level = Truncate(entry.Level, 20),
-                Message = Truncate(entry.Message, PersistedMessageLength),
-                Source = string.IsNullOrWhiteSpace(entry.Source) ? null : Truncate(entry.Source, 200),
-                StackTrace = entry.StackTrace is null ? null : Truncate(entry.StackTrace, PersistedDetailsLength)
-            });
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception exceptionToLog)
-        {
-            _logger.LogWarning(
-                exceptionToLog,
-                "Failed to persist app log entry for source {Source}.",
-                entry.Source ?? "<null>");
-        }
+        await WriteFileSafeAsync(entry, cancellationToken);
     }
 
     public IReadOnlyList<AppLog> GetRecent(int limit = 100, string? level = null, IReadOnlyCollection<string>? sources = null)
     {
-        var take = limit <= 0 ? 100 : Math.Min(limit, 500);
+        var take = NormalizeLimit(limit);
+        var memoryEntries = GetRecentMemoryEntries(take, level, sources);
+        var fileEntries = ReadRecentFileEntries(take, level, sources);
+
+        return memoryEntries
+            .Concat(fileEntries)
+            .GroupBy(item => item.Id)
+            .Select(group => group.First())
+            .OrderByDescending(item => item.TimestampUtc)
+            .Take(take)
+            .ToList();
+    }
+
+    public Task<IReadOnlyList<AppLog>> GetRecentAsync(
+        int limit = 100,
+        string? level = null,
+        IReadOnlyCollection<string>? sources = null,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(GetRecent(limit, level, sources));
+    }
+
+    private IReadOnlyList<AppLog> GetRecentMemoryEntries(int limit, string? level, IReadOnlyCollection<string>? sources)
+    {
         AppLog[] snapshot;
         lock (_sync)
         {
             snapshot = _entries.ToArray();
         }
 
-        IEnumerable<AppLog> query = snapshot;
-        if (!string.IsNullOrWhiteSpace(level))
-        {
-            query = query.Where(item => string.Equals(item.Level, level.Trim(), StringComparison.OrdinalIgnoreCase));
-        }
-
-        if (sources is { Count: > 0 })
-        {
-            var sourceSet = new HashSet<string>(sources, StringComparer.Ordinal);
-            query = query.Where(item => item.Source is not null && sourceSet.Contains(item.Source));
-        }
-
-        return query
+        return Filter(snapshot, level, sources)
             .OrderByDescending(item => item.TimestampUtc)
-            .Take(take)
+            .Take(limit)
             .Select(Clone)
             .ToList();
     }
 
-    public async Task<IReadOnlyList<AppLog>> GetRecentAsync(
-        int limit = 100,
-        string? level = null,
-        IReadOnlyCollection<string>? sources = null,
-        CancellationToken cancellationToken = default)
+    private IReadOnlyList<AppLog> ReadRecentFileEntries(int limit, string? level, IReadOnlyCollection<string>? sources)
     {
-        var take = limit <= 0 ? 100 : Math.Min(limit, 500);
-        var memoryEntries = GetRecent(take, level, sources);
-        var persistedEntries = new List<AppLog>();
+        if (!Directory.Exists(_logDirectory))
+        {
+            return Array.Empty<AppLog>();
+        }
 
+        var scanLimit = Math.Max(limit, Math.Min(MaxFileScanLines, limit * MaxFileScanMultiplier));
+        var results = new List<AppLog>(Math.Min(scanLimit, Math.Max(limit, 1)));
+
+        foreach (var file in EnumerateRecentLogFiles())
+        {
+            foreach (var line in ReadTailLines(file.FullName, scanLimit))
+            {
+                var item = DeserializeEntry(line);
+                if (item is null || !Matches(item, level, sources))
+                {
+                    continue;
+                }
+
+                results.Add(item);
+                if (results.Count >= scanLimit)
+                {
+                    break;
+                }
+            }
+
+            if (results.Count >= scanLimit)
+            {
+                break;
+            }
+        }
+
+        return results
+            .OrderByDescending(item => item.TimestampUtc)
+            .Take(limit)
+            .ToList();
+    }
+
+    private async Task WriteFileSafeAsync(AppLog entry, CancellationToken cancellationToken)
+    {
         try
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            var query = dbContext.Logs.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(level))
+            await _fileWriteLock.WaitAsync(cancellationToken);
+            try
             {
-                var normalizedLevel = level.Trim();
-                query = query.Where(item => item.Level == normalizedLevel);
-            }
-
-            if (sources is { Count: > 0 })
-            {
-                var sourceArray = sources.ToArray();
-                query = query.Where(item => item.Source != null && sourceArray.Contains(item.Source));
-            }
-
-            persistedEntries = await query
-                .OrderByDescending(item => item.TimestampUtc)
-                .Take(take)
-                .Select(item => new AppLog
+                Directory.CreateDirectory(_logDirectory);
+                PruneOldFiles();
+                var filePath = ResolveCurrentFilePath();
+                var fileEntry = new AppLog
                 {
-                    Id = item.Id,
-                    TimestampUtc = item.TimestampUtc,
-                    Level = item.Level,
-                    Message = item.Message,
-                    Source = item.Source,
-                    StackTrace = item.StackTrace
-                })
-                .ToListAsync(cancellationToken);
+                    Id = entry.Id,
+                    TimestampUtc = entry.TimestampUtc,
+                    Level = Truncate(entry.Level, 20),
+                    Message = Truncate(entry.Message, PersistedMessageLength),
+                    Source = string.IsNullOrWhiteSpace(entry.Source) ? null : Truncate(entry.Source, 200),
+                    StackTrace = entry.StackTrace is null ? null : Truncate(entry.StackTrace, PersistedDetailsLength)
+                };
+                var json = JsonSerializer.Serialize(fileEntry, JsonOptions);
+                await File.AppendAllTextAsync(filePath, json + Environment.NewLine, cancellationToken);
+            }
+            finally
+            {
+                _fileWriteLock.Release();
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -158,16 +166,134 @@ public class AppLogService : IAppLogService, IAppLogReader
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to read persisted app logs.");
+            _logger.LogWarning(exception, "Failed to persist app log entry to server file storage.");
+        }
+    }
+
+    private string ResolveCurrentFilePath()
+    {
+        var baseName = $"app-logs-{DateTime.UtcNow:yyyy-MM-dd}";
+        var filePath = Path.Combine(_logDirectory, $"{baseName}.log");
+        if (!File.Exists(filePath) || new FileInfo(filePath).Length < MaxLogFileBytes)
+        {
+            return filePath;
         }
 
-        return memoryEntries
-            .Concat(persistedEntries)
-            .GroupBy(item => item.Id)
-            .Select(group => group.First())
-            .OrderByDescending(item => item.TimestampUtc)
-            .Take(take)
+        for (var index = 1; index < 100; index++)
+        {
+            var candidate = Path.Combine(_logDirectory, $"{baseName}.{index}.log");
+            if (!File.Exists(candidate) || new FileInfo(candidate).Length < MaxLogFileBytes)
+            {
+                return candidate;
+            }
+        }
+
+        return filePath;
+    }
+
+    private IEnumerable<FileInfo> EnumerateRecentLogFiles()
+    {
+        try
+        {
+            return Directory
+                .EnumerateFiles(_logDirectory, "app-logs-*.log")
+                .Select(path => new FileInfo(path))
+                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .Take(MaxLogFiles)
+                .ToList();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogDebug(exception, "Failed to enumerate app log files.");
+            return Array.Empty<FileInfo>();
+        }
+    }
+
+    private void PruneOldFiles()
+    {
+        var files = Directory.GetFiles(_logDirectory, "app-logs-*.log")
+            .Select(path => new FileInfo(path))
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Skip(MaxLogFiles)
             .ToList();
+
+        foreach (var file in files)
+        {
+            try
+            {
+                file.Delete();
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogDebug(exception, "Failed to prune old app log file {FilePath}.", file.FullName);
+            }
+        }
+    }
+
+    private IEnumerable<string> ReadTailLines(string filePath, int limit)
+    {
+        var queue = new Queue<string>(Math.Max(1, limit));
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            while (reader.ReadLine() is { } line)
+            {
+                queue.Enqueue(line);
+                while (queue.Count > limit)
+                {
+                    queue.Dequeue();
+                }
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            _logger.LogDebug(exception, "Failed to read app log file {FilePath}.", filePath);
+        }
+
+        return queue.Reverse();
+    }
+
+    private static IEnumerable<AppLog> Filter(IEnumerable<AppLog> entries, string? level, IReadOnlyCollection<string>? sources)
+    {
+        return entries.Where(item => Matches(item, level, sources));
+    }
+
+    private static bool Matches(AppLog item, string? level, IReadOnlyCollection<string>? sources)
+    {
+        if (!string.IsNullOrWhiteSpace(level) &&
+            !string.Equals(item.Level, level.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (sources is { Count: > 0 })
+        {
+            var sourceSet = new HashSet<string>(sources, StringComparer.Ordinal);
+            if (item.Source is null || !sourceSet.Contains(item.Source))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static AppLog? DeserializeEntry(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<AppLog>(line, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static AppLog Clone(AppLog item)
@@ -183,6 +309,11 @@ public class AppLogService : IAppLogService, IAppLogReader
         };
     }
 
+    private static int NormalizeLimit(int limit)
+    {
+        return limit <= 0 ? 100 : Math.Min(limit, 500);
+    }
+
     private static string Truncate(string value, int maxLength)
     {
         if (value.Length <= maxLength)
@@ -191,10 +322,5 @@ public class AppLogService : IAppLogService, IAppLogReader
         }
 
         return value[..maxLength] + "...";
-    }
-
-    private static bool ShouldPersist(string? source)
-    {
-        return !string.IsNullOrWhiteSpace(source) && PersistedSources.Contains(source);
     }
 }
