@@ -8,7 +8,7 @@ public class PricingSourceSemanticsTests
     [Theory]
     [InlineData("$1.23", "1.23")]
     [InlineData("$1,234.56", "1234.56")]
-    [InlineData("1,23€", "1.23")]
+    [InlineData("1,23â‚¬", "1.23")]
     public void SteamPriceParser_UsesDecimalAndLocalizedSeparators(string raw, string expected)
     {
         Assert.Equal(decimal.Parse(expected), SteamMarketPriceService.ParsePrice(raw));

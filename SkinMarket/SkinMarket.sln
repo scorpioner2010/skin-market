@@ -5,7 +5,7 @@ VisualStudioVersion = 17.14.36623.8
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkinMarket", "SkinMarket.csproj", "{489AB068-D8AC-425B-A3D6-54639847EF72}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkinMarket.Tests", "SkinMarket.Tests\SkinMarket.Tests.csproj", "{ADEFA300-C522-4AFE-90BC-8544045018B5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SkinMarket.Tests", "..\SkinMarket.Tests\SkinMarket.Tests.csproj", "{ADEFA300-C522-4AFE-90BC-8544045018B5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
