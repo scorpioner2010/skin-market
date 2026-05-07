@@ -4,7 +4,7 @@
     ViewData["Title"] = L["Page_Market_Title"];
 }
 
-<div class="market-page py-4">
+<div class="market-page py-4" data-deferred-page="market" data-deferred-loaded="@((!Model.DeferInitialLoad).ToString().ToLowerInvariant())">
     <div class="page-header">
         <div>
             <h1>@L["Page_Market_Title"]</h1>
@@ -29,33 +29,60 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+    @if (Model.DeferInitialLoad)
     {
-        <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
-    {
-        <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
-    }
-
-    @if (User.Identity?.IsAuthenticated ?? false)
-    {
-        <div class="summary-card market-balance-card">
-            <span class="market-balance-label">@L["Market_AvailableBalance"]</span>
-            <h2>$@Model.CurrentBalance.ToString("0.00")</h2>
-        </div>
-    }
-
-    @if (Model.GroupedItems.Count == 0)
-    {
-        <div class="empty-state">
-            <h2>@L["Market_Empty_Title"]</h2>
-        </div>
+        <section class="deferred-page-loader" aria-live="polite" aria-busy="true">
+            <div class="deferred-loader-card">
+                <div class="deferred-loader-copy">
+                    <span class="deferred-spinner" aria-hidden="true"></span>
+                    <div>
+                        <h2>@L["Market_AvailableItems_Title"]</h2>
+                        <p>@L["Loading_MarketItems"]</p>
+                    </div>
+                </div>
+                <div class="deferred-skeleton-grid" aria-hidden="true">
+                    @for (var index = 0; index < 6; index++)
+                    {
+                        <div class="deferred-skeleton-card">
+                            <span class="deferred-skeleton-icon"></span>
+                            <span class="deferred-skeleton-line deferred-skeleton-line-wide"></span>
+                            <span class="deferred-skeleton-line"></span>
+                            <span class="deferred-skeleton-pill"></span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
     }
     else
     {
-        <section class="page-section">
+        @if (!string.IsNullOrWhiteSpace(Model.SuccessMessage))
+        {
+            <div class="app-alert alert-success" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.SuccessMessage)</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        {
+            <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
+        }
+
+        @if (User.Identity?.IsAuthenticated ?? false)
+        {
+            <div class="summary-card market-balance-card">
+                <span class="market-balance-label">@L["Market_AvailableBalance"]</span>
+                <h2>$@Model.CurrentBalance.ToString("0.00")</h2>
+            </div>
+        }
+
+        @if (Model.GroupedItems.Count == 0)
+        {
+            <div class="empty-state">
+                <h2>@L["Market_Empty_Title"]</h2>
+            </div>
+        }
+        else
+        {
+            <section class="page-section">
             <div class="section-heading">
                 <div>
                     <h2>@L["Market_AvailableItems_Title"]</h2>
@@ -95,13 +122,13 @@
                                     </div>
                                     <div class="market-price-block">
                                         <span class="compact-badge market-quantity-badge">@L["Common_QuantityShort"]: @item.Quantity</span>
-                                        <span class="market-price-label">USD price</span>
+                                        <span class="market-price-label">@L["Common_UsdPrice"]</span>
                                         <p class="price-tag market-price-tag" data-price-source="@item.PriceSource" data-price-type="@item.PriceType" data-price-confidence="@item.ConfidenceScore.ToString("0.####")">@Model.GetPriceNumberText(item)</p>
                                         <span class="inventory-meta">@Model.GetPriceStatusLabel(item)</span>
                                         @if (priceBreakdown.Count > 0)
                                         {
                                             <div class="price-source-dropdown price-source-dropdown-right" data-price-source-menu>
-                                                <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                                <button type="button" class="price-source-trigger" aria-expanded="false">@L["Common_Price"]</button>
                                                 <div class="price-source-list" aria-hidden="true">
                                                     @foreach (var sourcePrice in priceBreakdown)
                                                     {
@@ -145,7 +172,7 @@
                         }
                         else if (!item.HasReliablePrice)
                         {
-                            <p class="meta-note market-owner-note" title="@item.PriceFailureReason">Price unavailable</p>
+                            <p class="meta-note market-owner-note" title="@item.PriceFailureReason">@L["Inventory_PriceUnavailable"]</p>
                         }
                         else if (!item.HasBuyableItems)
                         {
@@ -174,9 +201,9 @@
                         <div class="market-table-cell market-table-item-cell">@L["Common_Item"]</div>
                         <div class="market-table-cell">@L["Common_QuantityShort"]</div>
                         <div class="market-table-cell market-table-asset-cell">@L["Common_AssetId"]</div>
-                        <div class="market-table-cell">USD price</div>
-                        <div class="market-table-cell">Price status</div>
-                        <div class="market-table-cell">Price sources</div>
+                        <div class="market-table-cell">@L["Common_UsdPrice"]</div>
+                        <div class="market-table-cell">@L["Common_PriceStatus"]</div>
+                        <div class="market-table-cell">@L["Common_PriceSources"]</div>
                         <div class="market-table-cell">@L["Common_Tradable"]</div>
                         <div class="market-table-cell market-table-actions-cell">@L["Common_Action"]</div>
                     </div>
@@ -211,19 +238,19 @@
                             <div class="market-table-cell market-table-asset-cell" data-label="@L["Common_AssetId"]">
                                 <span class="inventory-meta break-value">@item.AssetId</span>
                             </div>
-                            <div class="market-table-cell" data-label="USD price">
+                            <div class="market-table-cell" data-label="@L["Common_UsdPrice"]">
                                 <div class="price-cell-stack">
                                     <span class="price-value" data-price-source="@item.PriceSource" data-price-type="@item.PriceType" data-price-confidence="@item.ConfidenceScore.ToString("0.####")">@Model.GetPriceNumberText(item)</span>
                                 </div>
                             </div>
-                            <div class="market-table-cell" data-label="Price status">
+                            <div class="market-table-cell" data-label="@L["Common_PriceStatus"]">
                                 <span class="inventory-meta">@Model.GetPriceStatusLabel(item)</span>
                             </div>
-                            <div class="market-table-cell" data-label="Price sources">
+                            <div class="market-table-cell" data-label="@L["Common_PriceSources"]">
                                 @if (priceBreakdown.Count > 0)
                                 {
                                     <div class="price-source-dropdown" data-price-source-menu>
-                                        <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                        <button type="button" class="price-source-trigger" aria-expanded="false">@L["Common_Price"]</button>
                                         <div class="price-source-list" aria-hidden="true">
                                             @foreach (var sourcePrice in priceBreakdown)
                                             {
@@ -255,7 +282,7 @@
                                 }
                                 else if (!item.HasReliablePrice)
                                 {
-                                    <span class="compact-badge compact-badge-neutral" title="@item.PriceFailureReason">Price unavailable</span>
+                                    <span class="compact-badge compact-badge-neutral" title="@item.PriceFailureReason">@L["Inventory_PriceUnavailable"]</span>
                                 }
                                 else if (!item.HasBuyableItems)
                                 {
@@ -280,7 +307,8 @@
                     }
                 </div>
             </div>
-        </section>
+            </section>
+        }
     }
 </div>
 

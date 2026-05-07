@@ -51,6 +51,7 @@ public class MarketModel : PageModel
     public int TotalAvailableItemCount { get; private set; }
     public GameType CurrentGameType { get; private set; } = GameType.CS2;
     public string CurrentGameDisplayName { get; private set; } = string.Empty;
+    public bool DeferInitialLoad { get; private set; }
     public IReadOnlyList<GameDefinition> SupportedGames => _gameCatalog.SupportedGames;
     [BindProperty(SupportsGet = true)]
     public GameType Game { get; set; } = GameType.CS2;
@@ -72,17 +73,24 @@ public class MarketModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        var currentGame = _gameCatalog.Get(Game);
+        Game = currentGame.Type;
+        CurrentGameType = currentGame.Type;
+        CurrentGameDisplayName = currentGame.DisplayName;
+
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
             return;
         }
 
+        if (!IsDeferredContentRequest())
+        {
+            DeferInitialLoad = true;
+            return;
+        }
+
         await LoadCurrentUserAsync(cancellationToken);
-        var currentGame = _gameCatalog.Get(Game);
-        Game = currentGame.Type;
-        CurrentGameType = currentGame.Type;
-        CurrentGameDisplayName = currentGame.DisplayName;
         Items = await _marketService.GetAvailableItemsAsync(CurrentGameType, cancellationToken);
         TotalAvailableItemCount = Items.Count;
         PriceBreakdownsByMarketHashName = await LoadPriceBreakdownsAsync(
@@ -118,7 +126,7 @@ public class MarketModel : PageModel
 
         if (await HasActiveTradeFlowAsync(CurrentUserId.Value, cancellationToken))
         {
-            ErrorMessage = "Finish or cancel the active trade offer before buying another item.";
+            ErrorMessage = _localizer["Market_TradeBlockMessageBuy"].Value;
             return RedirectToCurrentGame(PurchaseRequest.GameType);
         }
 
@@ -202,20 +210,20 @@ public class MarketModel : PageModel
     {
         if (!item.HasReliablePrice)
         {
-            return "No reliable price";
+            return _localizer["PriceStatus_NoReliablePrice"].Value;
         }
 
         if (item.IsStale)
         {
-            return "Stale";
+            return _localizer["PriceStatus_Stale"].Value;
         }
 
         if (item.IsCached)
         {
-            return item.IsEstimated ? "Estimated cached" : "Cached";
+            return item.IsEstimated ? _localizer["PriceStatus_EstimatedCached"].Value : _localizer["PriceStatus_Cached"].Value;
         }
 
-        return item.IsEstimated ? "Estimated" : "Live";
+        return item.IsEstimated ? _localizer["PriceStatus_Estimated"].Value : _localizer["PriceStatus_Live"].Value;
     }
 
     public string GetPriceSourceLabel(string? source)
@@ -226,7 +234,7 @@ public class MarketModel : PageModel
             PriceSourceNames.Skinport => "Skinport",
             PriceSourceNames.Steam => "Steam",
             PriceSourceNames.DMarket => "DMarket",
-            _ => "Unavailable"
+            _ => _localizer["PriceStatus_Unavailable"].Value
         };
     }
 
@@ -273,6 +281,11 @@ public class MarketModel : PageModel
     {
         var game = _gameCatalog.Get(gameType ?? Game);
         return RedirectToPage(new { game = game.Type });
+    }
+
+    private bool IsDeferredContentRequest()
+    {
+        return string.Equals(Request.Query["deferred"], "1", StringComparison.Ordinal);
     }
 
     private async Task LoadCurrentUserAsync(CancellationToken cancellationToken)

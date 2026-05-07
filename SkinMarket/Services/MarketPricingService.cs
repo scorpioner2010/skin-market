@@ -23,7 +23,7 @@ public class MarketPricingService : IMarketPricingService
     {
         if (resolvedPrice?.HasPrice == true && resolvedPrice.Price.HasValue)
         {
-            return Math.Round(resolvedPrice.Price.Value * 0.92m, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(resolvedPrice.Price.Value, 2, MidpointRounding.AwayFromZero);
         }
 
         _logger.LogDebug(
@@ -61,7 +61,7 @@ public class MarketPricingService : IMarketPricingService
         var resolvedPrice = await _itemPriceResolver.GetCachedAsync(marketHashName, gameType, cancellationToken);
         if (resolvedPrice.HasPrice && resolvedPrice.Price.HasValue)
         {
-            return Math.Round(resolvedPrice.Price.Value * 0.92m, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(resolvedPrice.Price.Value, 2, MidpointRounding.AwayFromZero);
         }
 
         _logger.LogDebug(

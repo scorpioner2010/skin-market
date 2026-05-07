@@ -60,7 +60,7 @@
   <data name="Profile_TradeUrl_NotSet" xml:space="preserve"><value>Trade URL is not set yet.</value></data>
   <data name="Profile_LocalUserId" xml:space="preserve"><value>Local user id</value></data>
   <data name="Profile_TradeSettings" xml:space="preserve"><value>Trade settings</value></data>
-  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Your Trade URL is required for bot intake and delivery flow.</value></data>
+  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Your Trade URL is required for service intake and delivery flow.</value></data>
   <data name="Profile_SteamTradeUrl" xml:space="preserve"><value>Steam Trade URL</value></data>
   <data name="Profile_TradeUrl_Placeholder" xml:space="preserve"><value>https://steamcommunity.com/tradeoffer/new/...</value></data>
   <data name="Profile_SaveTradeUrl" xml:space="preserve"><value>Save Trade URL</value></data>
@@ -91,7 +91,7 @@
   <data name="Inventory_RecentSales_Empty_Title" xml:space="preserve"><value>No sale requests yet</value></data>
   <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Create a sale from your inventory to start the service flow.</value></data>
   <data name="Inventory_Credit" xml:space="preserve"><value>Credit</value></data>
-  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>BotTradeUrl</value></data>
+  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>Service Trade URL</value></data>
   <data name="Market_Kicker" xml:space="preserve"><value>Market</value></data>
   <data name="Market_Description" xml:space="preserve"><value>Browse credited items, spend account balance and track delivery progress for your purchases.</value></data>
   <data name="Market_BalanceSummary" xml:space="preserve"><value>Balance summary</value></data>
@@ -131,16 +131,16 @@
   <data name="History_Balance_Empty_Title" xml:space="preserve"><value>No balance transactions yet</value></data>
   <data name="History_Balance_Empty_Text" xml:space="preserve"><value>Credits and purchases will appear here once activity starts.</value></data>
   <data name="Status_Pending" xml:space="preserve"><value>Pending</value></data>
-  <data name="Status_BotPending" xml:space="preserve"><value>Bot pending</value></data>
+  <data name="Status_BotPending" xml:space="preserve"><value>Waiting for service processing</value></data>
   <data name="Status_PendingDelivery" xml:space="preserve"><value>Pending delivery</value></data>
-  <data name="Status_DeliveryBotPending" xml:space="preserve"><value>Delivery bot pending</value></data>
+  <data name="Status_DeliveryBotPending" xml:space="preserve"><value>Delivery waiting for service processing</value></data>
   <data name="Status_TradeCreated" xml:space="preserve"><value>Trade created</value></data>
   <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade created</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Available</value></data>
   <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protected</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Awaiting user action</value></data>
   <data name="Status_AwaitingBuyerAction" xml:space="preserve"><value>Awaiting buyer action</value></data>
-  <data name="Status_ReceivedByBot" xml:space="preserve"><value>Received by bot</value></data>
+  <data name="Status_ReceivedByBot" xml:space="preserve"><value>Received by service</value></data>
   <data name="Status_Credited" xml:space="preserve"><value>Credited</value></data>
   <data name="Status_Delivered" xml:space="preserve"><value>Delivered</value></data>
   <data name="Status_Sold" xml:space="preserve"><value>Sold</value></data>
@@ -158,7 +158,7 @@
   <data name="Message_SelectedItemInvalid" xml:space="preserve"><value>Selected inventory item is invalid.</value></data>
   <data name="Message_ItemAlreadyHasSaleOperation" xml:space="preserve"><value>This item already has a sale operation.</value></data>
   <data name="Message_SaleRequestCreated" xml:space="preserve"><value>Sale request created.</value></data>
-  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Steam login is required to create bot intake.</value></data>
+  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Steam login is required to send the item to the service.</value></data>
   <data name="Message_SaleRequestInvalid" xml:space="preserve"><value>Sale request is invalid.</value></data>
   <data name="Message_LoginRequiredCreditBalance" xml:space="preserve"><value>Steam login is required to credit balance.</value></data>
   <data name="Message_TradeUrlNotSetInventoryStillLoads" xml:space="preserve"><value>Trade URL is not set yet. Inventory still loads by SteamID.</value></data>
@@ -174,14 +174,14 @@
   <data name="Message_OnlyTradeCreatedCanBeCredited" xml:space="preserve"><value>Only trade-created requests can be credited.</value></data>
   <data name="Message_BalanceCreditedBy" xml:space="preserve"><value>Balance credited by {0}.</value></data>
   <data name="Message_TradeIntakeOnlyPending" xml:space="preserve"><value>Trade intake is available only for pending sale requests.</value></data>
-  <data name="Message_BotIntegrationNotConfigured" xml:space="preserve"><value>Bot integration is not fully configured yet. Complete bot settings to enable real trade creation.</value></data>
+  <data name="Message_BotIntegrationNotConfigured" xml:space="preserve"><value>Service integration is not fully configured yet. Complete service settings to enable real trade creation.</value></data>
   <data name="Message_PurchasedItemNotFound" xml:space="preserve"><value>Purchased item was not found.</value></data>
   <data name="Message_OnlySoldItemsCanEnterDelivery" xml:space="preserve"><value>Only sold items can enter delivery flow.</value></data>
   <data name="Message_ItemAlreadyDelivered" xml:space="preserve"><value>Item was already delivered.</value></data>
   <data name="Message_DeliveryTradeAlreadyExists" xml:space="preserve"><value>Delivery trade already exists for this item.</value></data>
   <data name="Message_BuyerProfileNotFound" xml:space="preserve"><value>Buyer profile was not found.</value></data>
   <data name="Message_BuyerTradeUrlRequired" xml:space="preserve"><value>Buyer Trade URL is required before delivery can start.</value></data>
-  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Delivery bot integration is not fully configured yet. Complete bot settings to enable real delivery trade creation.</value></data>
+  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Delivery integration is not fully configured yet. Complete service settings to enable real delivery trade creation.</value></data>
   <data name="Message_ItemAlreadyMarkedDelivered" xml:space="preserve"><value>Item was already marked as delivered.</value></data>
   <data name="Message_OnlyDeliveryCreatedCanBeConfirmed" xml:space="preserve"><value>Only delivery-created items can be confirmed as delivered.</value></data>
   <data name="Message_ItemMarkedDelivered" xml:space="preserve"><value>Item marked as delivered.</value></data>
@@ -200,7 +200,7 @@
   <data name="Inventory_Privacy_Step_ReturnRefresh" xml:space="preserve"><value>Return here and refresh the inventory page.</value></data>
   <data name="Inventory_Privacy_OpenSteamSettings" xml:space="preserve"><value>Open Steam settings</value></data>
   <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam returned an incomplete inventory response. Please try again in a few minutes.</value></data>
-  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Stub bot trade created. Real Steam bot integration is not connected yet.</value></data>
+  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Test trade created through the service. Real Steam integration is not connected yet.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Stub delivery trade created. Real Steam delivery integration is not connected yet.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
   <data name="PriceStatus_Cached" xml:space="preserve"><value>Cached</value></data>
@@ -208,9 +208,35 @@
   <data name="PriceStatus_Loading" xml:space="preserve"><value>Loading price...</value></data>
   <data name="PriceStatus_NoPrice" xml:space="preserve"><value>No price</value></data>
   <data name="PriceStatus_Refreshing" xml:space="preserve"><value>Refreshing</value></data>
+  <data name="PriceStatus_Stale" xml:space="preserve"><value>Stale</value></data>
+  <data name="PriceStatus_Live" xml:space="preserve"><value>Live</value></data>
+  <data name="PriceStatus_Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="PriceStatus_EstimatedCached" xml:space="preserve"><value>Estimated cached</value></data>
+  <data name="PriceStatus_NoReliablePrice" xml:space="preserve"><value>No reliable price</value></data>
+  <data name="Common_UsdPrice" xml:space="preserve"><value>USD price</value></data>
+  <data name="Common_PriceStatus" xml:space="preserve"><value>Price status</value></data>
+  <data name="Common_PriceSources" xml:space="preserve"><value>Price sources</value></data>
+  <data name="Loading_MarketItems" xml:space="preserve"><value>Loading market items...</value></data>
+  <data name="Loading_InventoryItems" xml:space="preserve"><value>Loading inventory items...</value></data>
+  <data name="Inventory_FirstSnapshotRefreshing" xml:space="preserve"><value>The first inventory snapshot is being refreshed in the background.</value></data>
+  <data name="Inventory_SyncingAfterTrade" xml:space="preserve"><value>Syncing inventory after trade...</value></data>
+  <data name="Inventory_Updating" xml:space="preserve"><value>Updating inventory...</value></data>
+  <data name="Inventory_LastUpdatedAgo" xml:space="preserve"><value>Inventory last updated: {0} ago.</value></data>
+  <data name="Inventory_LoadingCooldown" xml:space="preserve"><value>Inventory is loading. Refresh skipped because cooldown is active.</value></data>
+  <data name="Inventory_StaleCooldown" xml:space="preserve"><value>Inventory snapshot is stale. Refresh skipped because cooldown is active.</value></data>
+  <data name="Inventory_StaleRecentFailure" xml:space="preserve"><value>Inventory snapshot is stale. Refresh skipped because the last failed attempt was less than {0} minutes ago.</value></data>
+  <data name="Inventory_StaleRefreshQueued" xml:space="preserve"><value>Inventory snapshot is stale. A background refresh has been queued.</value></data>
+  <data name="Inventory_PrivateUnavailable" xml:space="preserve"><value>Steam inventory is private or unavailable. Set your Steam inventory privacy to Public, then refresh this page.</value></data>
+  <data name="Time_LessThanOneMinute" xml:space="preserve"><value>less than 1 minute</value></data>
+  <data name="Time_Minute" xml:space="preserve"><value>1 minute</value></data>
+  <data name="Time_Minutes" xml:space="preserve"><value>{0} minutes</value></data>
+  <data name="Time_Hour" xml:space="preserve"><value>1 hour</value></data>
+  <data name="Time_Hours" xml:space="preserve"><value>{0} hours</value></data>
+  <data name="Time_Day" xml:space="preserve"><value>1 day</value></data>
+  <data name="Time_Days" xml:space="preserve"><value>{0} days</value></data>
   <data name="Chats_Description" xml:space="preserve"><value>Item conversations with the service team.</value></data>
   <data name="Message_FinishActiveTradeBuy" xml:space="preserve"><value>Finish or cancel the active trade offer before buying another item.</value></data>
-  <data name="Message_CheckSteamOfferStatusFailed" xml:space="preserve"><value>Could not check Steam offer status. Bot service did not return a status.</value></data>
+  <data name="Message_CheckSteamOfferStatusFailed" xml:space="preserve"><value>Could not check Steam offer status. The service did not return a status.</value></data>
   <data name="Layout_GlobalTrade_Status_Waiting" xml:space="preserve"><value>Waiting for status</value></data>
   <data name="Common_Actions" xml:space="preserve"><value>Actions</value></data>
   <data name="Message_AdminAccountNotFound" xml:space="preserve"><value>Admin account was not found.</value></data>
@@ -248,7 +274,7 @@
   <data name="Message_TradeUrlBelongsAnotherSteam" xml:space="preserve"><value>Trade URL belongs to another Steam account.</value></data>
   <data name="Error_DevelopmentMode_Text" xml:space="preserve"><value>Enable the Development environment only for local debugging to see full exception details.</value></data>
   <data name="Message_ActiveGameNotFound" xml:space="preserve"><value>Active game was not found.</value></data>
-  <data name="Market_AvailableItems_Summary" xml:space="preserve"><value>{0}: {1} grouped listing(s), {2} total item(s) currently visible from the bot inventory.</value></data>
+  <data name="Market_AvailableItems_Summary" xml:space="preserve"><value>{0}: {1} grouped listing(s), {2} total item(s) currently visible in the service internal store.</value></data>
   <data name="Message_TradeOfferCanceledBySeller" xml:space="preserve"><value>Trade offer was canceled by seller. {0}</value></data>
   <data name="Message_MessageEmpty" xml:space="preserve"><value>Message cannot be empty.</value></data>
   <data name="Chats_NoChats_Title" xml:space="preserve"><value>No chats yet</value></data>
@@ -288,7 +314,7 @@
   <data name="Message_MinefieldMaximumBet" xml:space="preserve"><value>Maximum bet is {0}.</value></data>
   <data name="Games_Empty_Title" xml:space="preserve"><value>No games available yet</value></data>
   <data name="Error_SecurityNote" xml:space="preserve"><value>Security Note</value></data>
-  <data name="Status_AwaitingBotConfirmation" xml:space="preserve"><value>Awaiting bot confirmation</value></data>
+  <data name="Status_AwaitingBotConfirmation" xml:space="preserve"><value>Awaiting service confirmation</value></data>
   <data name="Common_Quantity" xml:space="preserve"><value>Quantity</value></data>
   <data name="Inventory_LiveDescription" xml:space="preserve"><value>Live Steam inventory with grouped duplicates, current price resolution, and trade flow status.</value></data>
   <data name="Layout_Admin" xml:space="preserve"><value>Admin</value></data>
@@ -352,7 +378,7 @@
   <data name="Message_SteamStatusChecked" xml:space="preserve"><value>Steam status checked. SteamState={0}; AppStatus={1}; Message={2}</value></data>
   <data name="Profile_GiftCode_Title" xml:space="preserve"><value>Gift code</value></data>
   <data name="Games_GameIconAlt" xml:space="preserve"><value>{0} icon</value></data>
-  <data name="Market_OwnItemBotInventory_Text" xml:space="preserve"><value>Your item is already in the bot inventory.</value></data>
+  <data name="Market_OwnItemBotInventory_Text" xml:space="preserve"><value>Your item is already in the service internal store.</value></data>
   <data name="Profile_GiftCode_Label" xml:space="preserve"><value>Gift code</value></data>
   <data name="Items_Empty_Title" xml:space="preserve"><value>No items created yet</value></data>
   <data name="Market_View" xml:space="preserve"><value>Market view</value></data>
@@ -365,7 +391,7 @@
   <data name="Auth_Logout_Title" xml:space="preserve"><value>Logout</value></data>
   <data name="Items_View" xml:space="preserve"><value>Items view</value></data>
   <data name="Page_Games_Title" xml:space="preserve"><value>Games</value></data>
-  <data name="Items_Description" xml:space="preserve"><value>Custom service items created from the admin panel.</value></data>
+  <data name="Items_Description" xml:space="preserve"><value>Game items.</value></data>
   <data name="Layout_GlobalTrade_OpenOffers" xml:space="preserve"><value>Open trade offers</value></data>
   <data name="Js_AcceptDeliveryOffer" xml:space="preserve"><value>accept the delivery offer</value></data>
   <data name="Games_Empty_Text" xml:space="preserve"><value>This section is prepared for future Unity WebGL integrations.</value></data>

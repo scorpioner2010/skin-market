@@ -83,6 +83,7 @@ public class InventoryModel : PageModel
     public string? InventoryRefreshReason { get; private set; }
     public bool InventorySnapshotStale { get; private set; }
     public bool InventoryIsLoading { get; private set; }
+    public bool DeferInitialLoad { get; private set; }
     public bool InventoryRefreshTradeRelated => SteamInventoryRefreshReasons.IsTradeRelated(InventoryRefreshReason);
     public bool InventoryPrivacySetupRequired =>
         IsPrivateInventoryError(InventoryRefreshLastErrorMessage) ||
@@ -105,6 +106,8 @@ public class InventoryModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        ApplyCurrentGameFromRequest();
+
         if (_runtimeState.IsDegradedMode)
         {
             ErrorMessage = _runtimeState.ServiceUnavailableMessage;
@@ -113,6 +116,12 @@ public class InventoryModel : PageModel
                 "Inventory page request blocked because the application is running in degraded mode.",
                 nameof(InventoryModel),
                 cancellationToken: cancellationToken);
+            return;
+        }
+
+        if ((User.Identity?.IsAuthenticated ?? false) && !IsDeferredContentRequest())
+        {
+            DeferInitialLoad = true;
             return;
         }
 
@@ -127,7 +136,7 @@ public class InventoryModel : PageModel
             "Skinport" => "Skinport",
             "Steam" => "Steam",
             "DMarket" => "DMarket",
-            _ => "Unavailable"
+            _ => _localizer["PriceStatus_Unavailable"].Value
         };
     }
 
@@ -135,7 +144,7 @@ public class InventoryModel : PageModel
     {
         if (price?.Status == "Refreshing")
         {
-            return "Refreshing...";
+            return _localizer["PriceStatus_Refreshing"].Value;
         }
 
         if (price?.HasPrice == true && price.DisplayPriceUsd is decimal amount)
@@ -143,38 +152,38 @@ public class InventoryModel : PageModel
             return $"${amount:0.00}";
         }
 
-        return "No reliable price";
+        return _localizer["PriceStatus_NoReliablePrice"].Value;
     }
 
     public string GetPriceStatusLabel(ItemPriceResolutionResult? price)
     {
         if (price is null || !price.HasPrice)
         {
-            return "Unavailable";
+            return _localizer["PriceStatus_Unavailable"].Value;
         }
 
         if (price.IsStale)
         {
-            return "Stale";
+            return _localizer["PriceStatus_Stale"].Value;
         }
 
         if (price.IsEstimated && price.IsCached)
         {
             return price.LastUpdatedUtc.HasValue
-                ? $"Estimated cached {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)} ago"
-                : "Estimated cached";
+                ? $"{_localizer["PriceStatus_EstimatedCached"].Value} {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)}"
+                : _localizer["PriceStatus_EstimatedCached"].Value;
         }
 
         if (price.IsCached)
         {
             return price.LastUpdatedUtc.HasValue
-                ? $"Cached {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)} ago"
-                : "Cached";
+                ? $"{_localizer["PriceStatus_Cached"].Value} {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)}"
+                : _localizer["PriceStatus_Cached"].Value;
         }
 
         if (price.IsEstimated)
         {
-            return "Estimated";
+            return _localizer["PriceStatus_Estimated"].Value;
         }
 
         return GetPriceSourceLabel(price.Source);
@@ -242,7 +251,7 @@ public class InventoryModel : PageModel
 
         if (await HasActiveTradeFlowAsync(appUser.Id, cancellationToken))
         {
-            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Finish or cancel the active trade offer before selling another item.");
+            SellErrorMessage = _localizer["Inventory_TradeBlockMessageSell"].Value;
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -292,7 +301,7 @@ public class InventoryModel : PageModel
         var appUser = await GetCurrentUserAsync(cancellationToken);
         if (appUser is null)
         {
-            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Steam login is required to create bot intake.");
+            SellErrorMessage = _localizer["Message_LoginRequiredBotIntake"].Value;
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -380,7 +389,7 @@ public class InventoryModel : PageModel
 
         if (string.IsNullOrWhiteSpace(operation.TradeOfferId))
         {
-            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "This sale request does not have a Steam trade offer yet.");
+            SellErrorMessage = _localizer["Message_TradeOfferNoSteamYet"].Value;
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -397,7 +406,7 @@ public class InventoryModel : PageModel
         var status = results.FirstOrDefault();
         if (status is null)
         {
-            SellErrorMessage = UiTextLocalizer.LocalizeMessage(_localizer, "Could not check Steam offer status. Bot service did not return a status.");
+            SellErrorMessage = _localizer["Message_CheckSteamOfferStatusFailed"].Value;
             return RedirectToCurrentGame(Input.GameType);
         }
 
@@ -611,6 +620,19 @@ public class InventoryModel : PageModel
         return RedirectToPage(new { game = game.Type });
     }
 
+    private void ApplyCurrentGameFromRequest()
+    {
+        var currentGame = _gameCatalog.Get(Game);
+        Game = currentGame.Type;
+        CurrentGameType = currentGame.Type;
+        CurrentGameDisplayName = currentGame.DisplayName;
+    }
+
+    private bool IsDeferredContentRequest()
+    {
+        return string.Equals(Request.Query["deferred"], "1", StringComparison.Ordinal);
+    }
+
     private async Task LoadPageAsync(CancellationToken cancellationToken)
     {
         var appUser = await GetCurrentUserAsync(cancellationToken);
@@ -666,7 +688,7 @@ public class InventoryModel : PageModel
             ApplyInventoryRefreshStatus(enqueueStatus);
             if (InventoryRefreshRateLimited)
             {
-                InventorySnapshotWarningMessage = "Inventory is loading. Refresh skipped because cooldown is active.";
+                InventorySnapshotWarningMessage = _localizer["Inventory_LoadingCooldown"].Value;
             }
             else if (!InventoryRefreshInProgress && !string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
             {
@@ -693,11 +715,11 @@ public class InventoryModel : PageModel
                                       !string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage);
             if (InventoryRefreshRateLimited)
             {
-                InventorySnapshotWarningMessage = "Inventory snapshot is stale. Refresh skipped because cooldown is active.";
+                InventorySnapshotWarningMessage = _localizer["Inventory_StaleCooldown"].Value;
             }
             else if (recentFailedAttempt)
             {
-                InventorySnapshotWarningMessage = $"Inventory snapshot is stale. Refresh skipped because the last failed attempt was less than {failedAttemptCooldownMinutes} minutes ago.";
+                InventorySnapshotWarningMessage = _localizer["Inventory_StaleRecentFailure", failedAttemptCooldownMinutes].Value;
                 await _appLogService.WriteAsync(
                     "Info",
                     $"Inventory stale auto-refresh skipped after recent failed attempt. AppUserId={appUser.Id}; SteamId={appUser.SteamId}; Game={(int)CurrentGameType}; LastAttempt={InventoryLastAttemptUtc:O}; LastError={InventoryRefreshLastErrorMessage ?? "<null>"}",
@@ -714,16 +736,16 @@ public class InventoryModel : PageModel
                     reason: SteamInventoryRefreshReasons.AutoStale);
                 ApplyInventoryRefreshStatus(enqueueStatus);
                 InventorySnapshotWarningMessage = InventoryRefreshRateLimited
-                    ? "Inventory snapshot is stale. Refresh skipped because cooldown is active."
-                    : "Inventory snapshot is stale. A background refresh has been queued.";
+                    ? _localizer["Inventory_StaleCooldown"].Value
+                    : _localizer["Inventory_StaleRefreshQueued"].Value;
             }
         }
 
         if (InventoryRefreshInProgress)
         {
             InventorySnapshotWarningMessage ??= InventoryRefreshTradeRelated
-                ? "Syncing inventory after trade..."
-                : "Updating inventory...";
+                ? _localizer["Inventory_SyncingAfterTrade"].Value
+                : _localizer["Inventory_Updating"].Value;
         }
 
         if (!string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
@@ -853,11 +875,11 @@ public class InventoryModel : PageModel
         InventoryRefreshLastErrorMessage = status.LastErrorMessage;
     }
 
-    private static string BuildInventoryLoadErrorMessage(string errorMessage)
+    private string BuildInventoryLoadErrorMessage(string errorMessage)
     {
         if (IsPrivateInventoryError(errorMessage))
         {
-            return "Steam inventory is private or unavailable. Set your Steam inventory privacy to Public, then refresh this page.";
+            return _localizer["Inventory_PrivateUnavailable"].Value;
         }
 
         return errorMessage;
@@ -880,13 +902,13 @@ public class InventoryModel : PageModel
         if (InventoryRefreshInProgress)
         {
             return InventoryRefreshTradeRelated
-                ? "Syncing inventory after trade..."
-                : "Updating inventory...";
+                ? _localizer["Inventory_SyncingAfterTrade"].Value
+                : _localizer["Inventory_Updating"].Value;
         }
 
         if (InventoryLastSuccessRefreshUtc is null)
         {
-            return "Loading inventory...";
+            return _localizer["Loading_InventoryItems"].Value;
         }
 
         return FormatInventoryLastUpdated();
@@ -896,33 +918,33 @@ public class InventoryModel : PageModel
     {
         if (InventoryLastSuccessRefreshUtc is null)
         {
-            return "Inventory has not been loaded yet.";
+            return _localizer["Loading_InventoryItems"].Value;
         }
 
-        return $"Inventory last updated: {FormatAge(DateTime.UtcNow - InventoryLastSuccessRefreshUtc.Value)} ago.";
+        return _localizer["Inventory_LastUpdatedAgo", FormatAge(DateTime.UtcNow - InventoryLastSuccessRefreshUtc.Value)].Value;
     }
 
-    private static string FormatAge(TimeSpan age)
+    private string FormatAge(TimeSpan age)
     {
         if (age < TimeSpan.FromMinutes(1))
         {
-            return "less than 1 minute";
+            return _localizer["Time_LessThanOneMinute"].Value;
         }
 
         if (age < TimeSpan.FromHours(1))
         {
             var minutes = Math.Max(1, (int)Math.Floor(age.TotalMinutes));
-            return minutes == 1 ? "1 minute" : $"{minutes} minutes";
+            return minutes == 1 ? _localizer["Time_Minute"].Value : _localizer["Time_Minutes", minutes].Value;
         }
 
         if (age < TimeSpan.FromDays(1))
         {
             var hours = Math.Max(1, (int)Math.Floor(age.TotalHours));
-            return hours == 1 ? "1 hour" : $"{hours} hours";
+            return hours == 1 ? _localizer["Time_Hour"].Value : _localizer["Time_Hours", hours].Value;
         }
 
         var days = Math.Max(1, (int)Math.Floor(age.TotalDays));
-        return days == 1 ? "1 day" : $"{days} days";
+        return days == 1 ? _localizer["Time_Day"].Value : _localizer["Time_Days", days].Value;
     }
 
     private async Task<Dictionary<string, List<PriceSourceBreakdownItem>>> LoadPriceBreakdownsAsync(

@@ -314,7 +314,7 @@ public class MarketService : IMarketService
     {
         if (resolvedPrice?.HasPrice == true && resolvedPrice.Price.HasValue)
         {
-            return Math.Round(resolvedPrice.Price.Value * 0.92m, 2, MidpointRounding.AwayFromZero);
+            return Math.Round(resolvedPrice.Price.Value, 2, MidpointRounding.AwayFromZero);
         }
 
         return null;

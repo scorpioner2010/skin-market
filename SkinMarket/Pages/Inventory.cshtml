@@ -1,6 +1,7 @@
 @page
 @model SkinMarket.Pages.InventoryModel
 @using System.Linq
+@using System.Text.Encodings.Web
 @using System.Text.Json
 @{
     ViewData["Title"] = L["Page_Inventory_Title"];
@@ -31,17 +32,20 @@
         item.StatusItems.Any(statusItem => !statusItem.IsReady && waitingForCreditStatuses.Contains(statusItem.Status)));
 }
 
-<div class="py-4">
+<div class="inventory-page py-4" data-deferred-page="inventory" data-deferred-loaded="@((!Model.DeferInitialLoad).ToString().ToLowerInvariant())">
     <div class="page-header">
         <div>
             <h1>@L["Page_Inventory_Title"]</h1>
             <p class="page-description inventory-page-description">@L["Inventory_LiveDescription"]</p>
-            <div class="status-group inventory-summary-strip">
-                <span class="compact-badge compact-badge-neutral">@L["Inventory_Grouped"]: @Model.GroupedItems.Count</span>
-                <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryReady"]: @readyToSellCount</span>
-                <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryPending"]: @pendingTradeCount</span>
-                <span class="compact-badge compact-badge-neutral">@L["Inventory_CreditWait"]: @waitingForCreditCount</span>
-            </div>
+            @if (!Model.DeferInitialLoad)
+            {
+                <div class="status-group inventory-summary-strip">
+                    <span class="compact-badge compact-badge-neutral">@L["Inventory_Grouped"]: @Model.GroupedItems.Count</span>
+                    <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryReady"]: @readyToSellCount</span>
+                    <span class="compact-badge compact-badge-neutral">@L["Inventory_SummaryPending"]: @pendingTradeCount</span>
+                    <span class="compact-badge compact-badge-neutral">@L["Inventory_CreditWait"]: @waitingForCreditCount</span>
+                </div>
+            }
         </div>
         <div class="status-group">
             <form method="get" class="game-switcher" aria-label="@L["Inventory_GameSelector"]">
@@ -60,7 +64,7 @@
                     }
                 </select>
             </form>
-            @if (User.Identity?.IsAuthenticated ?? false)
+            @if ((User.Identity?.IsAuthenticated ?? false) && !Model.DeferInitialLoad)
             {
                 <div class="inventory-refresh-controls"
                      data-inventory-refresh-root
@@ -76,7 +80,32 @@
         </div>
     </div>
 
-    @if (!(User.Identity?.IsAuthenticated ?? false))
+    @if (Model.DeferInitialLoad)
+    {
+        <section class="deferred-page-loader" aria-live="polite" aria-busy="true">
+            <div class="deferred-loader-card">
+                <div class="deferred-loader-copy">
+                    <span class="deferred-spinner" aria-hidden="true"></span>
+                    <div>
+                        <h2>@L["Inventory_YourItems_Title"]</h2>
+                        <p>@L["Loading_InventoryItems"]</p>
+                    </div>
+                </div>
+                <div class="deferred-skeleton-list" aria-hidden="true">
+                    @for (var index = 0; index < 8; index++)
+                    {
+                        <div class="deferred-skeleton-row">
+                            <span class="deferred-skeleton-icon"></span>
+                            <span class="deferred-skeleton-line deferred-skeleton-line-wide"></span>
+                            <span class="deferred-skeleton-line"></span>
+                            <span class="deferred-skeleton-pill"></span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+    }
+    else if (!(User.Identity?.IsAuthenticated ?? false))
     {
         <div class="empty-state">
             <h2>@L["Common_SteamLoginRequired"]</h2>
@@ -147,8 +176,8 @@
         else if (Model.InventoryIsLoading)
         {
             <div class="empty-state">
-                <h2>Loading inventory...</h2>
-                <p>The first inventory snapshot is being refreshed in the background.</p>
+                <h2>@L["Loading_InventoryItems"]</h2>
+                <p>@L["Inventory_FirstSnapshotRefreshing"]</p>
             </div>
         }
         else if (Model.GroupedItems.Count == 0)
@@ -174,10 +203,10 @@
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Tradable"]</div>
                             <div class="inventory-cell inventory-flag-cell">@L["Inventory_Column_Marketable"]</div>
                             <div class="inventory-cell">@L["Common_QuantityShort"]</div>
-                            <div class="inventory-cell">Asset ID</div>
-                            <div class="inventory-cell">USD price</div>
-                            <div class="inventory-cell">Price status</div>
-                            <div class="inventory-cell">Price sources</div>
+                            <div class="inventory-cell">@L["Common_AssetId"]</div>
+                            <div class="inventory-cell">@L["Common_UsdPrice"]</div>
+                            <div class="inventory-cell">@L["Common_PriceStatus"]</div>
+                            <div class="inventory-cell">@L["Common_PriceSources"]</div>
                             <div class="inventory-cell inventory-status-cell">@L["Inventory_Column_Status"]</div>
                             <div class="inventory-cell inventory-actions-cell">@L["Inventory_Column_Action"]</div>
                         </div>
@@ -227,11 +256,11 @@
                                 <div class="inventory-cell inventory-meta break-value" data-label="@L["Common_QuantityShort"]">
                                     <span class="balance-pill inventory-count-pill">@item.Quantity</span>
                                 </div>
-                                <div class="inventory-cell inventory-meta break-value" data-label="Asset ID" title="@string.Join(", ", item.AssetIds)">
+                                <div class="inventory-cell inventory-meta break-value" data-label="@L["Common_AssetId"]" title="@string.Join(", ", item.AssetIds)">
                                     @item.RepresentativeAssetId
                                 </div>
                                 <div class="inventory-cell inventory-meta inventory-price-cell"
-                                     data-label="USD price"
+                                     data-label="@L["Common_UsdPrice"]"
                                      data-asset-id="@item.RepresentativeAssetId"
                                      data-market-hash-name="@item.MarketHashName"
                                      data-price-source="@Model.ResolvedPricesByAssetId.GetValueOrDefault(item.RepresentativeAssetId)?.Source"
@@ -260,16 +289,16 @@
                                     }
                                 </div>
                                 <div class="inventory-cell inventory-meta inventory-price-status-cell"
-                                     data-label="Price status"
+                                     data-label="@L["Common_PriceStatus"]"
                                      data-asset-id="@item.RepresentativeAssetId">
                                     @(resolvedPrice?.Status == "Refreshing" ? L["PriceStatus_Refreshing"].Value : Model.GetPriceStatusLabel(resolvedPrice))
                                 </div>
                                 <div class="inventory-cell inventory-meta inventory-price-sources-cell"
-                                     data-label="Price sources">
+                                     data-label="@L["Common_PriceSources"]">
                                     @if (priceBreakdown.Count > 0)
                                     {
                                         <div class="price-source-dropdown" data-price-source-menu>
-                                            <button type="button" class="price-source-trigger" aria-expanded="false">Price</button>
+                                            <button type="button" class="price-source-trigger" aria-expanded="false">@L["Common_Price"]</button>
                                             <div class="price-source-list" aria-hidden="true">
                                                 @foreach (var sourcePrice in priceBreakdown)
                                                 {
@@ -402,26 +431,36 @@
             let lastSuccessUtc = root.dataset.lastSuccessUtc || null;
             let isRefreshing = root.dataset.refreshing === 'true';
             let statusPollTimer = null;
+            const ageText = {
+                lessThanMinute: '@JavaScriptEncoder.Default.Encode(L["Time_LessThanOneMinute"].Value)',
+                minute: '@JavaScriptEncoder.Default.Encode(L["Time_Minute"].Value)',
+                minutes: '@JavaScriptEncoder.Default.Encode(L["Time_Minutes", "__COUNT__"].Value)',
+                hour: '@JavaScriptEncoder.Default.Encode(L["Time_Hour"].Value)',
+                hours: '@JavaScriptEncoder.Default.Encode(L["Time_Hours", "__COUNT__"].Value)',
+                day: '@JavaScriptEncoder.Default.Encode(L["Time_Day"].Value)',
+                days: '@JavaScriptEncoder.Default.Encode(L["Time_Days", "__COUNT__"].Value)'
+            };
+            const formatCountText = (template, count) => template.replace('__COUNT__', String(count));
 
             const read = (entry, camelName, pascalName) => entry?.[camelName] ?? entry?.[pascalName] ?? null;
             const formatAge = (date) => {
                 const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
                 if (seconds < 60) {
-                    return 'less than 1 minute';
+                    return ageText.lessThanMinute;
                 }
 
                 const minutes = Math.floor(seconds / 60);
                 if (minutes < 60) {
-                    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+                    return minutes === 1 ? ageText.minute : formatCountText(ageText.minutes, minutes);
                 }
 
                 const hours = Math.floor(minutes / 60);
                 if (hours < 24) {
-                    return hours === 1 ? '1 hour' : `${hours} hours`;
+                    return hours === 1 ? ageText.hour : formatCountText(ageText.hours, hours);
                 }
 
                 const days = Math.floor(hours / 24);
-                return days === 1 ? '1 day' : `${days} days`;
+                return days === 1 ? ageText.day : formatCountText(ageText.days, days);
             };
 
             const fetchStatus = async (url) => {
@@ -452,14 +491,14 @@
                 if (statusElement) {
                     if (isRefreshing) {
                         statusElement.textContent = tradeRefreshReasons.has(refreshReason)
-                            ? 'Syncing inventory after trade...'
-                            : 'Updating inventory...';
+                            ? '@JavaScriptEncoder.Default.Encode(L["Inventory_SyncingAfterTrade"].Value)'
+                            : '@JavaScriptEncoder.Default.Encode(L["Inventory_Updating"].Value)';
                     } else if (lastSuccessValue) {
-                        statusElement.textContent = `Inventory last updated: ${formatAge(new Date(lastSuccessValue))} ago.`;
+                        statusElement.textContent = '@JavaScriptEncoder.Default.Encode(L["Inventory_LastUpdatedAgo", "__AGE__"].Value)'.replace('__AGE__', formatAge(new Date(lastSuccessValue)));
                     } else if (lastErrorValue) {
                         statusElement.textContent = lastErrorValue;
                     } else {
-                        statusElement.textContent = 'Loading inventory...';
+                        statusElement.textContent = '@JavaScriptEncoder.Default.Encode(L["Loading_InventoryItems"].Value)';
                     }
                 }
 
@@ -530,9 +569,15 @@
 
                 if (entry.hasPrice && entry.price !== null) {
                     const display = `$${Number(entry.price).toFixed(2)}`;
-                    const label = entry.isStale ? 'Stale' : entry.isEstimated ? 'Estimated' : entry.isCached ? 'Cached' : 'Live';
+                    const label = entry.isStale
+                        ? '@JavaScriptEncoder.Default.Encode(L["PriceStatus_Stale"].Value)'
+                        : entry.isEstimated
+                            ? '@JavaScriptEncoder.Default.Encode(L["PriceStatus_Estimated"].Value)'
+                            : entry.isCached
+                                ? '@JavaScriptEncoder.Default.Encode(L["PriceStatus_Cached"].Value)'
+                                : '@JavaScriptEncoder.Default.Encode(L["PriceStatus_Live"].Value)';
                     if (cell) {
-                        cell.dataset.priceSource = entry.source || 'Unavailable';
+                        cell.dataset.priceSource = entry.source || '@JavaScriptEncoder.Default.Encode(L["PriceStatus_Unavailable"].Value)';
                         cell.dataset.priceType = entry.priceType || 'unavailable';
                         cell.dataset.priceConfidence = entry.confidenceLabel || '';
                         cell.innerHTML = `<div class="inventory-price-block"><span class="price-value">${display}</span></div>`;
@@ -547,7 +592,7 @@
                     cell.innerHTML = `<div class="inventory-price-block"><span class="inventory-unavailable">-</span></div>`;
                 }
                 if (statusCell) {
-                    statusCell.textContent = 'No reliable price';
+                    statusCell.textContent = '@JavaScriptEncoder.Default.Encode(L["PriceStatus_NoReliablePrice"].Value)';
                 }
             };
 

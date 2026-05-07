@@ -83,7 +83,7 @@ public class ProfileModel : PageModel
         {
             ModelState.AddModelError(
                 $"{nameof(Input)}.{nameof(Input.TradeUrl)}",
-                UiTextLocalizer.LocalizeMessage(_localizer, "Trade URL must be a valid Steam trade offer link."));
+                _localizer["Message_TradeUrlMustBeValid"].Value);
         }
         else if (!string.IsNullOrWhiteSpace(tradeUrl) && !SteamTradeUrlUtility.BelongsToSteamId(tradeUrl, appUser.SteamId))
         {

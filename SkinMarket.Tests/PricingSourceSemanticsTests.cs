@@ -199,7 +199,7 @@ public class PricingSourceSemanticsTests
     }
 
     [Fact]
-    public async Task MarketPricingService_UsesDiscountedResolvedUsdPriceWhenAvailable()
+    public async Task MarketPricingService_UsesResolvedUsdPriceWhenAvailable()
     {
         var service = new MarketPricingService(
             new FakeItemPriceResolver(new ItemPriceResolutionResult
@@ -219,7 +219,7 @@ public class PricingSourceSemanticsTests
             AssetId = "asset-1"
         });
 
-        Assert.Equal(92m, price);
+        Assert.Equal(100m, price);
     }
 
     [Fact]
