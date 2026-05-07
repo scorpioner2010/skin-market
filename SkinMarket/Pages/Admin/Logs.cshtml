@@ -15,6 +15,7 @@
         <div class="action-row">
             <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
             <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotLogs">Steam Trade Bot Logs</a>
             <a class="btn app-button-primary" asp-page="/Admin/Logs">Logs</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
@@ -63,6 +64,7 @@
         <div class="history-tabs" data-admin-log-tabs>
             <div class="history-tab-list" role="tablist" aria-label="Log sections">
                 <button type="button" class="history-tab-button active" role="tab" aria-selected="true" data-admin-log-tab="bot-service">bot-service Issues (@Math.Min(recentBotIssues.Count, take))</button>
+                <a class="history-tab-button" role="tab" aria-selected="false" asp-page="/Admin/BotLogs">Steam Trade Bot Logs</a>
                 <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-log-tab="steam-inventory">Steam Inventory (@Model.InventoryEntries.Count)</button>
                 <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-log-tab="application">Application Issues (@Model.AppEntries.Count)</button>
                 <button type="button" class="history-tab-button" role="tab" aria-selected="false" data-admin-log-tab="workflow">Workflow Logs (@Model.WorkflowEntries.Count)</button>

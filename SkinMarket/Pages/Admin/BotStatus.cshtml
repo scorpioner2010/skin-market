@@ -45,6 +45,7 @@
                asp-route-limit="@Model.Limit"
                asp-route-searchTerm="@Model.SearchTerm"
                asp-route-historyMode="@(historyMode == "all" ? null : historyMode)">Bot History</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotLogs">Steam Trade Bot Logs</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
             <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
@@ -63,6 +64,12 @@
     {
         <div class="app-alert alert-danger" role="alert">
             Bot service is unreachable. @(Model.ServiceStatus.ReachabilityError ?? "No response from bot service.")
+        </div>
+    }
+    else if (!Model.ServiceStatus.Bot.Ready)
+    {
+        <div class="app-alert alert-warning" role="alert">
+            Bot is not ready. Reason: @(Model.NotReadyReason). @(Model.ServiceStatus.Bot.RecommendedNextCheck ?? "Open Steam Trade Bot Logs for recent lifecycle events.")
         </div>
     }
 
@@ -105,6 +112,8 @@
                         <div class="history-metrics">
                             <span><strong>State updated:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.StateUpdatedAt)</span>
                             <span><strong>Service reachable:</strong> @(Model.ServiceStatus.Reachable ? "Yes" : "No")</span>
+                            <span><strong>Not-ready reason:</strong> @Model.NotReadyReason</span>
+                            <span><strong>Recommended check:</strong> @(Model.ServiceStatus.Bot.RecommendedNextCheck ?? "Review recent bot-service events.")</span>
                         </div>
                     </article>
 
@@ -120,16 +129,20 @@
                                 : serviceStateDescription)</p>
                         <div class="history-metrics">
                             <span><strong>Username configured:</strong> @(Model.ServiceStatus.Bot.UsernameConfigured ? "Yes" : "No")</span>
+                            <span><strong>Steam ID configured:</strong> @(Model.ServiceStatus.Bot.SteamIdConfigured ? "Yes" : "No")</span>
                             <span><strong>Shared secret:</strong> @(Model.ServiceStatus.Bot.SharedSecretConfigured ? "Yes" : "No")</span>
                             <span><strong>Identity secret:</strong> @(Model.ServiceStatus.Bot.IdentitySecretConfigured ? "Yes" : "No")</span>
+                            <span><strong>Logon mode:</strong> @(Model.ServiceStatus.Bot.LogonMode ?? "Unknown")</span>
+                            <span><strong>Last login attempt:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastLogonAttemptAt)</span>
+                            <span><strong>Last login success:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastSuccessfulLogonAt)</span>
                         </div>
                     </article>
 
                     <article class="content-card live-status-card">
                         <span class="section-kicker">Web Session</span>
                         <div class="card-heading">
-                            <h3>@(Model.ServiceStatus.Bot.Ready ? "Trade manager ready" : "Waiting for web session")</h3>
-                            <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.Ready ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.Ready ? "Ready" : "Waiting")</span>
+                            <h3>@(Model.ServiceStatus.Bot.TradeManagerReady ? "Trade manager ready" : Model.ServiceStatus.Bot.WebSessionReady ? "Web session ready" : "Waiting for web session")</h3>
+                            <span class="status-badge" data-status="@(Model.ServiceStatus.Bot.TradeManagerReady ? "Credited" : serviceBadgeStatus)">@(Model.ServiceStatus.Bot.TradeManagerReady ? "Ready" : "Waiting")</span>
                         </div>
                         <p class="card-subtitle">@(
                             Model.ServiceStatus.Bot.Ready
@@ -137,6 +150,10 @@
                                 : "The bot may already be logged into Steam but still waiting for cookies or a refreshed web session.")</p>
                         <div class="history-metrics">
                             <span><strong>Last ready:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastReadyAt)</span>
+                            <span><strong>Web session:</strong> @(Model.ServiceStatus.Bot.WebSessionReady ? "Yes" : "No")</span>
+                            <span><strong>Trade manager:</strong> @(Model.ServiceStatus.Bot.TradeManagerReady ? "Yes" : "No")</span>
+                            <span><strong>Last disconnect:</strong> @FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastDisconnectAt)</span>
+                            <span><strong>Disconnect reason:</strong> @(string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.LastDisconnectReason) ? "None" : Model.ServiceStatus.Bot.LastDisconnectReason)</span>
                             <span><strong>Active activities:</strong> @Model.ServiceStatus.Bot.ActiveActivityCount</span>
                         </div>
                     </article>
@@ -179,8 +196,20 @@
                     <dd>@(Model.ServiceStatus.Bot.Ready ? "Yes" : "No")</dd>
                 </div>
                 <div class="detail-row">
+                    <dt>Not Ready Reason</dt>
+                    <dd>@Model.NotReadyReason</dd>
+                </div>
+                <div class="detail-row">
                     <dt>Logged On</dt>
                     <dd>@(Model.ServiceStatus.Bot.LoggedOn ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Web Session</dt>
+                    <dd>@(Model.ServiceStatus.Bot.WebSessionReady ? "Yes" : "No")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Trade Manager</dt>
+                    <dd>@(Model.ServiceStatus.Bot.TradeManagerReady ? "Yes" : "No")</dd>
                 </div>
                 <div class="detail-row">
                     <dt>State</dt>
@@ -197,6 +226,34 @@
                 <div class="detail-row">
                     <dt>Last Error</dt>
                     <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.LastError) ? "None" : Model.ServiceStatus.Bot.LastError)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Last Error At</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastErrorAt)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Last Disconnect</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastDisconnectAt)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Disconnect Reason</dt>
+                    <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.LastDisconnectReason) ? "None" : Model.ServiceStatus.Bot.LastDisconnectReason)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Process Started</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.ProcessStartedAt)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Restart Detected</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.LastRestartDetectedAt, "Not detected")</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Previous Error</dt>
+                    <dd class="break-value">@(string.IsNullOrWhiteSpace(Model.ServiceStatus.Bot.PreviousErrorBeforeRecovery) ? "None" : Model.ServiceStatus.Bot.PreviousErrorBeforeRecovery)</dd>
+                </div>
+                <div class="detail-row">
+                    <dt>Recovered At</dt>
+                    <dd>@FormatLocalDateTimeOffset(Model.ServiceStatus.Bot.RecoveredFromErrorAt, "Not recorded")</dd>
                 </div>
                 <div class="detail-row">
                     <dt>Trade URL</dt>
@@ -316,7 +373,7 @@
         <section class="content-card">
             <div class="card-heading">
                 <h2>Recent Issues</h2>
-                <a class="btn app-button-primary" asp-page="/Admin/Logs" asp-route-limit="50">Open Logs</a>
+                <a class="btn app-button-primary" asp-page="/Admin/BotLogs" asp-route-limit="100">Open Steam Bot Logs</a>
             </div>
             <div class="card-grid mt-3">
                 <article class="content-card live-status-card">

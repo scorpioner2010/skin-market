@@ -1,0 +1,260 @@
+@page
+@model SkinMarket.Pages.Admin.BotLogsModel
+@{
+    ViewData["Title"] = "Steam Trade Bot Logs";
+    string FormatLocal(DateTimeOffset? timestamp, string fallback = "Unknown") => timestamp?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz") ?? fallback;
+    string FormatUptime(int? seconds)
+    {
+        if (seconds is null)
+        {
+            return "Unknown";
+        }
+
+        var uptime = TimeSpan.FromSeconds(seconds.Value);
+        return uptime.TotalDays >= 1
+            ? $"{(int)uptime.TotalDays}d {uptime.Hours}h {uptime.Minutes}m"
+            : $"{uptime.Hours}h {uptime.Minutes}m {uptime.Seconds}s";
+    }
+
+    var reason = Model.ResolveNotReadyReason();
+    var statusLabel = !Model.BotStatus.Reachable
+        ? "Disconnected"
+        : Model.BotStatus.Bot.Ready ? "Ready" : "Not Ready";
+    var statusBadge = !Model.BotStatus.Reachable || string.Equals(Model.BotStatus.Bot.NotReadyReason, "SteamDisconnected", StringComparison.OrdinalIgnoreCase)
+        ? "Failed"
+        : Model.BotStatus.Bot.Ready ? "Credited" : "Pending";
+}
+
+<div class="py-4" data-bot-log-refresh data-refresh-interval-seconds="5">
+    <div class="page-header">
+        <div>
+            <h1>Steam Trade Bot Logs</h1>
+            <p class="text-muted mb-0">Safe bot-service event stream with lifecycle, readiness, trade, inventory, and API failures.</p>
+        </div>
+        <div class="action-row">
+            <a class="btn app-button-secondary" asp-page="/Admin/BotStatus">Bot Status</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/BotHistory">Bot History</a>
+            <a class="btn app-button-primary" asp-page="/Admin/BotLogs">Steam Trade Bot Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Logs">Logs</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Accounts">Accounts</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Items">Items</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Games">Games</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Menus">Menus</a>
+            <a class="btn app-button-secondary" asp-page="/Admin/Chats">Chats</a>
+        </div>
+    </div>
+
+    <section class="content-card mb-4">
+        <div class="card-heading">
+            <div>
+                <h2>Current Bot Summary</h2>
+                <p class="card-subtitle mb-0">@(!string.IsNullOrWhiteSpace(Model.BotStatus.Bot.RecommendedNextCheck) ? Model.BotStatus.Bot.RecommendedNextCheck : "Use recent events below to diagnose the current state.")</p>
+            </div>
+            <span class="status-badge" data-status="@statusBadge">@statusLabel</span>
+        </div>
+        <div class="history-metrics mt-3">
+            <span><strong>Reachable:</strong> @(Model.BotStatus.Reachable ? "Yes" : "No")</span>
+            <span><strong>Reason:</strong> @reason</span>
+            <span><strong>State:</strong> @(Model.BotStatus.Bot.ServiceState ?? "Unknown")</span>
+            <span><strong>Description:</strong> @(Model.BotStatus.Bot.ServiceStateDescription ?? Model.BotStatus.ReachabilityError ?? "Unknown")</span>
+            <span><strong>Last Error:</strong> @(string.IsNullOrWhiteSpace(Model.BotStatus.Bot.LastError) ? "None" : Model.BotStatus.Bot.LastError)</span>
+            <span><strong>Last Ready:</strong> @FormatLocal(Model.BotStatus.Bot.LastReadyAt, "Never")</span>
+            <span><strong>Last Disconnect:</strong> @FormatLocal(Model.BotStatus.Bot.LastDisconnectAt, "Never")</span>
+            <span><strong>Disconnect Reason:</strong> @(string.IsNullOrWhiteSpace(Model.BotStatus.Bot.LastDisconnectReason) ? "None" : Model.BotStatus.Bot.LastDisconnectReason)</span>
+            <span><strong>Started:</strong> @FormatLocal(Model.BotStatus.Bot.ProcessStartedAt)</span>
+            <span><strong>Restart Detected:</strong> @FormatLocal(Model.BotStatus.Bot.LastRestartDetectedAt, "Not detected")</span>
+            <span><strong>Recovered:</strong> @FormatLocal(Model.BotStatus.Bot.RecoveredFromErrorAt, "Not recorded")</span>
+            <span><strong>Uptime:</strong> @FormatUptime(Model.BotStatus.Bot.UptimeSeconds)</span>
+        </div>
+    </section>
+
+    <section class="page-section">
+        <div class="section-heading">
+            <div>
+                <h2>Events</h2>
+                <p class="section-description">Latest events are shown first. Filters are applied by the bot-service endpoint.</p>
+            </div>
+            <div class="action-row">
+                <span class="compact-badge compact-badge-neutral" data-bot-log-refresh-status>Auto refresh on</span>
+                <span class="meta-note" data-bot-log-refresh-countdown>Refresh in 5s.</span>
+                <button type="button" class="btn app-button-secondary" data-bot-log-refresh-toggle>Pause auto refresh</button>
+                <a class="btn app-button-primary"
+                   asp-page="/Admin/BotLogs"
+                   asp-route-limit="@Model.Limit"
+                   asp-route-level="@Model.Level"
+                   asp-route-source="@Model.Source"
+                   asp-route-eventType="@Model.EventType"
+                   asp-route-tradeOperationId="@Model.TradeOperationId"
+                   asp-route-offerId="@Model.OfferId">Refresh</a>
+            </div>
+        </div>
+
+        <form method="get" class="content-card mb-4" data-pause-refresh>
+            <div class="history-metrics">
+                <label>
+                    <strong>Limit</strong>
+                    <select name="Limit" class="form-select app-input">
+                        <option value="100" selected="@(Model.Limit == 100)">100</option>
+                        <option value="500" selected="@(Model.Limit == 500)">500</option>
+                    </select>
+                </label>
+                <label>
+                    <strong>Level</strong>
+                    <select name="Level" class="form-select app-input">
+                        <option value="">All</option>
+                        <option value="Debug" selected="@(Model.Level == "Debug")">Debug</option>
+                        <option value="Info" selected="@(Model.Level == "Info")">Info</option>
+                        <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
+                        <option value="Error" selected="@(Model.Level == "Error")">Error</option>
+                    </select>
+                </label>
+                <label>
+                    <strong>Source</strong>
+                    <input name="Source" class="form-control app-input" value="@Model.Source" placeholder="steam-bot, trade-manager, inventory" />
+                </label>
+                <label>
+                    <strong>Event Type</strong>
+                    <input name="EventType" class="form-control app-input" value="@Model.EventType" placeholder="SteamDisconnected" />
+                </label>
+                <label>
+                    <strong>Trade Operation</strong>
+                    <input name="TradeOperationId" class="form-control app-input" value="@Model.TradeOperationId" />
+                </label>
+                <label>
+                    <strong>Offer ID</strong>
+                    <input name="OfferId" class="form-control app-input" value="@Model.OfferId" />
+                </label>
+                <button type="submit" class="btn app-button-secondary">Apply</button>
+            </div>
+        </form>
+
+        @if (!Model.BotLogs.Reachable)
+        {
+            <div class="app-alert alert-danger" role="alert">
+                Bot log endpoint is unavailable. @(Model.BotLogs.ReachabilityError ?? "No response from bot-service.")
+            </div>
+        }
+        else if (Model.BotLogs.Entries.Count == 0)
+        {
+            <div class="empty-state compact">
+                <h3>No Steam trade bot events matched the current filters.</h3>
+            </div>
+        }
+        else
+        {
+            <div class="market-table-shell admin-table-shell admin-log-shell">
+                <div class="market-table-list admin-log-table">
+                    <div class="market-table-row market-table-header admin-bot-log-row">
+                        <div class="market-table-cell market-table-item-cell">Event</div>
+                        <div class="market-table-cell">Level</div>
+                        <div class="market-table-cell">Time</div>
+                        <div class="market-table-cell">Source</div>
+                        <div class="market-table-cell">Details</div>
+                    </div>
+                    @foreach (var entry in Model.BotLogs.Entries)
+                    {
+                        var entryBadge = string.Equals(entry.Level, "Error", StringComparison.OrdinalIgnoreCase)
+                            ? "Failed"
+                            : string.Equals(entry.Level, "Warning", StringComparison.OrdinalIgnoreCase) ? "Pending" : "Credited";
+                        <article class="market-table-row admin-bot-log-row">
+                            <div class="market-table-cell market-table-item-cell" data-label="Event">
+                                <div class="market-table-copy">
+                                    <strong>@entry.Message</strong>
+                                    <div class="card-subtitle">@entry.EventType</div>
+                                </div>
+                            </div>
+                            <div class="market-table-cell" data-label="Level">
+                                <span class="status-badge" data-status="@entryBadge">@entry.Level</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Time">
+                                <span>@FormatLocal(entry.TimestampUtc)</span>
+                            </div>
+                            <div class="market-table-cell" data-label="Source">
+                                <span class="compact-badge compact-badge-neutral">@entry.Source</span>
+                            </div>
+                            <div class="market-table-cell admin-log-details" data-label="Details">
+                                @if (!string.IsNullOrWhiteSpace(entry.TradeOperationId))
+                                {
+                                    <span><strong>tradeOperationId:</strong> <span class="break-value">@entry.TradeOperationId</span></span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(entry.OfferId))
+                                {
+                                    <span><strong>offerId:</strong> <span class="break-value">@entry.OfferId</span></span>
+                                }
+                                @foreach (var detail in entry.Metadata)
+                                {
+                                    <span><strong>@detail.Key:</strong> <span class="break-value">@detail.Value</span></span>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            </div>
+        }
+    </section>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const root = document.querySelector('[data-bot-log-refresh]');
+            if (!root) {
+                return;
+            }
+
+            const status = root.querySelector('[data-bot-log-refresh-status]');
+            const countdown = root.querySelector('[data-bot-log-refresh-countdown]');
+            const toggle = root.querySelector('[data-bot-log-refresh-toggle]');
+            const intervalSeconds = Number(root.dataset.refreshIntervalSeconds || '5');
+            const storageKey = 'skinmarket-admin-botlogs-autorefresh';
+            let enabled = localStorage.getItem(storageKey) !== 'off';
+            let remainingSeconds = intervalSeconds;
+
+            const isEditingFilters = () => {
+                const activeElement = document.activeElement;
+                return activeElement instanceof HTMLElement &&
+                    activeElement.closest('[data-pause-refresh]') !== null;
+            };
+
+            const render = () => {
+                if (!status || !countdown || !toggle) {
+                    return;
+                }
+
+                status.textContent = enabled ? 'Auto refresh on' : 'Auto refresh paused';
+                toggle.textContent = enabled ? 'Pause auto refresh' : 'Resume auto refresh';
+                countdown.textContent = !enabled
+                    ? 'Polling is paused.'
+                    : isEditingFilters() ? 'Paused while filters are focused.' : `Refresh in ${remainingSeconds}s.`;
+            };
+
+            toggle?.addEventListener('click', () => {
+                enabled = !enabled;
+                localStorage.setItem(storageKey, enabled ? 'on' : 'off');
+                remainingSeconds = intervalSeconds;
+                render();
+            });
+
+            render();
+            window.setInterval(() => {
+                if (!enabled) {
+                    return;
+                }
+
+                if (isEditingFilters()) {
+                    remainingSeconds = intervalSeconds;
+                    render();
+                    return;
+                }
+
+                remainingSeconds -= 1;
+                if (remainingSeconds <= 0) {
+                    window.location.reload();
+                    return;
+                }
+
+                render();
+            }, 1000);
+        })();
+    </script>
+}

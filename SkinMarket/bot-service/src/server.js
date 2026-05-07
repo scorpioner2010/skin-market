@@ -2,16 +2,45 @@ const express = require("express");
 const config = require("./config");
 const logger = require("./logger");
 const { SteamBot, HttpError } = require("./steam-bot");
+const { BotEventLog } = require("./event-log");
 
 const app = express();
 app.use(express.json());
 
-const bot = new SteamBot(config, logger);
+const eventLog = new BotEventLog(config.dataDirectory);
+const bot = new SteamBot(config, logger, eventLog);
 
 app.get("/healthz", (_req, res) => {
+  bot.recordHealthCheck();
   res.status(200).json({
     status: "ok",
     bot: bot.getHealth()
+  });
+});
+
+app.get("/api/bot/logs", (req, res) => {
+  res.status(200).json({
+    entries: bot.getLogs({
+      limit: req.query.limit,
+      level: req.query.level,
+      source: req.query.source,
+      eventType: req.query.eventType,
+      tradeOperationId: req.query.tradeOperationId,
+      offerId: req.query.offerId
+    })
+  });
+});
+
+app.get("/api/logs", (req, res) => {
+  res.status(200).json({
+    entries: bot.getLogs({
+      limit: req.query.limit,
+      level: req.query.level,
+      source: req.query.source,
+      eventType: req.query.eventType,
+      tradeOperationId: req.query.tradeOperationId,
+      offerId: req.query.offerId
+    })
   });
 });
 
@@ -72,7 +101,7 @@ app.post("/api/inventory/user", async (req, res, next) => {
 app.use((error, req, res, _next) => {
   const statusCode = error instanceof HttpError ? error.statusCode : 500;
   if (statusCode >= 500 || statusCode === 429) {
-    bot.recordRequestFailure(req.path, statusCode, error.message);
+    bot.recordRequestFailure(req.path, statusCode, error.message, error.details);
   }
   logger.error("Bot service request failed.", {
     route: req.path,
@@ -80,10 +109,17 @@ app.use((error, req, res, _next) => {
     error: error.message
   });
 
-  res.status(statusCode).json({
+  const payload = {
     success: false,
     message: error.message || "Bot service request failed."
-  });
+  };
+
+  if (error instanceof HttpError && error.details) {
+    payload.error = error.message;
+    Object.assign(payload, error.details);
+  }
+
+  res.status(statusCode).json(payload);
 });
 
 app.listen(config.port, async () => {

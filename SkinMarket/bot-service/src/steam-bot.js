@@ -4,6 +4,7 @@ const SteamUser = require("steam-user");
 const SteamCommunity = require("steamcommunity");
 const TradeOfferManager = require("steam-tradeoffer-manager");
 const SteamTotp = require("steam-totp");
+const { sanitizeMetadata } = require("./event-log");
 
 function createDeferred() {
   let resolve;
@@ -17,21 +18,35 @@ function createDeferred() {
 }
 
 class HttpError extends Error {
-  constructor(statusCode, message) {
+  constructor(statusCode, message, details = null) {
     super(message);
     this.statusCode = statusCode;
+    this.details = details;
   }
 }
 
 class SteamBot {
-  constructor(config, logger) {
+  constructor(config, logger, eventLog) {
     this.config = config;
     this.logger = logger;
+    this.eventLog = eventLog;
     this.readyDeferred = createDeferred();
     this.ready = false;
     this.loggedOn = false;
+    this.webSessionReady = false;
+    this.tradeManagerReady = false;
     this.lastError = null;
+    this.lastErrorAt = null;
+    this.lastDisconnectReason = null;
+    this.lastDisconnectAt = null;
+    this.lastLogonAttemptAt = null;
+    this.lastSuccessfulLogonAt = null;
     this.lastReadyAt = null;
+    this.logonMode = null;
+    this.processStartedAt = new Date().toISOString();
+    this.lastRestartDetectedAt = null;
+    this.previousErrorBeforeRecovery = null;
+    this.recoveredFromErrorAt = null;
     this.serviceState = "Starting";
     this.serviceStateDescription = "Initializing Steam bot service.";
     this.stateUpdatedAt = new Date().toISOString();
@@ -40,6 +55,9 @@ class SteamBot {
     this.lastCompletedActivity = null;
     this.activitySequence = 0;
     this.refreshTokenPath = path.join(this.config.dataDirectory, "refresh-token.txt");
+    this.lifecycleStatePath = path.join(this.config.dataDirectory, "bot-lifecycle-state.json");
+
+    this.loadLifecycleState();
 
     this.client = new SteamUser({
       autoRelogin: true
@@ -88,6 +106,12 @@ class SteamBot {
       appId,
       contextId
     });
+    this.recordEvent("Info", "inventory", "InventoryRequestStarted", "Inventory request started through Steam bot session.", {
+      steamId,
+      appId: String(appId),
+      contextId,
+      serviceState: this.serviceState
+    });
 
     return await this.runTrackedActivity(
       "inventory",
@@ -120,7 +144,7 @@ class SteamBot {
             );
           });
 
-          return {
+          const result = {
             success: true,
             itemCount: items.length,
             totalInventoryCount: totalInventoryCount ?? items.length,
@@ -138,9 +162,23 @@ class SteamBot {
               }))
               .filter((item) => item.assetId)
           };
+          this.recordEvent("Info", "inventory", "InventoryRequestSucceeded", "Inventory request succeeded through Steam bot session.", {
+            steamId,
+            appId: String(appId),
+            contextId,
+            itemCount: String(result.items.length),
+            totalInventoryCount: String(result.totalInventoryCount)
+          });
+          return result;
         } catch (error) {
           const mappedError = this.mapInventoryError(error);
           this.recordIssue("Error", "Steam inventory request through bot session failed.", {
+            steamId,
+            appId: String(appId),
+            contextId,
+            error: mappedError.message
+          });
+          this.recordEvent("Error", "inventory", "InventoryRequestFailed", "Inventory request failed through Steam bot session.", {
             steamId,
             appId: String(appId),
             contextId,
@@ -156,6 +194,12 @@ class SteamBot {
     fs.mkdirSync(this.config.dataDirectory, { recursive: true });
     this.setServiceState("Starting", "Initializing Steam bot service.");
 
+    this.recordEvent("Info", "steam-bot", "BotServiceStarted", "Steam bot service process started.", {
+      processStartedAt: this.processStartedAt,
+      lastRestartDetectedAt: this.lastRestartDetectedAt,
+      previousErrorBeforeRecovery: this.previousErrorBeforeRecovery
+    });
+
     this.logger.info("Steam bot service startup.", {
       enabled: this.config.bot.enabled,
       steamIdConfigured: Boolean(this.config.bot.steamId),
@@ -167,36 +211,49 @@ class SteamBot {
       minimumPollInterval: this.config.polling.minimumPollInterval,
       pollFullUpdateInterval: this.config.polling.pollFullUpdateInterval
     });
+    this.recordEvent("Info", "steam-bot", "ConfigLoaded", "Steam bot configuration loaded.", this.getConfigurationFlags());
 
     if (!this.config.bot.enabled) {
-      this.lastError = "Steam bot is disabled by configuration.";
+      this.setLastError("Steam bot is disabled by configuration.");
       this.setServiceState("Disabled", this.lastError);
       this.recordIssue("Warning", this.lastError);
       this.logger.warn(this.lastError);
+      this.recordEvent("Warning", "steam-bot", "BotDisabled", this.lastError, this.getConfigurationFlags());
       return;
     }
 
     if (!this.config.bot.username || !this.config.bot.password || !this.config.bot.steamId) {
-      this.lastError = "Steam bot username, password, or Steam ID is missing.";
+      this.setLastError("Steam bot username, password, or Steam ID is missing.");
       this.setServiceState("Misconfigured", this.lastError);
       this.recordIssue("Error", this.lastError);
       this.logger.error(this.lastError);
+      this.recordEvent("Error", "steam-bot", "ConfigurationMissing", this.lastError, this.getConfigurationFlags());
       return;
     }
 
-    this.lastError = null;
+    this.clearLastError();
     this.setServiceState("Connecting", "Connecting to Steam.");
     this.logOn();
   }
 
   getHealth() {
+    const memoryUsage = process.memoryUsage();
     return {
       enabled: this.config.bot.enabled,
-      active: this.config.bot.enabled && this.ready && this.loggedOn,
+      active: this.config.bot.enabled && this.ready && this.loggedOn && this.webSessionReady && this.tradeManagerReady,
       ready: this.ready,
       loggedOn: this.loggedOn,
+      webSessionReady: this.webSessionReady,
+      tradeManagerReady: this.tradeManagerReady,
       lastReadyAt: this.lastReadyAt,
+      lastErrorAt: this.lastErrorAt,
+      lastDisconnectReason: this.lastDisconnectReason,
+      lastDisconnectAt: this.lastDisconnectAt,
+      lastLogonAttemptAt: this.lastLogonAttemptAt,
+      lastSuccessfulLogonAt: this.lastSuccessfulLogonAt,
+      logonMode: this.logonMode,
       botSteamId: this.config.bot.steamId || null,
+      steamIdConfigured: Boolean(this.config.bot.steamId),
       usernameConfigured: Boolean(this.config.bot.username),
       identitySecretConfigured: Boolean(this.config.bot.identitySecret),
       sharedSecretConfigured: Boolean(this.config.bot.sharedSecret),
@@ -209,15 +266,35 @@ class SteamBot {
       activeActivities: Array.from(this.activeActivities.values())
         .sort((left, right) => left.startedAt.localeCompare(right.startedAt)),
       lastCompletedActivity: this.lastCompletedActivity,
-      recentIssues: this.recentIssues
+      recentIssues: this.recentIssues,
+      notReadyReason: this.classifyNotReadyReason(),
+      recommendedNextCheck: this.getRecommendedNextCheck(),
+      uptimeSeconds: Math.floor((Date.now() - Date.parse(this.processStartedAt)) / 1000),
+      processMemoryMb: Math.round(memoryUsage.rss / 1024 / 1024),
+      processStartedAt: this.processStartedAt,
+      lastRestartDetectedAt: this.lastRestartDetectedAt,
+      previousErrorBeforeRecovery: this.previousErrorBeforeRecovery,
+      recoveredFromErrorAt: this.recoveredFromErrorAt
     };
   }
 
-  recordRequestFailure(route, statusCode, errorMessage) {
+  recordRequestFailure(route, statusCode, errorMessage, details = null) {
     this.recordIssue("Error", "Bot service request failed.", {
       route,
       statusCode: String(statusCode),
-      error: errorMessage || "Unknown error"
+      error: errorMessage || "Unknown error",
+      reason: details?.reason,
+      serviceState: this.serviceState,
+      activeActivityCount: String(this.activeActivities.size)
+    });
+
+    this.recordEvent("Error", "api", statusCode === 503 ? "ApiRequestNotReady" : "ApiRequestFailed", "Bot service request failed.", {
+      route,
+      statusCode: String(statusCode),
+      error: errorMessage || "Unknown error",
+      reason: details?.reason,
+      serviceState: this.serviceState,
+      activeActivityCount: String(this.activeActivities.size)
     });
   }
 
@@ -252,6 +329,14 @@ class SteamBot {
       appId: payload.appId,
       contextId: payload.contextId
     });
+    this.recordEvent("Info", "trade-manager", "TradeOfferCreateStarted", "Creating intake trade offer.", {
+      flow: "intake",
+      tradeOperationId: String(payload.tradeOperationId),
+      sellerSteamId: String(payload.sellerSteamId),
+      assetId: String(payload.assetId),
+      appId: String(payload.appId),
+      contextId: String(payload.contextId)
+    });
 
     try {
       return await this.runTrackedActivity(
@@ -275,6 +360,12 @@ class SteamBot {
     } catch (error) {
       this.recordIssue("Error", "Intake trade creation failed.", {
         entityId: String(payload.tradeOperationId),
+        itemName: payload.itemName,
+        error: error.message
+      });
+      this.recordEvent("Error", "trade-manager", "TradeOfferFailed", "Intake trade creation failed.", {
+        flow: "intake",
+        tradeOperationId: String(payload.tradeOperationId),
         itemName: payload.itemName,
         error: error.message
       });
@@ -313,6 +404,14 @@ class SteamBot {
       appId: payload.appId,
       contextId: payload.contextId
     });
+    this.recordEvent("Info", "trade-manager", "TradeOfferCreateStarted", "Creating delivery trade offer.", {
+      flow: "delivery",
+      tradeOperationId: String(payload.marketItemId),
+      buyerSteamId: String(payload.buyerSteamId),
+      assetId: String(payload.assetId),
+      appId: String(payload.appId),
+      contextId: String(payload.contextId)
+    });
 
     try {
       return await this.runTrackedActivity(
@@ -336,6 +435,12 @@ class SteamBot {
     } catch (error) {
       this.recordIssue("Error", "Delivery trade creation failed.", {
         entityId: String(payload.marketItemId),
+        itemName: payload.itemName,
+        error: error.message
+      });
+      this.recordEvent("Error", "trade-manager", "TradeOfferFailed", "Delivery trade creation failed.", {
+        flow: "delivery",
+        tradeOperationId: String(payload.marketItemId),
         itemName: payload.itemName,
         error: error.message
       });
@@ -566,6 +671,8 @@ class SteamBot {
 
   logOn() {
     const refreshToken = this.tryReadRefreshToken();
+    this.logonMode = refreshToken ? "refresh_token" : "password";
+    this.lastLogonAttemptAt = new Date().toISOString();
     const loginDetails = refreshToken
       ? { refreshToken }
       : {
@@ -577,7 +684,11 @@ class SteamBot {
         };
 
     this.logger.info("Steam bot login starting.", {
-      mode: refreshToken ? "refresh_token" : "password"
+      mode: this.logonMode
+    });
+    this.recordEvent("Info", "steam-bot", "SteamLoginStarting", "Steam login starting.", {
+      logonMode: this.logonMode,
+      lastLogonAttemptAt: this.lastLogonAttemptAt
     });
     this.setServiceState("Connecting", refreshToken
       ? "Connecting to Steam with a stored refresh token."
@@ -588,22 +699,32 @@ class SteamBot {
   registerEventHandlers() {
     this.client.on("loggedOn", () => {
       this.loggedOn = true;
-      this.lastError = null;
+      this.lastSuccessfulLogonAt = new Date().toISOString();
+      this.clearLastError();
       this.client.setPersona(SteamUser.EPersonaState.Online);
       this.setServiceState("AwaitingWebSession", "Logged on to Steam and waiting for a web session.");
       this.logger.info("Steam bot logged on successfully.", {
         steamId: this.client.steamID?.getSteamID64?.() || null
       });
+      this.recordEvent("Info", "steam-bot", "SteamLoginSucceeded", "Steam login succeeded.", {
+        steamIdConfigured: String(Boolean(this.config.bot.steamId)),
+        lastSuccessfulLogonAt: this.lastSuccessfulLogonAt,
+        serviceState: this.serviceState
+      });
     });
 
     this.client.on("steamGuard", (_domain, callback, lastCodeWrong) => {
       if (!this.config.bot.sharedSecret) {
-        this.lastError = "Steam Guard challenge received but STEAM_BOT_SHARED_SECRET is missing.";
+        this.setLastError("Steam Guard challenge received but STEAM_BOT_SHARED_SECRET is missing.");
         this.setServiceState("Error", this.lastError);
         this.recordIssue("Error", this.lastError, {
           lastCodeWrong: String(Boolean(lastCodeWrong))
         });
         this.logger.error(this.lastError, { lastCodeWrong });
+        this.recordEvent("Error", "steam-bot", "SteamLoginFailed", this.lastError, {
+          sharedSecretConfigured: String(Boolean(this.config.bot.sharedSecret)),
+          lastCodeWrong: String(Boolean(lastCodeWrong))
+        });
         return;
       }
 
@@ -618,23 +739,48 @@ class SteamBot {
     });
 
     this.client.on("webSession", (_sessionId, cookies) => {
+      this.webSessionReady = true;
+      this.recordEvent("Info", "steam-bot", "WebSessionInitialized", "Steam web session received.", {
+        cookieCount: String(Array.isArray(cookies) ? cookies.length : 0),
+        serviceState: this.serviceState
+      });
       this.community.setCookies(cookies);
       this.manager.setCookies(cookies, (error) => {
         if (error) {
           this.ready = false;
-          this.lastError = `Trade manager session initialization failed: ${error.message}`;
+          this.tradeManagerReady = false;
+          this.setLastError(`Trade manager session initialization failed: ${error.message}`);
           this.setServiceState("Error", this.lastError);
           this.recordIssue("Error", this.lastError);
           this.logger.error(this.lastError);
+          this.recordEvent("Error", "trade-manager", "WebSessionFailed", this.lastError, {
+            error: error.message,
+            serviceState: this.serviceState
+          });
           this.resetReadyDeferred();
           return;
         }
 
         this.ready = true;
-        this.lastError = null;
+        this.tradeManagerReady = true;
+        if (this.lastError || this.previousErrorBeforeRecovery) {
+          this.recoveredFromErrorAt = new Date().toISOString();
+        }
+        this.clearLastError();
         this.lastReadyAt = new Date().toISOString();
         this.refreshServiceState();
         this.logger.info("Steam bot web session initialized.");
+        this.recordEvent("Info", "trade-manager", "TradeManagerReady", "Trade manager session is ready.", {
+          lastReadyAt: this.lastReadyAt,
+          recoveredFromErrorAt: this.recoveredFromErrorAt,
+          serviceState: this.serviceState
+        });
+        if (this.recoveredFromErrorAt) {
+          this.recordEvent("Info", "steam-bot", "ReconnectSucceeded", "Steam bot recovered and is ready.", {
+            lastReadyAt: this.lastReadyAt,
+            recoveredFromErrorAt: this.recoveredFromErrorAt
+          });
+        }
         this.readyDeferred.resolve();
       });
     });
@@ -642,7 +788,9 @@ class SteamBot {
     this.client.on("error", (error) => {
       this.ready = false;
       this.loggedOn = false;
-      this.lastError = error.message;
+      this.webSessionReady = false;
+      this.tradeManagerReady = false;
+      this.setLastError(error.message);
       this.setServiceState("Error", this.lastError);
       this.recordIssue("Error", "Steam bot client error.", {
         error: error.message,
@@ -652,13 +800,22 @@ class SteamBot {
         error: error.message,
         eresult: error.eresult || null
       });
+      this.recordEvent("Error", "steam-bot", "SteamLoginFailed", "Steam bot client error.", {
+        error: error.message,
+        eresult: String(error.eresult || ""),
+        serviceState: this.serviceState
+      });
       this.resetReadyDeferred();
     });
 
     this.client.on("disconnected", (eresult, message) => {
       this.ready = false;
       this.loggedOn = false;
-      this.lastError = message || "Steam client disconnected.";
+      this.webSessionReady = false;
+      this.tradeManagerReady = false;
+      this.lastDisconnectReason = message || "Steam client disconnected.";
+      this.lastDisconnectAt = new Date().toISOString();
+      this.setLastError(this.lastDisconnectReason);
       this.setServiceState("Disconnected", this.lastError);
       this.recordIssue("Warning", "Steam bot disconnected.", {
         eresult: String(eresult || ""),
@@ -668,15 +825,29 @@ class SteamBot {
         eresult,
         message
       });
+      this.recordEvent("Warning", "steam-bot", "SteamDisconnected", "Steam bot disconnected from Steam.", {
+        eresult: String(eresult || ""),
+        lastDisconnectReason: this.lastDisconnectReason,
+        lastDisconnectAt: this.lastDisconnectAt,
+        serviceState: this.serviceState
+      });
       this.resetReadyDeferred();
     });
 
     this.manager.on("sessionExpired", () => {
       this.ready = false;
-      this.lastError = "Trade manager session expired. Refreshing web session.";
+      this.webSessionReady = false;
+      this.tradeManagerReady = false;
+      this.setLastError("Trade manager session expired. Refreshing web session.");
       this.setServiceState("RefreshingSession", this.lastError);
       this.recordIssue("Warning", this.lastError);
       this.logger.warn(this.lastError);
+      this.recordEvent("Warning", "trade-manager", "TradeManagerNotReady", this.lastError, {
+        serviceState: this.serviceState
+      });
+      this.recordEvent("Info", "steam-bot", "ReconnectAttemptStarted", "Refreshing Steam web session.", {
+        serviceState: this.serviceState
+      });
       this.resetReadyDeferred();
       this.client.webLogOn();
     });
@@ -688,13 +859,29 @@ class SteamBot {
       this.logger.warn("Trade manager poll failure.", {
         error: error.message
       });
+      this.recordEvent("Warning", "trade-manager", "TradeOfferStatusPollFailed", "Trade manager poll failure.", {
+        error: error.message,
+        serviceState: this.serviceState
+      });
     });
 
     this.manager.on("sentOfferChanged", (offer, oldState) => {
+      const newState = this.getOfferStateName(offer.state);
+      const oldStateName = this.getOfferStateName(oldState);
       this.logger.info("Sent offer state changed.", {
         offerId: offer.id,
-        oldState: this.getOfferStateName(oldState),
-        newState: this.getOfferStateName(offer.state)
+        oldState: oldStateName,
+        newState
+      });
+      const eventType = newState === "Accepted"
+        ? "TradeOfferAccepted"
+        : this.isFailureOfferState(offer.state)
+          ? "TradeOfferFailed"
+          : "TradeOfferStateChanged";
+      this.recordEvent(this.isFailureOfferState(offer.state) ? "Warning" : "Info", "trade-manager", eventType, "Sent offer state changed.", {
+        offerId: String(offer.id),
+        oldState: oldStateName,
+        newState
       });
     });
 
@@ -704,6 +891,9 @@ class SteamBot {
       });
       this.logger.warn("Real-time trade confirmation required.", {
         offerId: offer.id
+      });
+      this.recordEvent("Warning", "trade-manager", "TradeOfferConfirmationRequired", "Real-time trade confirmation required.", {
+        offerId: String(offer.id)
       });
     });
   }
@@ -729,6 +919,12 @@ class SteamBot {
       offerId: sendResult.offerId,
       sendStatus: sendResult.status
     });
+    this.recordEvent("Info", "trade-manager", "TradeOfferSent", "Trade offer sent to Steam.", {
+      flow: context.flow,
+      tradeOperationId: String(context.entityId),
+      offerId: sendResult.offerId,
+      sendStatus: sendResult.status
+    });
 
     if (sendResult.status === "pending") {
       if (!this.config.bot.identitySecret) {
@@ -739,6 +935,12 @@ class SteamBot {
         this.logger.warn("Trade offer requires manual confirmation because identity secret is missing.", {
           offerId: sendResult.offerId,
           flow: context.flow
+        });
+        this.recordEvent("Warning", "trade-manager", "TradeOfferConfirmationRequired", "Trade offer requires manual confirmation because identity secret is missing.", {
+          flow: context.flow,
+          tradeOperationId: String(context.entityId),
+          offerId: sendResult.offerId,
+          identitySecretConfigured: String(Boolean(this.config.bot.identitySecret))
         });
 
         return {
@@ -766,6 +968,12 @@ class SteamBot {
         this.logger.error("Trade offer confirmation failed.", {
           offerId: sendResult.offerId,
           flow: context.flow,
+          error: error.message
+        });
+        this.recordEvent("Error", "trade-manager", "TradeOfferFailed", "Trade offer confirmation failed.", {
+          flow: context.flow,
+          tradeOperationId: String(context.entityId),
+          offerId: sendResult.offerId,
           error: error.message
         });
 
@@ -806,6 +1014,9 @@ class SteamBot {
           });
         });
         this.logger.info("Mobile confirmation accepted.", { offerId });
+        this.recordEvent("Info", "trade-manager", "TradeOfferAccepted", "Mobile confirmation accepted.", {
+          offerId: String(offerId)
+        });
       }
     );
   }
@@ -973,7 +1184,7 @@ class SteamBot {
 
   async ensureReady(timeoutMs = 60000) {
     if (!this.config.bot.enabled) {
-      throw new HttpError(503, "Steam bot is disabled.");
+      throw new HttpError(503, "Steam bot is disabled.", this.getNotReadyDetails());
     }
 
     if (this.ready) {
@@ -981,7 +1192,7 @@ class SteamBot {
     }
 
     const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new HttpError(503, "Steam bot is not ready yet.")), timeoutMs);
+      setTimeout(() => reject(new HttpError(503, "Steam bot is not ready yet.", this.getNotReadyDetails())), timeoutMs);
     });
 
     await Promise.race([this.readyDeferred.promise, timeout]);
@@ -1028,6 +1239,16 @@ class SteamBot {
       state === TradeOfferManager.ETradeOfferState.InvalidItems ||
       state === TradeOfferManager.ETradeOfferState.CanceledBySecondFactor ||
       state === TradeOfferManager.ETradeOfferState.Countered;
+  }
+
+  isFailureOfferState(state) {
+    return state === TradeOfferManager.ETradeOfferState.Declined ||
+      state === TradeOfferManager.ETradeOfferState.Canceled ||
+      state === TradeOfferManager.ETradeOfferState.Expired ||
+      state === TradeOfferManager.ETradeOfferState.Countered ||
+      state === TradeOfferManager.ETradeOfferState.InvalidItems ||
+      state === TradeOfferManager.ETradeOfferState.CanceledBySecondFactor ||
+      state === TradeOfferManager.ETradeOfferState.Invalid;
   }
 
   validatePayload(payload, requiredFields) {
@@ -1152,6 +1373,7 @@ class SteamBot {
     this.serviceState = state;
     this.serviceStateDescription = description;
     this.stateUpdatedAt = new Date().toISOString();
+    this.saveLifecycleState();
   }
 
   refreshServiceState() {
@@ -1205,16 +1427,194 @@ class SteamBot {
     }
   }
 
+  recordEvent(level, source, eventType, message, metadata = null) {
+    this.eventLog?.add(level, source, eventType, message, {
+      ...this.normalizeMeta(metadata),
+      serviceState: this.serviceState
+    });
+  }
+
+  getLogs(filters) {
+    return this.eventLog?.query(filters || {}) || [];
+  }
+
+  recordHealthCheck() {
+    const reason = this.classifyNotReadyReason();
+    const status = this.ready ? "Ready" : reason;
+    if (this.lastHealthStatus === status) {
+      return;
+    }
+
+    this.lastHealthStatus = status;
+    this.recordEvent(this.ready ? "Info" : "Warning", "health", "HealthStatusChanged", "Health check state changed.", {
+      ready: String(this.ready),
+      reason,
+      serviceState: this.serviceState,
+      loggedOn: String(this.loggedOn),
+      webSessionReady: String(this.webSessionReady),
+      tradeManagerReady: String(this.tradeManagerReady)
+    });
+  }
+
+  getNotReadyDetails() {
+    return {
+      reason: this.classifyNotReadyReason(),
+      serviceState: this.serviceState,
+      serviceStateDescription: this.serviceStateDescription,
+      loggedOn: this.loggedOn,
+      webSessionReady: this.webSessionReady,
+      tradeManagerReady: this.tradeManagerReady,
+      lastError: this.lastError,
+      lastErrorAt: this.lastErrorAt,
+      lastReadyAt: this.lastReadyAt
+    };
+  }
+
+  classifyNotReadyReason() {
+    if (!this.config.bot.enabled) {
+      return "Disabled";
+    }
+
+    if (!this.config.bot.username || !this.config.bot.password || !this.config.bot.steamId) {
+      return "ConfigurationMissing";
+    }
+
+    if (this.ready) {
+      return "Ready";
+    }
+
+    if (this.serviceState === "Starting") {
+      return "Starting";
+    }
+
+    if (this.serviceState === "Connecting") {
+      return "SteamLoginInProgress";
+    }
+
+    const errorText = String(this.lastError || "").toLowerCase();
+    if (errorText.includes("rate limit") || errorText.includes("429")) {
+      return "SteamRateLimited";
+    }
+
+    if (this.serviceState === "Disconnected") {
+      return "SteamDisconnected";
+    }
+
+    if (this.loggedOn && !this.webSessionReady) {
+      return "SteamLoggedOnButNoWebSession";
+    }
+
+    if (this.webSessionReady && !this.tradeManagerReady) {
+      return "TradeManagerNotReady";
+    }
+
+    if (this.serviceState === "RefreshingSession") {
+      return "WebSessionFailed";
+    }
+
+    if (this.serviceState === "Error" && this.lastError) {
+      return this.loggedOn ? "WebSessionFailed" : "SteamLoginFailed";
+    }
+
+    return "Unknown";
+  }
+
+  getRecommendedNextCheck() {
+    const reason = this.classifyNotReadyReason();
+    if (reason === "ConfigurationMissing") {
+      return `Configuration missing: steamIdConfigured=${Boolean(this.config.bot.steamId)}, usernameConfigured=${Boolean(this.config.bot.username)}, sharedSecretConfigured=${Boolean(this.config.bot.sharedSecret)}, identitySecretConfigured=${Boolean(this.config.bot.identitySecret)}`;
+    }
+
+    if (reason === "SteamLoggedOnButNoWebSession" || reason === "WebSessionFailed") {
+      return "Bot service is running but Steam web session is not initialized.";
+    }
+
+    if (reason === "TradeManagerNotReady") {
+      return "Bot is logged in but the trade manager is not ready yet.";
+    }
+
+    if (reason === "SteamLoginInProgress") {
+      return "Bot is logging into Steam; check last login attempt and recent Steam login events.";
+    }
+
+    if (reason === "SteamDisconnected") {
+      return "Bot disconnected from Steam; check last disconnect reason and reconnect events.";
+    }
+
+    if (reason === "Disabled") {
+      return "Bot is disabled by configuration.";
+    }
+
+    return this.ready ? "Bot is ready." : "Check recent bot-service events for the latest warning or error.";
+  }
+
+  getConfigurationFlags() {
+    return {
+      enabled: String(Boolean(this.config.bot.enabled)),
+      steamIdConfigured: String(Boolean(this.config.bot.steamId)),
+      usernameConfigured: String(Boolean(this.config.bot.username)),
+      sharedSecretConfigured: String(Boolean(this.config.bot.sharedSecret)),
+      identitySecretConfigured: String(Boolean(this.config.bot.identitySecret)),
+      steamApiKeyConfigured: String(Boolean(this.config.steamApiKey))
+    };
+  }
+
+  setLastError(message) {
+    this.lastError = message || null;
+    this.lastErrorAt = this.lastError ? new Date().toISOString() : null;
+    if (this.lastError) {
+      this.previousErrorBeforeRecovery = this.lastError;
+    }
+
+    this.saveLifecycleState();
+  }
+
+  clearLastError() {
+    this.lastError = null;
+    this.lastErrorAt = null;
+    this.saveLifecycleState();
+  }
+
+  loadLifecycleState() {
+    try {
+      if (!fs.existsSync(this.lifecycleStatePath)) {
+        return;
+      }
+
+      const previous = JSON.parse(fs.readFileSync(this.lifecycleStatePath, "utf8"));
+      if (previous?.processStartedAt) {
+        this.lastRestartDetectedAt = this.processStartedAt;
+      }
+
+      this.previousErrorBeforeRecovery = previous?.lastError || previous?.lastDisconnectReason || null;
+    } catch {
+    }
+  }
+
+  saveLifecycleState() {
+    try {
+      fs.mkdirSync(this.config.dataDirectory, { recursive: true });
+      fs.writeFileSync(this.lifecycleStatePath, JSON.stringify({
+        processStartedAt: this.processStartedAt,
+        stateUpdatedAt: this.stateUpdatedAt,
+        serviceState: this.serviceState,
+        lastError: this.lastError,
+        lastErrorAt: this.lastErrorAt,
+        lastDisconnectReason: this.lastDisconnectReason,
+        lastDisconnectAt: this.lastDisconnectAt,
+        lastReadyAt: this.lastReadyAt,
+        recoveredFromErrorAt: this.recoveredFromErrorAt
+      }, null, 2), "utf8");
+    } catch {
+    }
+  }
+
   normalizeMeta(meta) {
     if (!meta || typeof meta !== "object") {
       return {};
     }
 
-    return Object.fromEntries(
-      Object.entries(meta)
-        .filter(([, value]) => value !== undefined && value !== null && value !== "")
-        .map(([key, value]) => [key, String(value)])
-    );
+    return sanitizeMetadata(meta);
   }
 }
 

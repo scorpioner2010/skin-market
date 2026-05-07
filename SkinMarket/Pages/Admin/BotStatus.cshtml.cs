@@ -76,6 +76,7 @@ public class BotStatusModel : PageModel
     public string BotTradeUrl => _steamBotOptions.BotTradeUrl;
     public string ServiceUrl => _steamBotOptions.ServiceUrl;
     public bool BotEnabled => _steamBotOptions.Enabled;
+    public string NotReadyReason => ResolveNotReadyReason();
     public bool HasActiveHistoryFilters =>
         !string.IsNullOrWhiteSpace(SearchTerm) ||
         !string.Equals(HistoryMode, "all", StringComparison.OrdinalIgnoreCase) ||
@@ -243,6 +244,23 @@ public class BotStatusModel : PageModel
     public bool CanOpenBuyerOffer(BotSaleHistoryItem item)
     {
         return !string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId);
+    }
+
+    private string ResolveNotReadyReason()
+    {
+        if (!ServiceStatus.Reachable)
+        {
+            return "BotServiceHttpUnavailable";
+        }
+
+        if (ServiceStatus.Bot.Ready)
+        {
+            return "Ready";
+        }
+
+        return string.IsNullOrWhiteSpace(ServiceStatus.Bot.NotReadyReason)
+            ? "BotServiceReturnedNotReady"
+            : ServiceStatus.Bot.NotReadyReason;
     }
 
     protected static int NormalizeLimit(int limit)

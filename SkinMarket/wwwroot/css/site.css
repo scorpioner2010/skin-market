@@ -961,6 +961,11 @@ a:hover {
   align-items: start;
 }
 
+.admin-bot-log-row {
+  grid-template-columns: minmax(0, 1.35fr) minmax(82px, 0.34fr) minmax(150px, 0.68fr) minmax(110px, 0.45fr) minmax(0, 1.18fr);
+  align-items: start;
+}
+
 .admin-log-details {
   display: grid;
   gap: 4px;
@@ -1012,6 +1017,7 @@ a:hover {
   .admin-menus-row,
   .admin-minefield-step-row,
   .admin-log-row,
+  .admin-bot-log-row,
   .admin-activity-row,
   .games-table-row {
     grid-template-columns: minmax(0, 1fr);
@@ -1024,6 +1030,7 @@ a:hover {
   .market-table-header.admin-menus-row,
   .market-table-header.admin-minefield-step-row,
   .market-table-header.admin-log-row,
+  .market-table-header.admin-bot-log-row,
   .market-table-header.admin-activity-row,
   .market-table-header.games-table-row {
     display: none;
