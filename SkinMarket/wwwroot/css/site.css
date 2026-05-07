@@ -35,7 +35,7 @@ body.app-body {
   color: var(--vk-text);
   background:
     radial-gradient(circle at top right, rgba(25, 172, 186, 0.14), transparent 320px),
-    linear-gradient(180deg, #dceff3 0, var(--vk-page) 130px, var(--vk-page) 100%);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.42) 0%, rgba(218, 239, 243, 0.88) 34%, rgba(229, 245, 242, 0.9) 68%, var(--vk-page) 100%);
   font-family: Tahoma, Arial, sans-serif;
 }
 
@@ -125,6 +125,11 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 0;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: rgba(4, 62, 72, 0.36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .language-switch-link {
@@ -132,24 +137,31 @@ a:hover {
   align-items: center;
   justify-content: center;
   min-width: 34px;
-  height: 28px;
+  height: 24px;
   padding: 0 9px;
-  color: rgba(255, 255, 255, 0.84);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  border-left: 1px solid rgba(255, 255, 255, 0.12);
-  transition: color 0.16s ease, background-color 0.16s ease;
+  border-radius: 999px;
+  transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
 }
 
 .language-switch-link:first-child {
   border-left: 0;
 }
 
-.language-switch-link:hover,
-.language-switch-link.active {
+.language-switch-link:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.18);
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.language-switch-link.active {
+  color: #064852;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(2, 48, 58, 0.22);
   text-decoration: none;
 }
 
@@ -249,11 +261,21 @@ a:hover {
 .debug-table-wrap,
 .inventory-table-shell,
 .app-footer-inner {
-  background: var(--vk-card);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
   border: 1px solid var(--vk-card-border);
   border-radius: var(--vk-radius);
   box-shadow: var(--vk-shadow);
-  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.summary-card:hover,
+.content-card:hover,
+.empty-state:hover,
+.debug-table-wrap:hover,
+.inventory-table-shell:hover {
+  transform: translateY(-1px);
+  border-color: var(--vk-accent-border);
+  box-shadow: 0 14px 34px rgba(10, 83, 99, 0.11);
 }
 
 .app-sidebar-card {
@@ -300,6 +322,50 @@ a:hover {
   color: #7b612a;
   background: #fff7df;
   border-color: #e7d79f;
+}
+
+.inventory-privacy-alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px 16px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 13px 14px;
+  color: #7b2525;
+  background:
+    linear-gradient(90deg, rgba(166, 70, 70, 0.12), rgba(166, 70, 70, 0.04)),
+    #fff5f5;
+  border: 1px solid #e3b4b4;
+  border-left: 4px solid var(--vk-danger);
+  border-radius: var(--vk-radius);
+  box-shadow: 0 8px 20px rgba(122, 37, 37, 0.08);
+  animation: privacy-alert-glow 2.4s ease-in-out infinite;
+}
+
+.inventory-privacy-alert-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.inventory-privacy-alert-main strong {
+  font-size: 13px;
+}
+
+.inventory-privacy-alert-main p,
+.inventory-privacy-alert-main ol {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.inventory-privacy-alert-main ol {
+  padding-left: 18px;
+}
+
+.inventory-privacy-alert-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .trade-url-setup {
@@ -1367,9 +1433,11 @@ a:hover {
   padding: 16px;
   border-color: #d5dfea;
   background:
-    radial-gradient(circle at top right, rgba(16, 147, 166, 0.13), transparent 34%),
-    linear-gradient(180deg, #ffffff 0%, #fbfcfd 100%);
-  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    radial-gradient(circle at top right, rgba(16, 147, 166, 0.12), transparent 34%),
+    linear-gradient(145deg, #ffffff 0%, #fbfeff 46%, #f3faf7 100%);
+  background-size: 140% 140%;
+  animation: market-card-gradient 8s ease-in-out infinite;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background-position 0.22s ease;
 }
 
 .market-item-card:hover {
@@ -1397,6 +1465,7 @@ a:hover {
     radial-gradient(circle at top, rgba(255, 255, 255, 0.9), rgba(237, 243, 248, 0.95)),
     linear-gradient(180deg, #f8fafc 0%, #eef3f8 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  overflow: visible;
 }
 
 .market-item-icon {
@@ -1405,6 +1474,14 @@ a:hover {
   padding: 0;
   border: 0;
   background: transparent;
+  transform: scale(1.2);
+  transition: transform 0.18s ease, filter 0.18s ease;
+  filter: drop-shadow(0 7px 10px rgba(8, 50, 60, 0.12));
+}
+
+.market-item-card:hover .market-item-icon {
+  transform: scale(1.28) rotate(-1deg);
+  filter: drop-shadow(0 10px 14px rgba(8, 50, 60, 0.18));
 }
 
 .market-item-icon-fallback {
@@ -1418,6 +1495,12 @@ a:hover {
   background: linear-gradient(180deg, #24adbd 0%, #08727f 100%);
   font-size: 28px;
   font-weight: 700;
+  transform: scale(1.12);
+  transition: transform 0.18s ease;
+}
+
+.market-item-card:hover .market-item-icon-fallback {
+  transform: scale(1.18);
 }
 
 .market-item-copy {
@@ -1452,13 +1535,13 @@ a:hover {
 
 .market-quantity-badge {
   min-height: 24px;
-  color: #08727f;
-  background: #e5f6f8;
-  border-color: #bee3ea;
+  color: #14532d;
+  background: #eaf7f0;
+  border-color: #b9dec8;
 }
 
 .market-price-label {
-  color: #168da0;
+  color: #3f6470;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1470,9 +1553,9 @@ a:hover {
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 13px;
-  color: #075e68;
-  background: linear-gradient(180deg, #e9f8fa 0%, #d9f0f4 100%);
-  border-color: #b7dfe7;
+  color: #063f46;
+  background: linear-gradient(135deg, #f0fbff 0%, #dff6ef 100%);
+  border-color: #b7dfcf;
 }
 
 .market-detail-list {
@@ -1995,12 +2078,12 @@ a:hover {
 .balance-pill {
   background: #eef3f8;
   border-color: #d8e0ea;
-  color: #08727f;
+  color: #284657;
 }
 
 .amount-pill.positive,
 .mini-pill {
-  color: #08705f;
+  color: #14532d;
   background: #e7f7f3;
   border-color: #c6e7df;
 }
@@ -2038,9 +2121,9 @@ a:hover {
 .status-badge[data-status="TradeCreated"],
 .status-badge[data-status="DeliveryTradeCreated"],
 .status-badge[data-status="Available"] {
-  color: #08727f;
-  background: #e7f7fa;
-  border-color: #bfe3ea;
+  color: #14532d;
+  background: #eaf7f0;
+  border-color: #b9dec8;
 }
 
 .status-badge[data-status="AwaitingUserAction"],
@@ -2054,7 +2137,7 @@ a:hover {
 
 .status-badge[data-status="Credited"],
 .status-badge[data-status="Delivered"] {
-  color: #08705f;
+  color: #14532d;
   background: #e7f7f3;
   border-color: #c6e7df;
 }
@@ -2171,6 +2254,39 @@ a:hover {
   }
 }
 
+@keyframes market-card-gradient {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes button-gradient-flow {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes privacy-alert-glow {
+  0%,
+  100% {
+    box-shadow: 0 8px 20px rgba(122, 37, 37, 0.08);
+  }
+
+  50% {
+    box-shadow: 0 10px 26px rgba(122, 37, 37, 0.15);
+  }
+}
+
 @keyframes trade-url-critical-pulse {
   0%,
   100% {
@@ -2247,8 +2363,10 @@ a:hover {
 .app-button-primary {
   color: #fff;
   background: linear-gradient(135deg, #20adbd 0%, #08727f 100%);
+  background-size: 180% 180%;
   border: 1px solid #075e68;
   box-shadow: 0 5px 14px rgba(8, 114, 127, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  animation: button-gradient-flow 5.5s ease-in-out infinite;
 }
 
 .app-button-primary:hover {
@@ -2408,7 +2526,7 @@ a:hover {
 }
 
 .price-value {
-  color: #08727f;
+  color: #063f46;
   font-size: 14px;
   font-weight: 700;
 }
@@ -2438,7 +2556,7 @@ a:hover {
   border: 0;
   appearance: none;
   cursor: pointer;
-  color: #08727f;
+  color: #063f46;
   font: inherit;
   font-weight: 700;
 }
@@ -2501,7 +2619,7 @@ a:hover {
 }
 
 .price-source-amount {
-  color: #08727f;
+  color: #063f46;
   font-weight: 800;
   text-align: right;
 }
@@ -2851,8 +2969,13 @@ button:disabled,
     grid-template-columns: 1fr;
   }
 
-  .trade-url-setup-actions {
+  .trade-url-setup-actions,
+  .inventory-privacy-alert-actions {
     justify-content: flex-start;
+  }
+
+  .inventory-privacy-alert {
+    grid-template-columns: 1fr;
   }
 
   .inventory-table-shell {

@@ -8,7 +8,7 @@
   <data name="Layout_Subtitle" xml:space="preserve"><value>Маркетплейс ігрових предметів</value></data>
   <data name="Layout_ToggleNavigation" xml:space="preserve"><value>Перемкнути навігацію</value></data>
 <data name="Layout_Nav_Profile" xml:space="preserve"><value>Профіль</value></data>
-  <data name="Layout_Nav_Items" xml:space="preserve"><value>Айтеми</value></data>
+  <data name="Layout_Nav_Items" xml:space="preserve"><value>Предмети</value></data>
   <data name="Layout_Nav_Games" xml:space="preserve"><value>Ігри</value></data>
   <data name="Layout_Nav_Chats" xml:space="preserve"><value>Чати</value></data>
   <data name="Layout_Nav_Market" xml:space="preserve"><value>Маркет</value></data>
@@ -31,7 +31,7 @@
   <data name="Common_Unavailable" xml:space="preserve"><value>Недоступно</value></data>
 <data name="Page_Profile_Title" xml:space="preserve"><value>Профіль</value></data>
   <data name="Page_Inventory_Title" xml:space="preserve"><value>Інвентар</value></data>
-  <data name="Page_Items_Title" xml:space="preserve"><value>Айтеми</value></data>
+  <data name="Page_Items_Title" xml:space="preserve"><value>Предмети</value></data>
   <data name="Page_Chats_Title" xml:space="preserve"><value>Чати</value></data>
   <data name="Page_Market_Title" xml:space="preserve"><value>Маркет</value></data>
   <data name="Page_History_Title" xml:space="preserve"><value>Історія</value></data>
@@ -43,16 +43,16 @@
   <data name="Profile_SteamProfile" xml:space="preserve"><value>Профіль Steam</value></data>
   <data name="Profile_Subtitle_Fallback" xml:space="preserve"><value>Дані профілю Steam використовують резервні значення.</value></data>
   <data name="Profile_Subtitle_Synced" xml:space="preserve"><value>Нікнейм і аватар синхронізовані зі Steam.</value></data>
-  <data name="Profile_PersonaName" xml:space="preserve"><value>Persona name</value></data>
-  <data name="Profile_DisplayName" xml:space="preserve"><value>Display name</value></data>
-  <data name="Profile_AvatarUrl" xml:space="preserve"><value>Avatar URL</value></data>
+  <data name="Profile_PersonaName" xml:space="preserve"><value>Нікнейм Steam</value></data>
+  <data name="Profile_DisplayName" xml:space="preserve"><value>Відображуване ім'я</value></data>
+  <data name="Profile_AvatarUrl" xml:space="preserve"><value>URL аватара</value></data>
   <data name="Profile_AvatarUnavailable" xml:space="preserve"><value>Аватар недоступний.</value></data>
   <data name="Profile_Balance" xml:space="preserve"><value>Баланс</value></data>
   <data name="Profile_TradeUrl" xml:space="preserve"><value>Trade URL</value></data>
   <data name="Profile_TradeUrl_NotSet" xml:space="preserve"><value>Trade URL ще не задано.</value></data>
   <data name="Profile_LocalUserId" xml:space="preserve"><value>Локальний ID користувача</value></data>
   <data name="Profile_TradeSettings" xml:space="preserve"><value>Налаштування трейду</value></data>
-  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Ваш Trade URL потрібен для bot intake і сценарію доставки.</value></data>
+  <data name="Profile_TradeSettings_Description" xml:space="preserve"><value>Steam Trade URL потрібен, щоб бот міг приймати предмети та доставляти покупки.</value></data>
   <data name="Profile_SteamTradeUrl" xml:space="preserve"><value>Steam Trade URL</value></data>
   <data name="Profile_TradeUrl_Placeholder" xml:space="preserve"><value>https://steamcommunity.com/tradeoffer/new/...</value></data>
   <data name="Profile_SaveTradeUrl" xml:space="preserve"><value>Зберегти Trade URL</value></data>
@@ -65,25 +65,25 @@
   <data name="Inventory_YourItems_Title" xml:space="preserve"><value>Ваші предмети</value></data>
   <data name="Inventory_YourItems_Description" xml:space="preserve"><value>Компактний список інвентарю для швидкого перегляду статусу предмета, ідентифікаторів і наступної дії.</value></data>
   <data name="Inventory_Column_Item" xml:space="preserve"><value>Предмет</value></data>
-  <data name="Inventory_Column_Tradable" xml:space="preserve"><value>Trade</value></data>
-  <data name="Inventory_Column_Marketable" xml:space="preserve"><value>Market</value></data>
+  <data name="Inventory_Column_Tradable" xml:space="preserve"><value>Обмін</value></data>
+  <data name="Inventory_Column_Marketable" xml:space="preserve"><value>Маркет</value></data>
   <data name="Inventory_Column_RealPrice" xml:space="preserve"><value>Реальна ціна</value></data>
   <data name="Inventory_Column_Status" xml:space="preserve"><value>Статус</value></data>
   <data name="Inventory_Column_Action" xml:space="preserve"><value>Дія</value></data>
   <data name="Inventory_InstanceId" xml:space="preserve"><value>InstanceId</value></data>
   <data name="Inventory_PriceUnavailable" xml:space="preserve"><value>Ціна недоступна</value></data>
   <data name="Inventory_Credited" xml:space="preserve"><value>Зараховано</value></data>
-  <data name="Inventory_TradeOfferId" xml:space="preserve"><value>TradeOfferId</value></data>
+  <data name="Inventory_TradeOfferId" xml:space="preserve"><value>ID трейду</value></data>
   <data name="Inventory_Ready" xml:space="preserve"><value>Готово</value></data>
   <data name="Inventory_CreateTrade" xml:space="preserve"><value>Створити трейд</value></data>
   <data name="Inventory_ConfirmReceived" xml:space="preserve"><value>Підтвердити отримання</value></data>
   <data name="Inventory_PendingSale" xml:space="preserve"><value>Продаж очікується</value></data>
   <data name="Inventory_RecentSales_Title" xml:space="preserve"><value>Останні запити на продаж</value></data>
-  <data name="Inventory_RecentSales_Description" xml:space="preserve"><value>Останні sell-операції з поточними trade- та credit-статусами.</value></data>
+  <data name="Inventory_RecentSales_Description" xml:space="preserve"><value>Останні продажі з поточними статусами трейду та зарахування.</value></data>
   <data name="Inventory_RecentSales_Empty_Title" xml:space="preserve"><value>Запитів на продаж ще немає</value></data>
   <data name="Inventory_RecentSales_Empty_Text" xml:space="preserve"><value>Створіть продаж з інвентарю, щоб запустити маркетплейс-сценарій.</value></data>
   <data name="Inventory_Credit" xml:space="preserve"><value>Кредит</value></data>
-  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>BotTradeUrl</value></data>
+  <data name="Inventory_BotTradeUrl" xml:space="preserve"><value>Trade URL бота</value></data>
   <data name="Market_Kicker" xml:space="preserve"><value>Маркетплейс</value></data>
   <data name="Market_Description" xml:space="preserve"><value>Переглядайте зараховані предмети, витрачайте баланс акаунта й відстежуйте доставку покупок.</value></data>
   <data name="Market_BalanceSummary" xml:space="preserve"><value>Зведення балансу</value></data>
@@ -94,14 +94,14 @@
   <data name="Market_AvailableItems_Text" xml:space="preserve"><value>Усі пропозиції маркету, які зараз відкриті для покупки.</value></data>
   <data name="Market_LoginRequiredToBuy" xml:space="preserve"><value>Для покупки потрібен вхід.</value></data>
   <data name="Market_Purchases_Title" xml:space="preserve"><value>Мої покупки</value></data>
-  <data name="Market_Purchases_Text" xml:space="preserve"><value>Відстежуйте куплені предмети, статуси доставки та delivery trade references.</value></data>
+  <data name="Market_Purchases_Text" xml:space="preserve"><value>Відстежуйте куплені предмети, статуси доставки та посилання на трейди доставки.</value></data>
   <data name="Market_Purchases_Empty_Title" xml:space="preserve"><value>Покупок ще немає</value></data>
   <data name="Market_Purchases_Empty_Text" xml:space="preserve"><value>Куплені предмети з'являться тут разом із прогресом доставки.</value></data>
   <data name="Market_PurchasedFor" xml:space="preserve"><value>Куплено за ${0}</value></data>
   <data name="Market_Purchased" xml:space="preserve"><value>Куплено</value></data>
-  <data name="Market_DeliveryTradeOfferId" xml:space="preserve"><value>DeliveryTradeOfferId</value></data>
+  <data name="Market_DeliveryTradeOfferId" xml:space="preserve"><value>ID трейду доставки</value></data>
   <data name="Market_Delivered" xml:space="preserve"><value>Доставлено</value></data>
-  <data name="Market_CreateDeliveryTrade" xml:space="preserve"><value>Створити delivery trade</value></data>
+  <data name="Market_CreateDeliveryTrade" xml:space="preserve"><value>Створити трейд доставки</value></data>
   <data name="Market_ConfirmDelivered" xml:space="preserve"><value>Підтвердити доставку</value></data>
   <data name="History_Kicker" xml:space="preserve"><value>Активність акаунта</value></data>
   <data name="History_Description" xml:space="preserve"><value>Переглядайте продажі, покупки та зміни балансу, пов'язані з вашим акаунтом.</value></data>
@@ -109,7 +109,7 @@
   <data name="History_CurrentBalance" xml:space="preserve"><value>Поточний баланс</value></data>
   <data name="History_CurrentBalance_Text" xml:space="preserve"><value>Актуальний баланс на основі зарахованих продажів і покупок на маркеті.</value></data>
   <data name="History_Sales_Title" xml:space="preserve"><value>Історія продажів</value></data>
-  <data name="History_Sales_Text" xml:space="preserve"><value>Усі sell-операції, пов'язані з вашими предметами інвентарю Steam.</value></data>
+  <data name="History_Sales_Text" xml:space="preserve"><value>Усі продажі, пов'язані з вашими предметами інвентарю Steam.</value></data>
   <data name="History_Sales_Empty_Title" xml:space="preserve"><value>Продажів ще немає</value></data>
   <data name="History_Sales_Empty_Text" xml:space="preserve"><value>Запити на продаж з'являться тут, щойно ви почнете продавати предмети.</value></data>
   <data name="History_CreditAmount" xml:space="preserve"><value>Сума зарахування</value></data>
@@ -127,7 +127,7 @@
   <data name="Status_PendingDelivery" xml:space="preserve"><value>Очікує доставку</value></data>
   <data name="Status_DeliveryBotPending" xml:space="preserve"><value>Доставка очікує бота</value></data>
   <data name="Status_TradeCreated" xml:space="preserve"><value>Трейд створено</value></data>
-  <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Delivery trade створено</value></data>
+  <data name="Status_DeliveryTradeCreated" xml:space="preserve"><value>Трейд доставки створено</value></data>
   <data name="Status_Available" xml:space="preserve"><value>Доступно</value></data>
   <data name="Status_TradeProtected" xml:space="preserve"><value>Trade protection</value></data>
   <data name="Status_AwaitingUserAction" xml:space="preserve"><value>Очікується дія користувача</value></data>
@@ -150,14 +150,14 @@
   <data name="Message_SelectedItemInvalid" xml:space="preserve"><value>Вибраний предмет інвентарю некоректний.</value></data>
   <data name="Message_ItemAlreadyHasSaleOperation" xml:space="preserve"><value>Для цього предмета вже існує операція продажу.</value></data>
   <data name="Message_SaleRequestCreated" xml:space="preserve"><value>Запит на продаж створено.</value></data>
-  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Для створення bot intake потрібен вхід через Steam.</value></data>
+  <data name="Message_LoginRequiredBotIntake" xml:space="preserve"><value>Для передачі предмета боту потрібен вхід через Steam.</value></data>
   <data name="Message_SaleRequestInvalid" xml:space="preserve"><value>Запит на продаж некоректний.</value></data>
   <data name="Message_LoginRequiredCreditBalance" xml:space="preserve"><value>Для зарахування балансу потрібен вхід через Steam.</value></data>
   <data name="Message_TradeUrlNotSetInventoryStillLoads" xml:space="preserve"><value>Trade URL ще не задано. Інвентар все одно завантажується за SteamID.</value></data>
   <data name="Message_SteamIdUnavailable" xml:space="preserve"><value>SteamID недоступний для поточної сесії.</value></data>
   <data name="Message_LocalUserProfileNotFound" xml:space="preserve"><value>Локальний профіль користувача не знайдено.</value></data>
   <data name="Message_LoginRequiredBuyMarketItems" xml:space="preserve"><value>Для покупки предметів на маркеті потрібен вхід через Steam.</value></data>
-  <data name="Message_LoginRequiredCreateDeliveryTrade" xml:space="preserve"><value>Для створення delivery trade потрібен вхід через Steam.</value></data>
+  <data name="Message_LoginRequiredCreateDeliveryTrade" xml:space="preserve"><value>Для створення трейду доставки потрібен вхід через Steam.</value></data>
   <data name="Message_LoginRequiredConfirmDelivery" xml:space="preserve"><value>Для підтвердження доставки потрібен вхід через Steam.</value></data>
   <data name="Message_TradeUrlMustBeValid" xml:space="preserve"><value>Trade URL має бути коректним посиланням на Steam trade offer.</value></data>
   <data name="Message_TradeUrlSaved" xml:space="preserve"><value>Trade URL збережено.</value></data>
@@ -170,10 +170,10 @@
   <data name="Message_PurchasedItemNotFound" xml:space="preserve"><value>Куплений предмет не знайдено.</value></data>
   <data name="Message_OnlySoldItemsCanEnterDelivery" xml:space="preserve"><value>У доставку можуть переходити лише продані предмети.</value></data>
   <data name="Message_ItemAlreadyDelivered" xml:space="preserve"><value>Предмет уже доставлено.</value></data>
-  <data name="Message_DeliveryTradeAlreadyExists" xml:space="preserve"><value>Для цього предмета delivery trade вже існує.</value></data>
+  <data name="Message_DeliveryTradeAlreadyExists" xml:space="preserve"><value>Для цього предмета трейд доставки вже існує.</value></data>
   <data name="Message_BuyerProfileNotFound" xml:space="preserve"><value>Профіль покупця не знайдено.</value></data>
   <data name="Message_BuyerTradeUrlRequired" xml:space="preserve"><value>Перед початком доставки потрібно вказати Trade URL покупця.</value></data>
-  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Інтеграція delivery-бота ще не налаштована. Завершіть налаштування бота, щоб увімкнути реальне створення доставки.</value></data>
+  <data name="Message_DeliveryBotNotConfigured" xml:space="preserve"><value>Інтеграція бота доставки ще не налаштована. Завершіть налаштування бота, щоб увімкнути реальне створення доставки.</value></data>
   <data name="Message_ItemAlreadyMarkedDelivered" xml:space="preserve"><value>Предмет уже позначено як доставлений.</value></data>
   <data name="Message_OnlyDeliveryCreatedCanBeConfirmed" xml:space="preserve"><value>Підтвердити можна лише предмети зі створеною доставкою.</value></data>
   <data name="Message_ItemMarkedDelivered" xml:space="preserve"><value>Предмет позначено як доставлений.</value></data>
@@ -185,9 +185,15 @@
   <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam тимчасово обмежує запити до інвентарю. Спробуйте ще раз через кілька хвилин.</value></data>
   <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Відповідь інвентарю Steam порожня або некоректна.</value></data>
   <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Інвентар Steam недоступний або приватний.</value></data>
+  <data name="Inventory_Privacy_Title" xml:space="preserve"><value>Інвентар Steam приватний</value></data>
+  <data name="Inventory_Privacy_Text" xml:space="preserve"><value>Ми не можемо завантажити інвентар, бо Steam поки не дозволяє публічний доступ до нього.</value></data>
+  <data name="Inventory_Privacy_Step_OpenSettings" xml:space="preserve"><value>Відкрийте налаштування приватності Steam.</value></data>
+  <data name="Inventory_Privacy_Step_SetPublic" xml:space="preserve"><value>Поставте Інвентар у режим Публічний.</value></data>
+  <data name="Inventory_Privacy_Step_ReturnRefresh" xml:space="preserve"><value>Поверніться сюди та оновіть сторінку інвентаря.</value></data>
+  <data name="Inventory_Privacy_OpenSteamSettings" xml:space="preserve"><value>Відкрити налаштування Steam</value></data>
   <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam повернув неповну відповідь інвентарю. Спробуйте ще раз через кілька хвилин.</value></data>
-  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Створено stub bot trade. Реальна інтеграція зі Steam-ботом ще не підключена.</value></data>
-  <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Створено stub delivery trade. Реальна Steam-інтеграція доставки ще не підключена.</value></data>
+  <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Створено тестовий трейд з ботом. Реальна інтеграція зі Steam-ботом ще не підключена.</value></data>
+  <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Створено тестовий трейд доставки. Реальна Steam-інтеграція доставки ще не підключена.</value></data>
   <data name="PriceSource_CSFloat" xml:space="preserve"><value>CSFloat</value></data>
   <data name="PriceStatus_Cached" xml:space="preserve"><value>З кешу</value></data>
   <data name="PriceStatus_Estimated" xml:space="preserve"><value>Оціночна</value></data>
@@ -248,7 +254,7 @@
   <data name="Js_SaleOperationNotReadyCancel" xml:space="preserve"><value>Операція продажу ще не готова до скасування.</value></data>
   <data name="Error_Description" xml:space="preserve"><value>Під час обробки запиту сталася помилка.</value></data>
   <data name="History_Amount" xml:space="preserve"><value>Сума</value></data>
-  <data name="Status_InEscrow" xml:space="preserve"><value>В escrow</value></data>
+  <data name="Status_InEscrow" xml:space="preserve"><value>На утриманні Steam</value></data>
   <data name="Market_TradeProtection_Text" xml:space="preserve"><value>Активний trade protection. Предмет стане доступним для покупки після розблокування Steam.</value></data>
   <data name="History_Type" xml:space="preserve"><value>Тип</value></data>
   <data name="Common_Send" xml:space="preserve"><value>Надіслати</value></data>
@@ -283,7 +289,7 @@
   <data name="Inventory_AwaitingSellerAcceptance" xml:space="preserve"><value>Очікує прийняття продавцем</value></data>
   <data name="Inventory_AwaitingBuyerAcceptance" xml:space="preserve"><value>Очікує прийняття покупцем</value></data>
   <data name="Inventory_StateIssue" xml:space="preserve"><value>Проблема стану - перевірте логи</value></data>
-  <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Доставка в escrow</value></data>
+  <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Доставка на утриманні Steam</value></data>
   <data name="Common_AssetId" xml:space="preserve"><value>Asset ID</value></data>
   <data name="Message_MessageInvalid" xml:space="preserve"><value>Повідомлення некоректне.</value></data>
   <data name="Auth_Login_Redirecting" xml:space="preserve"><value>Перенаправлення до Steam...</value></data>
@@ -298,7 +304,7 @@
   <data name="Game_Minefield_Description" xml:space="preserve"><value>Відкривайте безпечні ряди, уникайте мін і забирайте множник до завершення поля.</value></data>
   <data name="Common_Cards" xml:space="preserve"><value>Картки</value></data>
   <data name="Inventory_TradeUrlRequired_Text" xml:space="preserve"><value>Додайте Steam Trade URL у профілі перед створенням запитів на продаж.</value></data>
-  <data name="Common_OpenItems" xml:space="preserve"><value>Відкрити айтеми</value></data>
+  <data name="Common_OpenItems" xml:space="preserve"><value>Відкрити предмети</value></data>
   <data name="Status_TradeAcceptedPendingReceipt" xml:space="preserve"><value>Трейд прийнято</value></data>
   <data name="Page_Minefield_Title" xml:space="preserve"><value>Minefield</value></data>
   <data name="Error_RequestId" xml:space="preserve"><value>ID запиту</value></data>
@@ -349,11 +355,11 @@
   <data name="Common_Item" xml:space="preserve"><value>Предмет</value></data>
   <data name="Layout_GlobalTrade_ConfirmTransfer" xml:space="preserve"><value>Підтвердити передачу предмета</value></data>
   <data name="Auth_Logout_Title" xml:space="preserve"><value>Вихід</value></data>
-  <data name="Items_View" xml:space="preserve"><value>Вигляд айтемів</value></data>
+  <data name="Items_View" xml:space="preserve"><value>Вигляд предметів</value></data>
   <data name="Page_Games_Title" xml:space="preserve"><value>Ігри</value></data>
-  <data name="Items_Description" xml:space="preserve"><value>Кастомні сервісні предмети, створені з адмін-панелі.</value></data>
+  <data name="Items_Description" xml:space="preserve"><value>Користувацькі сервісні предмети, створені в адмін-панелі.</value></data>
   <data name="Layout_GlobalTrade_OpenOffers" xml:space="preserve"><value>Відкрити трейд-офери</value></data>
-  <data name="Js_AcceptDeliveryOffer" xml:space="preserve"><value>прийміть delivery-офер</value></data>
+  <data name="Js_AcceptDeliveryOffer" xml:space="preserve"><value>прийміть офер доставки</value></data>
   <data name="Games_Empty_Text" xml:space="preserve"><value>Цей розділ підготовлений для майбутніх Unity WebGL інтеграцій.</value></data>
   <data name="Layout_GlobalTrade_Title_Action" xml:space="preserve"><value>Steam-офер потребує дії</value></data>
   <data name="Message_SteamOfferStillActive" xml:space="preserve"><value>Steam все ще показує цей офер активним. Якщо ви натиснули Confirm, зачекайте кілька секунд і перевірте ще раз; інакше завершіть підтвердження у Steam або Steam Mobile.</value></data>

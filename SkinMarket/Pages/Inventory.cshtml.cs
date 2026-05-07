@@ -84,6 +84,10 @@ public class InventoryModel : PageModel
     public bool InventorySnapshotStale { get; private set; }
     public bool InventoryIsLoading { get; private set; }
     public bool InventoryRefreshTradeRelated => SteamInventoryRefreshReasons.IsTradeRelated(InventoryRefreshReason);
+    public bool InventoryPrivacySetupRequired =>
+        IsPrivateInventoryError(InventoryRefreshLastErrorMessage) ||
+        IsPrivateInventoryError(ErrorMessage);
+    public string SteamPrivacySettingsUrl => "https://steamcommunity.com/my/edit/settings";
     public bool IsTradeUrlConfigured { get; private set; }
     [TempData]
     public string? SuccessMessage { get; set; }
@@ -664,6 +668,11 @@ public class InventoryModel : PageModel
             {
                 InventorySnapshotWarningMessage = "Inventory is loading. Refresh skipped because cooldown is active.";
             }
+            else if (!InventoryRefreshInProgress && !string.IsNullOrWhiteSpace(InventoryRefreshLastErrorMessage))
+            {
+                InventoryIsLoading = false;
+                ErrorMessage = BuildInventoryLoadErrorMessage(InventoryRefreshLastErrorMessage);
+            }
 
             await _appLogService.WriteAsync(
                 "Info",
@@ -842,6 +851,28 @@ public class InventoryModel : PageModel
         InventoryRefreshReason = status.RefreshReason;
         InventoryNextAllowedRefreshUtc = status.NextAllowedRefreshUtc;
         InventoryRefreshLastErrorMessage = status.LastErrorMessage;
+    }
+
+    private static string BuildInventoryLoadErrorMessage(string errorMessage)
+    {
+        if (IsPrivateInventoryError(errorMessage))
+        {
+            return "Steam inventory is private or unavailable. Set your Steam inventory privacy to Public, then refresh this page.";
+        }
+
+        return errorMessage;
+    }
+
+    private static bool IsPrivateInventoryError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return false;
+        }
+
+        return errorMessage.Contains("private", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("403", StringComparison.OrdinalIgnoreCase) ||
+               errorMessage.Contains("Forbidden", StringComparison.OrdinalIgnoreCase);
     }
 
     public string GetInventoryRefreshStatusText()

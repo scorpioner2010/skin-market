@@ -193,6 +193,12 @@
   <data name="Message_SteamRateLimited" xml:space="preserve"><value>Steam is temporarily rate-limiting inventory requests. Please try again in a few minutes.</value></data>
   <data name="Message_SteamInventoryInvalid" xml:space="preserve"><value>Steam inventory response was empty or invalid.</value></data>
   <data name="Message_SteamInventoryUnavailable" xml:space="preserve"><value>Steam inventory is unavailable or private.</value></data>
+  <data name="Inventory_Privacy_Title" xml:space="preserve"><value>Steam inventory is private</value></data>
+  <data name="Inventory_Privacy_Text" xml:space="preserve"><value>Your inventory cannot be loaded because Steam does not allow public access to it yet.</value></data>
+  <data name="Inventory_Privacy_Step_OpenSettings" xml:space="preserve"><value>Open Steam privacy settings.</value></data>
+  <data name="Inventory_Privacy_Step_SetPublic" xml:space="preserve"><value>Set Inventory to Public.</value></data>
+  <data name="Inventory_Privacy_Step_ReturnRefresh" xml:space="preserve"><value>Return here and refresh the inventory page.</value></data>
+  <data name="Inventory_Privacy_OpenSteamSettings" xml:space="preserve"><value>Open Steam settings</value></data>
   <data name="Message_SteamInventoryIncomplete" xml:space="preserve"><value>Steam returned an incomplete inventory response. Please try again in a few minutes.</value></data>
   <data name="Message_StubBotTradeCreated" xml:space="preserve"><value>Stub bot trade created. Real Steam bot integration is not connected yet.</value></data>
   <data name="Message_StubDeliveryTradeCreated" xml:space="preserve"><value>Stub delivery trade created. Real Steam delivery integration is not connected yet.</value></data>

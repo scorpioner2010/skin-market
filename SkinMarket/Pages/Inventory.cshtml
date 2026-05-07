@@ -123,7 +123,24 @@
             </div>
         }
 
-        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+        @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage) && Model.InventoryPrivacySetupRequired)
+        {
+            <div class="inventory-privacy-alert" role="alert">
+                <div class="inventory-privacy-alert-main">
+                    <strong>@L["Inventory_Privacy_Title"]</strong>
+                    <p>@L["Inventory_Privacy_Text"]</p>
+                    <ol>
+                        <li>@L["Inventory_Privacy_Step_OpenSettings"]</li>
+                        <li>@L["Inventory_Privacy_Step_SetPublic"]</li>
+                        <li>@L["Inventory_Privacy_Step_ReturnRefresh"]</li>
+                    </ol>
+                </div>
+                <div class="inventory-privacy-alert-actions">
+                    <a class="btn app-button-primary" href="@Model.SteamPrivacySettingsUrl" target="_blank" rel="noopener noreferrer">@L["Inventory_Privacy_OpenSteamSettings"]</a>
+                </div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
         {
             <div class="app-alert alert-danger" role="alert">@UiTextLocalizer.LocalizeMessage(L, Model.ErrorMessage)</div>
         }
@@ -428,6 +445,7 @@
                 const wasRefreshing = isRefreshing;
                 const lastSuccessValue = read(status, 'lastSuccessRefreshUtc', 'LastSuccessRefreshUtc');
                 const refreshReason = read(status, 'refreshReason', 'RefreshReason');
+                const lastErrorValue = read(status, 'lastErrorMessage', 'LastErrorMessage');
                 isRefreshing = Boolean(read(status, 'isRefreshing', 'IsRefreshing'));
                 lastSuccessUtc = lastSuccessValue || null;
 
@@ -438,6 +456,8 @@
                             : 'Updating inventory...';
                     } else if (lastSuccessValue) {
                         statusElement.textContent = `Inventory last updated: ${formatAge(new Date(lastSuccessValue))} ago.`;
+                    } else if (lastErrorValue) {
+                        statusElement.textContent = lastErrorValue;
                     } else {
                         statusElement.textContent = 'Loading inventory...';
                     }
@@ -446,6 +466,10 @@
                 if (!isRefreshing &&
                     lastSuccessValue &&
                     (!previousLastSuccessUtc || (wasRefreshing && previousLastSuccessUtc !== lastSuccessValue))) {
+                    window.setTimeout(() => window.location.reload(), 250);
+                }
+
+                if (!isRefreshing && !lastSuccessValue && lastErrorValue) {
                     window.setTimeout(() => window.location.reload(), 250);
                 }
             };
