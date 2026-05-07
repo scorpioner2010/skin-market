@@ -280,18 +280,65 @@ public class SteamMarketPriceService : ISteamMarketPriceService
             return null;
         }
 
-        if (cleaned.Count(character => character == ',') == 1 && !cleaned.Contains('.'))
+        var lastDot = cleaned.LastIndexOf('.');
+        var lastComma = cleaned.LastIndexOf(',');
+        if (lastDot >= 0 && lastComma >= 0)
         {
-            cleaned = cleaned.Replace(',', '.');
+            var decimalSeparatorIndex = Math.Max(lastDot, lastComma);
+            cleaned = NormalizePriceWithDecimalSeparator(cleaned, decimalSeparatorIndex);
         }
-        else
+        else if (lastComma >= 0)
         {
-            cleaned = cleaned.Replace(",", string.Empty);
+            cleaned = NormalizeSingleSeparatorPrice(cleaned, ',');
+        }
+        else if (lastDot >= 0)
+        {
+            cleaned = NormalizeSingleSeparatorPrice(cleaned, '.');
         }
 
         return decimal.TryParse(cleaned, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value)
             ? value
             : null;
+    }
+
+    private static string NormalizePriceWithDecimalSeparator(string value, int decimalSeparatorIndex)
+    {
+        var builder = new StringBuilder(value.Length);
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (char.IsDigit(character))
+            {
+                builder.Append(character);
+            }
+            else if (index == decimalSeparatorIndex)
+            {
+                builder.Append('.');
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    private static string NormalizeSingleSeparatorPrice(string value, char separator)
+    {
+        var separatorCount = value.Count(character => character == separator);
+        var separatorIndex = value.LastIndexOf(separator);
+        var digitsAfter = value.Length - separatorIndex - 1;
+        var treatAsThousands = digitsAfter == 3 && separatorCount >= 1;
+        if (treatAsThousands)
+        {
+            return value.Replace(separator.ToString(), string.Empty);
+        }
+
+        if (separator == ',')
+        {
+            return value.Replace(',', '.');
+        }
+
+        return separatorCount == 1
+            ? value
+            : NormalizePriceWithDecimalSeparator(value, separatorIndex);
     }
 
     private static int? TryParseInt(string? rawValue)

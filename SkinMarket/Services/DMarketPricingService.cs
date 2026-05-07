@@ -117,16 +117,15 @@ public class DMarketPricingService : IDMarketPricingService
                 return failed;
             }
 
-            var offerPrice = ParseMoney(item.OfferBestPrice);
             var bidPrice = ParseMoney(item.OrderBestPrice);
-            var suggestedPrice = ParseMoney(item.SuggestedPrice) ?? ParseMoney(item.RecommendedPrice);
             var observedAtUtc = DateTime.UtcNow;
             var offerCount = TryParseInt(item.OfferCount);
             var orderCount = TryParseInt(item.OrderCount);
 
-            if (offerPrice is { Amount: > 0 } && string.Equals(offerPrice.Value.Currency, "USD", StringComparison.OrdinalIgnoreCase))
+            var offerPriceUsd = TryGetOfferBestPriceUsd(item);
+            if (offerPriceUsd is > 0)
             {
-                var priceUsd = Math.Round(offerPrice.Value.Amount, 2, MidpointRounding.AwayFromZero);
+                var priceUsd = offerPriceUsd.Value;
                 var result = new PriceSourceResult
                 {
                     Success = true,
@@ -163,9 +162,10 @@ public class DMarketPricingService : IDMarketPricingService
                 return result;
             }
 
-            if (suggestedPrice is { Amount: > 0 } && string.Equals(suggestedPrice.Value.Currency, "USD", StringComparison.OrdinalIgnoreCase))
+            var suggestedPriceUsd = TryGetSuggestedPriceUsd(item);
+            if (suggestedPriceUsd is > 0)
             {
-                var priceUsd = Math.Round(suggestedPrice.Value.Amount, 2, MidpointRounding.AwayFromZero);
+                var priceUsd = suggestedPriceUsd.Value;
                 var result = new PriceSourceResult
                 {
                     Success = true,
@@ -254,6 +254,24 @@ public class DMarketPricingService : IDMarketPricingService
 
         return decimal.TryParse(money.Amount, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
             ? (amount, money.Currency)
+            : null;
+    }
+
+    internal static decimal? TryGetOfferBestPriceUsd(DMarketAggregatedPriceDto item)
+    {
+        var offerPrice = ParseMoney(item.OfferBestPrice);
+        return offerPrice is { Amount: > 0 } &&
+               string.Equals(offerPrice.Value.Currency, "USD", StringComparison.OrdinalIgnoreCase)
+            ? Math.Round(offerPrice.Value.Amount, 2, MidpointRounding.AwayFromZero)
+            : null;
+    }
+
+    internal static decimal? TryGetSuggestedPriceUsd(DMarketAggregatedPriceDto item)
+    {
+        var suggestedPrice = ParseMoney(item.SuggestedPrice) ?? ParseMoney(item.RecommendedPrice);
+        return suggestedPrice is { Amount: > 0 } &&
+               string.Equals(suggestedPrice.Value.Currency, "USD", StringComparison.OrdinalIgnoreCase)
+            ? Math.Round(suggestedPrice.Value.Amount, 2, MidpointRounding.AwayFromZero)
             : null;
     }
 

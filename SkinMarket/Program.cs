@@ -585,6 +585,11 @@ app.MapPost("/api/inventory/prices/status", async (
             ConfidenceScore = status.ConfidenceScore,
             ConfidenceLabel = status.ConfidenceLabel,
             LastUpdatedUtc = status.LastUpdatedUtc,
+            ObservedAtUtc = status.ObservedAtUtc,
+            ExpiresAtUtc = status.ExpiresAtUtc,
+            OriginalPrice = status.OriginalPrice,
+            OriginalCurrency = status.OriginalCurrency,
+            FxRate = status.FxRate,
             FailureReason = status.FailureReason
         };
     }).ToList();

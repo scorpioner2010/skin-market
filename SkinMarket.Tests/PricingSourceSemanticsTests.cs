@@ -8,6 +8,8 @@ public class PricingSourceSemanticsTests
     [Theory]
     [InlineData("$1.23", "1.23")]
     [InlineData("$1,234.56", "1234.56")]
+    [InlineData("1.234,56€", "1234.56")]
+    [InlineData("$1,234", "1234")]
     [InlineData("1,23â‚¬", "1.23")]
     public void SteamPriceParser_UsesDecimalAndLocalizedSeparators(string raw, string expected)
     {
@@ -72,6 +74,48 @@ public class PricingSourceSemanticsTests
     }
 
     [Fact]
+    public void DMarketOfferBestPrice_IsPreferredOverSuggestedPrice()
+    {
+        var item = new DMarketAggregatedPriceDto
+        {
+            OfferBestPrice = Money("12.34"),
+            SuggestedPrice = Money("99.99"),
+            RecommendedPrice = Money("88.88")
+        };
+
+        Assert.Equal(12.34m, DMarketPricingService.TryGetOfferBestPriceUsd(item));
+        Assert.Equal(99.99m, DMarketPricingService.TryGetSuggestedPriceUsd(item));
+    }
+
+    [Fact]
+    public void DMarketSuggestedPrice_IsEstimateOnlyWhenNoOfferExists()
+    {
+        var item = new DMarketAggregatedPriceDto
+        {
+            SuggestedPrice = Money("9.87")
+        };
+
+        Assert.Null(DMarketPricingService.TryGetOfferBestPriceUsd(item));
+        Assert.Equal(9.87m, DMarketPricingService.TryGetSuggestedPriceUsd(item));
+    }
+
+    [Fact]
+    public async Task UsdOnlyFxService_RejectsNonUsdInsteadOfMislabelingCurrency()
+    {
+        var service = new UsdOnlyFxRateService();
+
+        var usd = await service.NormalizeToUsdAsync(12.34m, "USD");
+        var eur = await service.NormalizeToUsdAsync(12.34m, "EUR");
+
+        Assert.True(usd.Success);
+        Assert.Equal(12.34m, usd.PriceUsd);
+        Assert.Equal(1m, usd.FxRate);
+        Assert.False(eur.Success);
+        Assert.Null(eur.PriceUsd);
+        Assert.Contains("FX conversion is not configured", eur.FailureReason);
+    }
+
+    [Fact]
     public void UnavailableResult_DoesNotUseZeroPrice()
     {
         var result = new ItemPriceResolutionResult
@@ -85,5 +129,14 @@ public class PricingSourceSemanticsTests
 
         Assert.False(result.HasPrice);
         Assert.Null(result.DisplayPriceUsd);
+    }
+
+    private static DMarketMoneyDto Money(string amount)
+    {
+        return new DMarketMoneyDto
+        {
+            CurrencyUpper = "USD",
+            AmountUpper = amount
+        };
     }
 }

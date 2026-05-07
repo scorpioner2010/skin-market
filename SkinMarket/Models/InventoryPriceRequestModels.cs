@@ -30,5 +30,10 @@ public class InventoryPriceStatusItem
     public decimal ConfidenceScore { get; set; }
     public string ConfidenceLabel { get; set; } = "Unavailable";
     public DateTime? LastUpdatedUtc { get; set; }
+    public DateTime? ObservedAtUtc { get; set; }
+    public DateTime? ExpiresAtUtc { get; set; }
+    public decimal? OriginalPrice { get; set; }
+    public string? OriginalCurrency { get; set; }
+    public decimal? FxRate { get; set; }
     public string? FailureReason { get; set; }
 }

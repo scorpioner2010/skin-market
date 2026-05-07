@@ -147,14 +147,23 @@ public class InventoryModel : PageModel
             return "Stale";
         }
 
-        if (price.IsEstimated)
+        if (price.IsEstimated && price.IsCached)
         {
-            return "Estimated";
+            return price.LastUpdatedUtc.HasValue
+                ? $"Estimated cached {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)} ago"
+                : "Estimated cached";
         }
 
         if (price.IsCached)
         {
-            return "Cached";
+            return price.LastUpdatedUtc.HasValue
+                ? $"Cached {FormatAge(DateTime.UtcNow - price.LastUpdatedUtc.Value)} ago"
+                : "Cached";
+        }
+
+        if (price.IsEstimated)
+        {
+            return "Estimated";
         }
 
         return GetPriceSourceLabel(price.Source);
