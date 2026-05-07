@@ -35,6 +35,8 @@ node_modules/
 # Runtime data
 *.pid
 *.pid.lock
+SkinMarket/bot-service/data/*
+!SkinMarket/bot-service/data/.gitkeep
 
 # Coverage
 coverage/

@@ -1,8 +1,11 @@
+const fs = require("fs");
 const express = require("express");
 const config = require("./config");
 const logger = require("./logger");
 const { SteamBot, HttpError } = require("./steam-bot");
 const { BotEventLog } = require("./event-log");
+
+fs.mkdirSync(config.dataDirectory, { recursive: true });
 
 const app = express();
 app.use(express.json());
