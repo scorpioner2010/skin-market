@@ -17,6 +17,7 @@ public class MarketService : IMarketService
     private readonly IInventoryPriceRefreshService _inventoryPriceRefreshService;
     private readonly IGameCatalog _gameCatalog;
     private readonly SteamBotOptions _steamBotOptions;
+    private readonly IAppLogService _appLogService;
     private readonly ILogger<MarketService> _logger;
 
     public MarketService(
@@ -27,6 +28,7 @@ public class MarketService : IMarketService
         IInventoryPriceRefreshService inventoryPriceRefreshService,
         IGameCatalog gameCatalog,
         IOptions<SteamBotOptions> steamBotOptions,
+        IAppLogService appLogService,
         ILogger<MarketService> logger)
     {
         _dbContext = dbContext;
@@ -36,6 +38,7 @@ public class MarketService : IMarketService
         _inventoryPriceRefreshService = inventoryPriceRefreshService;
         _gameCatalog = gameCatalog;
         _steamBotOptions = steamBotOptions.Value;
+        _appLogService = appLogService;
         _logger = logger;
     }
 
@@ -58,16 +61,38 @@ public class MarketService : IMarketService
             return [];
         }
 
-        var reservedAssets = await _dbContext.MarketPurchaseRecords
+        var liveInventoryAssetKeySet = new HashSet<string>(
+            inventory.Items.Select(item => BuildAssetKey(game.SteamAppId, game.SteamContextId.ToString(), item.AssetId)),
+            StringComparer.Ordinal);
+        var purchaseReservations = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
             .Where(item =>
                 item.AppId == game.SteamAppId &&
                 item.ContextId == game.SteamContextId.ToString())
-            .Select(item => new { item.AppId, item.ContextId, item.AssetId })
             .ToListAsync(cancellationToken);
-        var reservedAssetSet = new HashSet<string>(
-            reservedAssets.Select(item => BuildAssetKey(item.AppId, item.ContextId, item.AssetId)),
-            StringComparer.Ordinal);
+        var reservedDiagnostics = new List<string>();
+        var reservedAssetSet = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var purchase in purchaseReservations)
+        {
+            var assetKey = BuildAssetKey(purchase.AppId, purchase.ContextId, purchase.AssetId);
+            var decision = MarketReservationPolicy.GetDecision(purchase, liveInventoryAssetKeySet.Contains(assetKey));
+            if (!decision.IsReserved)
+            {
+                continue;
+            }
+
+            reservedAssetSet.Add(assetKey);
+            reservedDiagnostics.Add($"AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; Status={purchase.Status}; DeliveryStatus={purchase.DeliveryStatus ?? "<null>"}; Reason={decision.Reason}");
+        }
+
+        if (reservedDiagnostics.Count > 0)
+        {
+            await _appLogService.WriteAsync(
+                "Debug",
+                $"Market listing reserved assets hidden. Game={game.Key}; Count={reservedDiagnostics.Count}; Items={string.Join(" || ", reservedDiagnostics.Take(20))}",
+                nameof(MarketService),
+                cancellationToken: cancellationToken);
+        }
 
         var liveItems = inventory.Items
             .Where(item => !reservedAssetSet.Contains(BuildAssetKey(game.SteamAppId, game.SteamContextId.ToString(), item.AssetId)))

@@ -1,0 +1,117 @@
+@page
+@model SkinMarket.Pages.Admin.TradeDiagnosticsModel
+@using SkinMarket.Localization
+@{
+    ViewData["Title"] = "Trade diagnostics";
+    var filters = new[]
+    {
+        ("all", "All recent"),
+        ("stuck-pending", "Pending > 1m"),
+        ("botpending", "BotPending > 1m"),
+        ("awaiting-bot-confirmation", "Bot confirm > 5m"),
+        ("awaiting-user-action", "User action > 15m"),
+        ("delivery-failed", "Delivery failed"),
+        ("sold-without-delivery-progress", "Sold no progress")
+    };
+}
+
+<div class="app-shell content-page">
+    <section class="page-heading">
+        <div>
+            <p class="eyebrow">Admin</p>
+            <h1>Trade diagnostics</h1>
+            <p class="page-description">Seller intake and buyer delivery state debugging.</p>
+        </div>
+    </section>
+
+    <form method="get" class="admin-filter-bar">
+        <label class="form-label" for="filter">Filter</label>
+        <select id="filter" name="Filter" class="form-select app-input">
+            @foreach (var filter in filters)
+            {
+                <option value="@filter.Item1" selected="@(Model.Filter == filter.Item1)">@filter.Item2</option>
+            }
+        </select>
+        <label class="form-label" for="limit">Limit</label>
+        <input id="limit" name="Limit" type="number" min="1" max="500" class="form-control app-input" value="@Model.Limit" />
+        <button type="submit" class="btn app-button-primary">Apply</button>
+    </form>
+
+    <section class="admin-table-section">
+        <h2>TradeOperation</h2>
+        <div class="table-responsive">
+            <table class="table app-table">
+                <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>AppUserId</th>
+                    <th>SteamId</th>
+                    <th>AssetId</th>
+                    <th>ItemName</th>
+                    <th>Status</th>
+                    <th>TradeOfferId</th>
+                    <th>ErrorMessage</th>
+                    <th>CreatedAtUtc</th>
+                    <th>UpdatedAtUtc</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.TradeOperations)
+                {
+                    <tr>
+                        <td class="break-value">@item.Id</td>
+                        <td class="break-value">@item.AppUserId</td>
+                        <td class="break-value">@item.SteamId</td>
+                        <td class="break-value">@item.AssetId</td>
+                        <td>@item.ItemName</td>
+                        <td><span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span></td>
+                        <td class="break-value">@(!string.IsNullOrWhiteSpace(item.TradeOfferId) ? item.TradeOfferId : "-")</td>
+                        <td>@(item.ErrorMessage ?? "-")</td>
+                        <td>@item.CreatedAtUtc.ToString("u")</td>
+                        <td>@item.UpdatedAtUtc.ToString("u")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="admin-table-section">
+        <h2>MarketPurchaseRecord</h2>
+        <div class="table-responsive">
+            <table class="table app-table">
+                <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>BuyerAppUserId</th>
+                    <th>AssetId</th>
+                    <th>ItemName</th>
+                    <th>Status</th>
+                    <th>DeliveryStatus</th>
+                    <th>DeliveryTradeOfferId</th>
+                    <th>DeliveryErrorMessage</th>
+                    <th>CreatedAtUtc</th>
+                    <th>UpdatedAtUtc</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model.PurchaseRecords)
+                {
+                    <tr>
+                        <td class="break-value">@item.Id</td>
+                        <td class="break-value">@(item.BuyerAppUserId?.ToString() ?? "-")</td>
+                        <td class="break-value">@item.AssetId</td>
+                        <td>@item.ItemName</td>
+                        <td><span class="status-badge" data-status="@item.Status">@UiTextLocalizer.LocalizeStatus(L, item.Status)</span></td>
+                        <td><span class="status-badge" data-status="@item.DeliveryStatus">@(string.IsNullOrWhiteSpace(item.DeliveryStatus) ? "-" : UiTextLocalizer.LocalizeStatus(L, item.DeliveryStatus))</span></td>
+                        <td class="break-value">@(!string.IsNullOrWhiteSpace(item.DeliveryTradeOfferId) ? item.DeliveryTradeOfferId : "-")</td>
+                        <td>@(item.DeliveryErrorMessage ?? "-")</td>
+                        <td>@item.CreatedAtUtc.ToString("u")</td>
+                        <td>@item.UpdatedAtUtc.ToString("u")</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>

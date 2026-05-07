@@ -499,9 +499,10 @@ public class InventoryModel : PageModel
                 itemName = operation.ItemName,
                 status = operation.Status,
                 statusText = UiTextLocalizer.LocalizeStatus(_localizer, operation.Status),
+                detailText = BuildSaleStatusDetail(operation.Status, operation.TradeOfferId),
                 tradeOfferId = operation.TradeOfferId,
                 steamOfferUrl = BuildSteamOfferUrl(operation.TradeOfferId),
-                accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+                accountTradeOffersUrl = BuildAccountTradeOffersUrl(),
                 canCancel = CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
                 creditAmount = operation.CreditAmount,
                 updatedAtUtc = operation.UpdatedAtUtc
@@ -731,7 +732,8 @@ public class InventoryModel : PageModel
             await _inventoryPriceRefreshService.QueueRefreshAsync(refreshTargets.Distinct(StringComparer.Ordinal).ToList(), CurrentGameType, cancellationToken);
         }
 
-        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId, LatestPurchaseRecordsByAssetId);
+        GroupedItems = BuildGroupedItems(Items, LatestOperationsByAssetId, LatestPurchaseRecordsByAssetId, IsTradeUrlConfigured);
+        await LogUnknownInventoryActionStatesAsync(appUser.Id, currentGame, GroupedItems, cancellationToken);
         PricePollingItems = GroupedItems
             .Select(group =>
             {
@@ -1088,15 +1090,36 @@ public class InventoryModel : PageModel
             : $"https://steamcommunity.com/tradeoffer/{offerId}/";
     }
 
+    private static string BuildAccountTradeOffersUrl()
+    {
+        return "https://steamcommunity.com/my/tradeoffers/";
+    }
+
+    private static string BuildSaleStatusDetail(string? status, string? offerId)
+    {
+        return status switch
+        {
+            "Pending" => "Waiting for bot to create Steam offer",
+            "BotPending" => "Bot is creating Steam offer",
+            "AwaitingBotConfirmation" => "Waiting for bot mobile confirmation",
+            "TradeCreated" or "AwaitingUserAction" => "Open Steam and accept the trade offer",
+            "TradeAcceptedPendingReceipt" or "ReceivedByBot" => "Waiting for bot receipt and credit",
+            "InEscrow" => "Steam trade is in escrow",
+            _ when string.IsNullOrWhiteSpace(offerId) => "Waiting for bot to create Steam offer",
+            _ => "Waiting for next Steam trade step"
+        };
+    }
+
     private static bool CanCancelIntakeStatus(string? status)
     {
         return status is "AwaitingBotConfirmation" or "TradeCreated" or "AwaitingUserAction";
     }
 
-    private static List<GroupedInventoryItem> BuildGroupedItems(
+    internal static List<GroupedInventoryItem> BuildGroupedItems(
         IReadOnlyCollection<SteamInventoryItemDto> items,
         IReadOnlyDictionary<string, TradeOperation> latestOperationsByAssetId,
-        IReadOnlyDictionary<string, MarketPurchaseRecord> latestPurchasesByAssetId)
+        IReadOnlyDictionary<string, MarketPurchaseRecord> latestPurchasesByAssetId,
+        bool isTradeUrlConfigured)
     {
         return items
             .Where(item =>
@@ -1129,6 +1152,9 @@ public class InventoryModel : PageModel
                     .Where(operation => operation is not null && BlocksInventoryItem(operation.Status))
                     .Cast<TradeOperation>()
                     .ToList();
+                var activeTradeOperation = blockedOperations
+                    .OrderByDescending(operation => operation.UpdatedAtUtc)
+                    .FirstOrDefault();
                 var blockedAssetIds = new HashSet<string>(
                     blockedOperations.Select(operation => operation.AssetId),
                     StringComparer.Ordinal);
@@ -1196,7 +1222,7 @@ public class InventoryModel : PageModel
                     });
                 }
 
-                return new GroupedInventoryItem
+                var item = new GroupedInventoryItem
                 {
                     GroupKey = group.Key,
                     AssetIds = entries.Select(item => item.AssetId).ToList(),
@@ -1218,8 +1244,12 @@ public class InventoryModel : PageModel
                     CreateTradeOperationId = createTradeOperation?.Id,
                     CreateTradeStatus = createTradeOperation?.Status,
                     AwaitingUserTradeOfferId = awaitingUserOperation?.TradeOfferId,
+                    ActiveTradeOperationId = activeTradeOperation?.Id,
+                    ActiveTradeStatus = activeTradeOperation?.Status,
+                    ActiveTradeOfferId = activeTradeOperation?.TradeOfferId,
                     HasTradeProtected = tradeProtectedCount > 0,
                     HasIncomingDelivery = purchaseStatuses.Any(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus)),
+                    HasDeliveredPurchase = purchaseStatuses.Any(purchase => string.Equals(purchase.DeliveryStatus, "Delivered", StringComparison.Ordinal)),
                     IncomingDeliveryStatus = purchaseStatuses
                         .Where(purchase => IsActiveDeliveryStatus(purchase.DeliveryStatus))
                         .OrderByDescending(purchase => purchase.UpdatedAtUtc)
@@ -1233,10 +1263,38 @@ public class InventoryModel : PageModel
                                           !operation.CreditedAtUtc.HasValue),
                     StatusItems = statusItems
                 };
+
+                item.ActionDecision = InventoryItemActionResolver.Resolve(item, isTradeUrlConfigured);
+                return item;
             })
             .OrderBy(item => item.ItemName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(item => item.MarketHashName, StringComparer.Ordinal)
             .ToList();
+    }
+
+    private async Task LogUnknownInventoryActionStatesAsync(
+        Guid appUserId,
+        GameDefinition game,
+        IReadOnlyCollection<GroupedInventoryItem> groupedItems,
+        CancellationToken cancellationToken)
+    {
+        var unknownItems = groupedItems
+            .Where(item => item.ActionDecision.IsUnknown)
+            .Take(20)
+            .Select(item =>
+                $"GroupKey={item.GroupKey}; RepresentativeAssetId={item.RepresentativeAssetId}; AssetIds={string.Join("|", item.AssetIds)}; ItemName={TruncateForLog(item.ItemName, 80)}; ActiveTradeStatus={item.ActiveTradeStatus ?? "<null>"}; IncomingDeliveryStatus={item.IncomingDeliveryStatus ?? "<null>"}; HasTradeProtected={item.HasTradeProtected}; HasDeliveredPurchase={item.HasDeliveredPurchase}; Reason={item.ActionDecision.DiagnosticReason}")
+            .ToList();
+
+        if (unknownItems.Count == 0)
+        {
+            return;
+        }
+
+        await _appLogService.WriteAsync(
+            "Warning",
+            $"Inventory UI reached unknown item action state. AppUserId={appUserId}; Game={game.Key}; Count={unknownItems.Count}; Items={string.Join(" || ", unknownItems)}",
+            nameof(InventoryModel),
+            cancellationToken: cancellationToken);
     }
 
     private static bool BlocksInventoryItem(string? status)

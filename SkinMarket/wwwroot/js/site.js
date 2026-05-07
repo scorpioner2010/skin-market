@@ -211,10 +211,11 @@ const appText = (key, fallback, ...args) => {
 
         if (panelStatus) {
             const flowText = isDelivery ? appText('purchase', 'Purchase') : appText('sale', 'Sale');
-            const actionText = isActionRequired
-                ? (isDelivery ? appText('acceptDeliveryOffer', 'accept the delivery offer') : appText('acceptIntakeOffer', 'accept the intake offer'))
-                : appText('waitingNextSteamStep', 'waiting for the next Steam step');
-            panelStatus.textContent = `${flowText}: ${activeTrade.itemName || appText('steamOffer', 'Steam offer')} - ${activeTrade.statusText || activeTrade.status}. ${actionText}.`;
+            const detailText = activeTrade.detailText || (
+                isActionRequired
+                    ? (isDelivery ? appText('acceptDeliveryOffer', 'accept the delivery offer') : appText('acceptIntakeOffer', 'accept the intake offer'))
+                    : appText('waitingNextSteamStep', 'waiting for the next Steam step'));
+            panelStatus.textContent = `${flowText}: ${activeTrade.itemName || appText('steamOffer', 'Steam offer')} - ${activeTrade.statusText || activeTrade.status}. ${detailText}.`;
         }
 
         if (cancelOperationId) {

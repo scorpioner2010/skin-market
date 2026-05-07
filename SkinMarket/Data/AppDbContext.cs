@@ -98,7 +98,7 @@ public class AppDbContext : DbContext
             entity.Property(item => item.Status).IsRequired();
             entity.Property(item => item.DeliveryStatus).HasMaxLength(100);
             entity.Property(item => item.DeliveryTradeOfferId).HasMaxLength(100);
-            entity.HasIndex(item => new { item.AppId, item.ContextId, item.AssetId }).IsUnique();
+            entity.HasIndex(item => new { item.AppId, item.ContextId, item.AssetId });
             entity.HasIndex(item => item.SourceTradeOperationId).IsUnique();
             entity.HasOne(item => item.SourceTradeOperation)
                 .WithMany()

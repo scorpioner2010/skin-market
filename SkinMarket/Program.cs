@@ -778,9 +778,10 @@ app.MapGet("/api/sales/status", async (
             itemName = operation.ItemName,
             status = operation.Status,
             statusText = UiTextLocalizer.LocalizeStatus(localizer, operation.Status),
+            detailText = SaleStatusApiText.DescribeStatus("intake", operation.Status, operation.TradeOfferId),
             tradeOfferId = operation.TradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
-            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            accountTradeOffersUrl = SaleStatusApiText.AccountTradeOffersUrl,
             canCancel = SaleStatusApiText.CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
             creditAmount = operation.CreditAmount,
             updatedAtUtc = operation.UpdatedAtUtc
@@ -802,9 +803,10 @@ app.MapGet("/api/sales/status", async (
             itemName = item.ItemName,
             status = item.DeliveryStatus!,
             statusText = UiTextLocalizer.LocalizeStatus(localizer, item.DeliveryStatus),
+            detailText = SaleStatusApiText.DescribeStatus("delivery", item.DeliveryStatus, item.DeliveryTradeOfferId),
             tradeOfferId = item.DeliveryTradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
-            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            accountTradeOffersUrl = SaleStatusApiText.AccountTradeOffersUrl,
             canCancel = false,
             creditAmount = 0m,
             updatedAtUtc = item.UpdatedAtUtc
@@ -824,9 +826,10 @@ app.MapGet("/api/sales/status", async (
             itemName = operation.ItemName,
             status = operation.Status,
             statusText = UiTextLocalizer.LocalizeStatus(localizer, operation.Status),
+            detailText = SaleStatusApiText.DescribeStatus("intake", operation.Status, operation.TradeOfferId),
             tradeOfferId = operation.TradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(operation.TradeOfferId),
-            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            accountTradeOffersUrl = SaleStatusApiText.AccountTradeOffersUrl,
             canCancel = SaleStatusApiText.CanCancelIntakeStatus(operation.Status) && operation.TradeOfferId != null,
             creditAmount = operation.CreditAmount,
             updatedAtUtc = operation.UpdatedAtUtc
@@ -846,9 +849,10 @@ app.MapGet("/api/sales/status", async (
             itemName = item.ItemName,
             status = item.DeliveryStatus ?? item.Status,
             statusText = UiTextLocalizer.LocalizeStatus(localizer, item.DeliveryStatus ?? item.Status),
+            detailText = SaleStatusApiText.DescribeStatus("delivery", item.DeliveryStatus ?? item.Status, item.DeliveryTradeOfferId),
             tradeOfferId = item.DeliveryTradeOfferId,
             steamOfferUrl = SaleStatusApiText.BuildSteamOfferUrl(item.DeliveryTradeOfferId),
-            accountTradeOffersUrl = "https://steamcommunity.com/id/angielanz75/tradeoffers",
+            accountTradeOffersUrl = SaleStatusApiText.AccountTradeOffersUrl,
             canCancel = false,
             creditAmount = 0m,
             updatedAtUtc = item.UpdatedAtUtc
@@ -861,6 +865,12 @@ app.MapGet("/api/sales/status", async (
     var recentOperations = recentIntakes.Concat(recentDeliveries)
         .OrderByDescending(item => item.updatedAtUtc)
         .ToList();
+
+    await appLogService.WriteAsync(
+        "Debug",
+        $"Sales status requested. AppUserId={appUser.Id}; ActiveOperations={activeOperations.Count}; Statuses={string.Join("|", activeOperations.Select(item => $"{item.flow}:{item.status}"))}; OperationIds={string.Join("|", activeOperations.Select(item => item.id))}; TradeOfferIds={string.Join("|", activeOperations.Select(item => item.tradeOfferId ?? "<null>"))}",
+        "SalesStatusApi",
+        cancellationToken: cancellationToken);
 
     return Results.Ok(new
     {
@@ -1302,6 +1312,8 @@ static async Task<AppUser?> ResolveCurrentAppUserAsync(
 
 internal static class SaleStatusApiText
 {
+    public const string AccountTradeOffersUrl = "https://steamcommunity.com/my/tradeoffers/";
+
     public static string FormatStatus(string? status)
     {
         return status switch
@@ -1326,8 +1338,30 @@ internal static class SaleStatusApiText
     public static string BuildSteamOfferUrl(string? offerId)
     {
         return string.IsNullOrWhiteSpace(offerId)
-            ? "https://steamcommunity.com/my/tradeoffers/"
+            ? AccountTradeOffersUrl
             : $"https://steamcommunity.com/tradeoffer/{offerId}/";
+    }
+
+    public static string DescribeStatus(string flow, string? status, string? offerId)
+    {
+        var isDelivery = string.Equals(flow, "delivery", StringComparison.Ordinal);
+        return status switch
+        {
+            "Pending" => "Waiting for bot to create Steam offer",
+            "BotPending" => "Bot is creating Steam offer",
+            "AwaitingBotConfirmation" => "Waiting for bot mobile confirmation",
+            "TradeCreated" or "AwaitingUserAction" => "Open Steam and accept the trade offer",
+            "TradeAcceptedPendingReceipt" or "ReceivedByBot" => "Waiting for bot receipt and credit",
+            "InEscrow" => "Steam trade is in escrow",
+            "PendingDelivery" => "Waiting for bot to create delivery offer",
+            "DeliveryBotPending" => "Bot is creating delivery offer",
+            "DeliveryTradeCreated" or "AwaitingBuyerAction" => "Open Steam and accept the delivery offer",
+            "DeliveryInEscrow" => "Steam delivery is in escrow",
+            _ when string.IsNullOrWhiteSpace(offerId) => isDelivery
+                ? "Waiting for bot to create delivery offer"
+                : "Waiting for bot to create Steam offer",
+            _ => "Waiting for next Steam trade step"
+        };
     }
 
     public static bool CanCancelIntakeStatus(string? status)

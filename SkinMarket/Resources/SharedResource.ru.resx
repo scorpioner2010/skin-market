@@ -279,6 +279,10 @@
   <data name="Inventory_LiveDescription" xml:space="preserve"><value>Живой Steam-инвентарь с сгруппированными дублями, текущей ценой и статусом трейда.</value></data>
   <data name="Layout_Admin" xml:space="preserve"><value>Админ</value></data>
   <data name="Inventory_AutoTradePending" xml:space="preserve"><value>Автотрейд ожидается</value></data>
+  <data name="Inventory_CreatingTradeOffer" xml:space="preserve"><value>Создание трейд-офера</value></data>
+  <data name="Inventory_AwaitingSellerAcceptance" xml:space="preserve"><value>Ожидает принятия продавцом</value></data>
+  <data name="Inventory_AwaitingBuyerAcceptance" xml:space="preserve"><value>Ожидает принятия покупателем</value></data>
+  <data name="Inventory_StateIssue" xml:space="preserve"><value>Проблема состояния - проверьте логи</value></data>
   <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Доставка в escrow</value></data>
   <data name="Common_AssetId" xml:space="preserve"><value>Asset ID</value></data>
   <data name="Message_MessageInvalid" xml:space="preserve"><value>Сообщение некорректно.</value></data>

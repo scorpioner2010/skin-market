@@ -259,7 +259,10 @@
                                 </div>
                                 <div class="inventory-cell inventory-actions-cell" data-label="@L["Inventory_Column_Action"]">
                                     <div class="inventory-actions" data-sale-action-cell>
-                                        @if (item.HasSellableItem && Model.IsTradeUrlConfigured)
+                                        @{
+                                            var action = item.ActionDecision;
+                                        }
+                                        @if (action.Kind == InventoryItemActionKinds.Sell)
                                         {
                                             <form method="post" asp-page-handler="Sell" data-trade-blockable-form data-trade-block-message="@L["Inventory_TradeBlockMessageSell"]">
                                                 <input type="hidden" name="Input.GameType" value="@Model.CurrentGameType" />
@@ -272,16 +275,15 @@
                                                 <button type="submit" class="btn app-button-primary">@L["Common_Sell"]</button>
                                             </form>
                                         }
-                                        else if (item.HasSellableItem)
+                                        else if (action.Kind == InventoryItemActionKinds.TradeUrlRequired)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@L["Inventory_TradeUrlRequired"]</span>
                                         }
-                                        else if (!string.IsNullOrWhiteSpace(item.AwaitingUserTradeOfferId))
+                                        else if (action.Kind == InventoryItemActionKinds.AwaitingSellerAcceptance)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_ActionRequired"]</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_AwaitingSellerAcceptance"]</span>
                                         }
-                                        else if (item.CreateTradeOperationId.HasValue &&
-                                                 string.Equals(item.CreateTradeStatus, "Failed", StringComparison.Ordinal))
+                                        else if (action.Kind == InventoryItemActionKinds.FailedRetry && item.CreateTradeOperationId.HasValue)
                                         {
                                             <form method="post" asp-page-handler="CreateTrade">
                                                 <input type="hidden" name="Input.GameType" value="@Model.CurrentGameType" />
@@ -289,25 +291,37 @@
                                                 <button type="submit" class="btn app-button-secondary">@L["Inventory_CreateTrade"]</button>
                                             </form>
                                         }
-                                        else if (item.CreateTradeOperationId.HasValue)
+                                        else if (action.Kind == InventoryItemActionKinds.CreatingTradeOffer)
                                         {
-                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_AutoTradePending"]</span>
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_CreatingTradeOffer"]</span>
                                         }
-                                        else if (item.HasWaitingForCredit)
+                                        else if (action.Kind == InventoryItemActionKinds.AwaitingBotConfirmation)
+                                        {
+                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "AwaitingBotConfirmation")</span>
+                                        }
+                                        else if (action.Kind == InventoryItemActionKinds.WaitingForCredit)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@L["Inventory_WaitingForCredit"]</span>
                                         }
-                                        else if (item.HasIncomingDelivery)
+                                        else if (action.Kind == InventoryItemActionKinds.DeliveryPending)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, item.IncomingDeliveryStatus ?? "PendingDelivery")</span>
                                         }
-                                        else if (item.HasTradeProtected)
+                                        else if (action.Kind == InventoryItemActionKinds.AwaitingBuyerAcceptance)
+                                        {
+                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_AwaitingBuyerAcceptance"]</span>
+                                        }
+                                        else if (action.Kind == InventoryItemActionKinds.Delivered)
+                                        {
+                                            <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "Delivered")</span>
+                                        }
+                                        else if (action.Kind == InventoryItemActionKinds.TradeProtected)
                                         {
                                             <span class="compact-badge compact-badge-neutral">@UiTextLocalizer.LocalizeStatus(L, "TradeProtected")</span>
                                         }
                                         else
                                         {
-                                            <span class="compact-badge compact-badge-neutral">@L["Inventory_PendingSale"]</span>
+                                            <span class="compact-badge compact-badge-neutral" title="@item.ActionDecision.DiagnosticReason">@L["Inventory_StateIssue"]</span>
                                         }
                                     </div>
                                 </div>

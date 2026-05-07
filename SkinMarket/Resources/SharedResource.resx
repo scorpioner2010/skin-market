@@ -287,6 +287,10 @@
   <data name="Inventory_LiveDescription" xml:space="preserve"><value>Live Steam inventory with grouped duplicates, current price resolution, and trade flow status.</value></data>
   <data name="Layout_Admin" xml:space="preserve"><value>Admin</value></data>
   <data name="Inventory_AutoTradePending" xml:space="preserve"><value>Auto trade pending</value></data>
+  <data name="Inventory_CreatingTradeOffer" xml:space="preserve"><value>Creating trade offer</value></data>
+  <data name="Inventory_AwaitingSellerAcceptance" xml:space="preserve"><value>Awaiting seller acceptance</value></data>
+  <data name="Inventory_AwaitingBuyerAcceptance" xml:space="preserve"><value>Awaiting buyer acceptance</value></data>
+  <data name="Inventory_StateIssue" xml:space="preserve"><value>State issue - check logs</value></data>
   <data name="Status_DeliveryInEscrow" xml:space="preserve"><value>Delivery in escrow</value></data>
   <data name="Common_AssetId" xml:space="preserve"><value>Asset ID</value></data>
   <data name="Message_MessageInvalid" xml:space="preserve"><value>Message is invalid.</value></data>

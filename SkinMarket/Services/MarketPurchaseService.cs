@@ -81,14 +81,38 @@ public class MarketPurchaseService : IMarketPurchaseService
             return await FailAsync("This item is no longer available.");
         }
 
-        var reservedAssetIds = await _dbContext.MarketPurchaseRecords
+        var liveAssetKeySet = new HashSet<string>(
+            liveInventory.Items.Select(item => BuildAssetKey(game.SteamAppId, game.SteamContextId.ToString(), item.AssetId)),
+            StringComparer.Ordinal);
+        var purchaseReservations = await _dbContext.MarketPurchaseRecords
             .AsNoTracking()
             .Where(
                 item => item.AppId == game.SteamAppId &&
                         item.ContextId == game.SteamContextId.ToString())
-            .Select(item => item.AssetId)
             .ToListAsync(cancellationToken);
-        var reservedAssetSet = new HashSet<string>(reservedAssetIds, StringComparer.Ordinal);
+        var reservedAssetSet = new HashSet<string>(StringComparer.Ordinal);
+        var reservedDiagnostics = new List<string>();
+        foreach (var purchase in purchaseReservations)
+        {
+            var assetKey = BuildAssetKey(purchase.AppId, purchase.ContextId, purchase.AssetId);
+            var decision = MarketReservationPolicy.GetDecision(purchase, liveAssetKeySet.Contains(assetKey));
+            if (!decision.IsReserved)
+            {
+                continue;
+            }
+
+            reservedAssetSet.Add(purchase.AssetId);
+            reservedDiagnostics.Add($"AssetId={purchase.AssetId}; PurchaseId={purchase.Id}; Status={purchase.Status}; DeliveryStatus={purchase.DeliveryStatus ?? "<null>"}; Reason={decision.Reason}");
+        }
+
+        if (reservedDiagnostics.Count > 0)
+        {
+            await _appLogService.WriteAsync(
+                "Debug",
+                $"Market purchase reserved assets excluded. BuyerAppUserId={buyerAppUserId}; Game={game.Key}; Count={reservedDiagnostics.Count}; Items={string.Join(" || ", reservedDiagnostics.Take(20))}",
+                nameof(MarketPurchaseService),
+                cancellationToken: cancellationToken);
+        }
 
         var matchingItems = liveInventory.Items
             .Where(item => MatchesRequestGroup(item, request) && !reservedAssetSet.Contains(item.AssetId))
@@ -133,13 +157,7 @@ public class MarketPurchaseService : IMarketPurchaseService
             return await FailAsync("Not enough balance to buy this item.");
         }
 
-        var duplicateSaleExists = await _dbContext.MarketPurchaseRecords
-            .AnyAsync(
-                item => item.AppId == game.SteamAppId &&
-                        item.ContextId == game.SteamContextId.ToString() &&
-                        item.AssetId == inventoryItem.AssetId,
-                cancellationToken);
-        if (duplicateSaleExists)
+        if (reservedAssetSet.Contains(inventoryItem.AssetId))
         {
             return await FailAsync("This item is no longer available.");
         }
@@ -312,5 +330,10 @@ public class MarketPurchaseService : IMarketPurchaseService
         }
 
         return true;
+    }
+
+    private static string BuildAssetKey(int appId, string contextId, string assetId)
+    {
+        return $"{appId}:{contextId}:{assetId}";
     }
 }
