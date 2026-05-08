@@ -728,6 +728,38 @@ a:hover {
   resize: vertical;
 }
 
+.admin-item-create-form.is-submitting {
+  cursor: progress;
+}
+
+.admin-item-create-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 132px;
+}
+
+.admin-item-create-submit:disabled {
+  cursor: wait;
+  opacity: 0.82;
+  transform: none;
+}
+
+.admin-item-submit-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.42);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: deferred-spinner-spin 0.78s linear infinite;
+  flex: 0 0 auto;
+}
+
+.admin-item-upload-status {
+  color: #526b78;
+}
+
 .admin-items-table {
   min-width: 0;
 }

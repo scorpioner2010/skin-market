@@ -34,7 +34,7 @@
     }
 
     <section class="page-section admin-items-grid">
-        <form method="post" asp-page-handler="Create" enctype="multipart/form-data" class="content-card stack-form admin-item-create-form">
+        <form method="post" asp-page-handler="Create" enctype="multipart/form-data" class="content-card stack-form admin-item-create-form" data-admin-item-create-form>
             <div class="card-heading">
                 <div>
                     <h2>Create item</h2>
@@ -59,11 +59,17 @@
             </div>
             <div>
                 <label class="form-label" asp-for="CreateInput.Image">Image</label>
-                <input class="form-control app-input" asp-for="CreateInput.Image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                <input class="form-control app-input" asp-for="CreateInput.Image" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required />
                 <span class="text-danger" asp-validation-for="CreateInput.Image"></span>
                 <div class="meta-note mt-2">Allowed formats: JPG, PNG, WEBP, GIF. Max size: 5 MB.</div>
             </div>
-            <button type="submit" class="btn app-button-primary">Create item</button>
+            <button type="submit" class="btn app-button-primary admin-item-create-submit" data-admin-item-create-submit>
+                <span class="admin-item-submit-spinner" aria-hidden="true" hidden></span>
+                <span data-admin-item-create-submit-text>Create item</span>
+            </button>
+            <div class="meta-note admin-item-upload-status" data-admin-item-upload-status hidden>
+                Uploading image and creating item...
+            </div>
         </form>
 
         <div class="content-card">
@@ -136,4 +142,53 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
+    <script>
+        (() => {
+            const form = document.querySelector('[data-admin-item-create-form]');
+            if (!form) {
+                return;
+            }
+
+            const submitButton = form.querySelector('[data-admin-item-create-submit]');
+            const submitText = form.querySelector('[data-admin-item-create-submit-text]');
+            const spinner = form.querySelector('.admin-item-submit-spinner');
+            const uploadStatus = form.querySelector('[data-admin-item-upload-status]');
+
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.submitting === 'true') {
+                    event.preventDefault();
+                    return;
+                }
+
+                const $ = window.jQuery;
+                if ($ && $.fn && typeof $.fn.valid === 'function' && !$(form).valid()) {
+                    return;
+                }
+
+                if (!form.checkValidity()) {
+                    return;
+                }
+
+                form.dataset.submitting = 'true';
+                form.classList.add('is-submitting');
+
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.setAttribute('aria-busy', 'true');
+                }
+
+                if (spinner) {
+                    spinner.hidden = false;
+                }
+
+                if (submitText) {
+                    submitText.textContent = 'Creating item...';
+                }
+
+                if (uploadStatus) {
+                    uploadStatus.hidden = false;
+                }
+            });
+        })();
+    </script>
 }
