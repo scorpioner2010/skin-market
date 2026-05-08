@@ -94,6 +94,7 @@ builder.Services.AddSingleton(Options.Create(steamBotOptions));
 builder.Services.AddSingleton(Options.Create(steamApiOptions));
 builder.Services.AddSingleton<BotServiceAvailabilityTracker>();
 builder.Services.Configure<PricingOptions>(builder.Configuration.GetSection(PricingOptions.SectionName));
+builder.Services.Configure<CloudinaryOptions>(builder.Configuration.GetSection(CloudinaryOptions.SectionName));
 builder.Services.Configure<SteamMarketPriceOptions>(builder.Configuration.GetSection(SteamMarketPriceOptions.SectionName));
 builder.Services.Configure<SteamInventoryRefreshOptions>(builder.Configuration.GetSection(SteamInventoryRefreshOptions.SectionName));
 builder.Services.AddMemoryCache();
@@ -146,6 +147,12 @@ builder.Services.AddScoped<IMarketService, MarketService>();
 builder.Services.AddScoped<IMarketPurchaseService, MarketPurchaseService>();
 builder.Services.AddScoped<IMarketDeliveryService, MarketDeliveryService>();
 builder.Services.AddScoped<IItemChatService, ItemChatService>();
+builder.Services.AddHttpClient<IServiceItemImageStorage, CloudinaryServiceItemImageStorage>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(45);
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SkinMarket", "1.0"));
+    client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("(service-item-images)"));
+});
 builder.Services.AddScoped<ICreditService, CreditService>();
 builder.Services.AddScoped<IMinefieldGameService, MinefieldGameService>();
 builder.Services.AddScoped<ITradeOperationService, TradeOperationService>();
@@ -344,7 +351,10 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 var staticFileContentTypes = new FileExtensionContentTypeProvider();
 staticFileContentTypes.Mappings[".data"] = "application/octet-stream";
 staticFileContentTypes.Mappings[".wasm"] = "application/wasm";

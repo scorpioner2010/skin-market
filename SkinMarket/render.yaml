@@ -15,6 +15,12 @@ services:
           property: connectionString
       - key: STEAM_API_KEY
         sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: Cloudinary__Folder
+        value: skin-market/items
+      - key: Cloudinary__UploadPreset
+        sync: false
       - key: STEAM_BOT_ENABLED
         value: "true"
       - key: STEAM_BOT_USERNAME

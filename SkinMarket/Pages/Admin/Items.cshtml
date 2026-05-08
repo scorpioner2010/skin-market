@@ -28,9 +28,9 @@
         <div class="app-alert alert-success" role="alert">@Model.SuccessMessage</div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(Model.ErrorMessage))
+    @if (!string.IsNullOrWhiteSpace(Model.DisplayErrorMessage))
     {
-        <div class="app-alert alert-danger" role="alert">@Model.ErrorMessage</div>
+        <div class="app-alert alert-danger" role="alert">@Model.DisplayErrorMessage</div>
     }
 
     <section class="page-section admin-items-grid">

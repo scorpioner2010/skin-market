@@ -28,14 +28,17 @@ public class ItemsModel : PageModel
     };
 
     private readonly AppDbContext _dbContext;
-    private readonly IWebHostEnvironment _environment;
     private readonly IAppLogService _appLogService;
+    private readonly IServiceItemImageStorage _imageStorage;
 
-    public ItemsModel(AppDbContext dbContext, IWebHostEnvironment environment, IAppLogService appLogService)
+    public ItemsModel(
+        AppDbContext dbContext,
+        IAppLogService appLogService,
+        IServiceItemImageStorage imageStorage)
     {
         _dbContext = dbContext;
-        _environment = environment;
         _appLogService = appLogService;
+        _imageStorage = imageStorage;
     }
 
     public List<ServiceItem> Items { get; private set; } = new();
@@ -43,6 +46,8 @@ public class ItemsModel : PageModel
     public string? SuccessMessage { get; set; }
     [TempData]
     public string? ErrorMessage { get; set; }
+    public string? PageErrorMessage { get; private set; }
+    public string? DisplayErrorMessage => PageErrorMessage ?? ErrorMessage;
     [BindProperty]
     public CreateItemInputModel CreateInput { get; set; } = new();
     [BindProperty]
@@ -50,6 +55,11 @@ public class ItemsModel : PageModel
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
+        if (ErrorMessage is "Image upload failed." or "Item data is invalid." or "Item with this name already exists.")
+        {
+            ErrorMessage = null;
+        }
+
         await LoadItemsAsync(cancellationToken);
     }
 
@@ -66,7 +76,7 @@ public class ItemsModel : PageModel
 
         if (!ModelState.IsValid)
         {
-            ErrorMessage = "Item data is invalid.";
+            PageErrorMessage = "Item data is invalid.";
             await LoadItemsAsync(cancellationToken);
             return Page();
         }
@@ -77,28 +87,34 @@ public class ItemsModel : PageModel
         if (itemExists)
         {
             ModelState.AddModelError("CreateInput.Name", "Item with this name already exists.");
-            ErrorMessage = "Item with this name already exists.";
+            PageErrorMessage = "Item with this name already exists.";
             await LoadItemsAsync(cancellationToken);
             return Page();
         }
 
         var itemId = Guid.NewGuid();
         var image = CreateInput.Image!;
-        var extension = Path.GetExtension(image.FileName).ToLowerInvariant();
-        var storedFileName = $"{itemId:N}{extension}";
-        var uploadRoot = GetUploadRoot();
-        Directory.CreateDirectory(uploadRoot);
-        var physicalPath = Path.Combine(uploadRoot, storedFileName);
-        var relativeStoragePath = Path.Combine("uploads", "items", storedFileName);
-        var imageUrl = $"/uploads/items/{storedFileName}";
+        ServiceItemImageUploadResult uploadedImage;
+        try
+        {
+            uploadedImage = await _imageStorage.UploadAsync(itemId, image, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            ModelState.AddModelError("CreateInput.Image", "Image upload failed. Check Cloudinary configuration and try again.");
+            PageErrorMessage = "Image upload failed.";
+            await _appLogService.WriteAsync(
+                "Error",
+                $"Admin service item image upload failed. ItemId={itemId}; FileName={image.FileName}; {CloudinaryDiagnostics}",
+                nameof(ItemsModel),
+                exception,
+                cancellationToken);
+            await LoadItemsAsync(cancellationToken);
+            return Page();
+        }
 
         try
         {
-            await using (var fileStream = System.IO.File.Create(physicalPath))
-            {
-                await image.CopyToAsync(fileStream, cancellationToken);
-            }
-
             var now = DateTime.UtcNow;
             var item = new ServiceItem
             {
@@ -106,10 +122,10 @@ public class ItemsModel : PageModel
                 Name = normalizedName,
                 Description = string.IsNullOrWhiteSpace(CreateInput.Description) ? null : CreateInput.Description.Trim(),
                 Price = decimal.Round(CreateInput.Price, 2, MidpointRounding.AwayFromZero),
-                ImageUrl = imageUrl,
-                ImageStoragePath = relativeStoragePath,
-                ImageFileName = Path.GetFileName(image.FileName),
-                ImageContentType = image.ContentType,
+                ImageUrl = uploadedImage.ImageUrl,
+                ImageStoragePath = uploadedImage.StoragePath,
+                ImageFileName = uploadedImage.OriginalFileName,
+                ImageContentType = uploadedImage.ContentType,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now
             };
@@ -127,7 +143,7 @@ public class ItemsModel : PageModel
         }
         catch
         {
-            DeletePhysicalFileIfExists(relativeStoragePath);
+            await _imageStorage.DeleteAsync(uploadedImage.StoragePath, cancellationToken);
             throw;
         }
     }
@@ -144,7 +160,7 @@ public class ItemsModel : PageModel
 
         _dbContext.ServiceItems.Remove(item);
         await _dbContext.SaveChangesAsync(cancellationToken);
-        DeletePhysicalFileIfExists(item.ImageStoragePath);
+        await _imageStorage.DeleteAsync(item.ImageStoragePath, cancellationToken);
 
         await _appLogService.WriteAsync(
             "Warning",
@@ -183,37 +199,9 @@ public class ItemsModel : PageModel
         }
     }
 
-    private string GetUploadRoot()
-    {
-        var webRoot = string.IsNullOrWhiteSpace(_environment.WebRootPath)
-            ? Path.Combine(_environment.ContentRootPath, "wwwroot")
-            : _environment.WebRootPath;
-
-        return Path.Combine(webRoot, "uploads", "items");
-    }
-
-    private void DeletePhysicalFileIfExists(string? relativeStoragePath)
-    {
-        if (string.IsNullOrWhiteSpace(relativeStoragePath))
-        {
-            return;
-        }
-
-        var webRoot = string.IsNullOrWhiteSpace(_environment.WebRootPath)
-            ? Path.Combine(_environment.ContentRootPath, "wwwroot")
-            : _environment.WebRootPath;
-        var fullPath = Path.GetFullPath(Path.Combine(webRoot, relativeStoragePath));
-        var allowedRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads", "items"));
-        if (!fullPath.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        if (System.IO.File.Exists(fullPath))
-        {
-            System.IO.File.Delete(fullPath);
-        }
-    }
+    private string CloudinaryDiagnostics => _imageStorage is ICloudinaryServiceItemImageStorageDiagnostics diagnostics
+        ? diagnostics.GetConfigurationSummary()
+        : "ImageStorage=Unknown";
 
     public sealed class CreateItemInputModel
     {
@@ -222,7 +210,12 @@ public class ItemsModel : PageModel
         public string Name { get; set; } = string.Empty;
         [StringLength(1000)]
         public string? Description { get; set; }
-        [Range(typeof(decimal), "0.01", "1000000")]
+        [Range(
+            typeof(decimal),
+            "0.01",
+            "1000000",
+            ParseLimitsInInvariantCulture = true,
+            ConvertValueInInvariantCulture = true)]
         public decimal Price { get; set; }
         public IFormFile? Image { get; set; }
     }

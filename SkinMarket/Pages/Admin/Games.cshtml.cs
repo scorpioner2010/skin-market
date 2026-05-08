@@ -395,10 +395,20 @@ public class GamesModel : PageModel
     {
         public bool IsEnabled { get; set; } = true;
 
-        [Range(typeof(decimal), "0.01", "1000000")]
+        [Range(
+            typeof(decimal),
+            "0.01",
+            "1000000",
+            ParseLimitsInInvariantCulture = true,
+            ConvertValueInInvariantCulture = true)]
         public decimal MinimumBet { get; set; } = MinefieldGameSettingsDefaults.MinimumBet;
 
-        [Range(typeof(decimal), "0.01", "1000000")]
+        [Range(
+            typeof(decimal),
+            "0.01",
+            "1000000",
+            ParseLimitsInInvariantCulture = true,
+            ConvertValueInInvariantCulture = true)]
         public decimal MaximumBet { get; set; } = MinefieldGameSettingsDefaults.MaximumBet;
 
         [Range(1, MinefieldGameSettingsDefaults.Columns - 1)]
